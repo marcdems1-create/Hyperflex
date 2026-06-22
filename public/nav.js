@@ -366,7 +366,7 @@
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/finance', label: 'Finance' },
+    { href: '/finance', label: 'Markets' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 

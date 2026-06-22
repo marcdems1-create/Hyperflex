@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-06-21 — Grader fix: resolved markets that aged out of the active feed now grade (Claude Code, branch `claude/keen-ride-do3ml2`)
+
+### fix(intelligence): targeted resolution probe so pending calls actually grade (Source 4)
+- **Symptom (confirmed live):** `signal_outcomes` pending climbed (recording works post-HOLE-1) but `last30d.graded = 0`, all-time frozen at 13. Calls flow in, nothing grades out. Same root surfaced as WC match 404s.
+- **Diagnosis (it was (c)):** `resolveSignalOutcomes` IS running (every 30 min, `server.js:59423` + boot). But its only source for a *resolved* market's outcome was Source 3 — two bounded gamma fetches: `closed=true&limit=200&order=end_date` (200 most-recently-closed) + `closed=true&limit=200&order=volume` (200 highest-volume closed). Sources 1-2 (`_screenerCache`, `_whaleIndexCache`) are active-only. A call on a market that settled days ago — e.g. a World Cup match that resolved a week back — is in **none** of them: not in the 200-most-recent (huge daily WC churn), not in the 200-highest-volume. So it never matches, never grades, and (being <60d old) never expires → **pending forever**. The HOLE-1 flood of WC consensus calls made this total.
+- **Fix:** added **Source 4** — a targeted probe. For each pending call still unmatched after Sources 1-3, search gamma's CLOSED markets for that exact market (`markets/keyset?closed=true&order=end_date&search=<question 60 chars>`) and pull its settlement into `priceLookup`. Bounded to 30 probes/run, 200ms-spaced, deduped by question. **Purely additive + conservative:** it only *adds* resolvable markets to the lookup; if a probe finds nothing the grader behaves exactly as before (no regression), and grading still requires a definitive 0/1 settlement (`price>0.95` / `<0.05`), so a probe can never produce a *wrong* grade.
+- **Not touched:** band gate, dedup rule, the grading math, receipts/headline definitions, Sources 1-3.
+- **Still open (separate follow-up #2, NOT in this change):** WC match FINAL pages 404 because `/api/worldcup/match/:slug` reads only the active alpha cache (`server.js:36022`) — a resolved match has left the `closed=false` feed. Same root (resolved markets aren't persisted), different surface. Fix later: have the WC page fall back to a resolution lookup instead of 404.
+- **Verify after deploy:** Railway log `[intelligence] targeted resolution probe: searched N unmatched markets`, then `[intelligence] Resolved N signals` with N>0; `/api/edge/track-record` → `record.last30d.graded` moves off 0 and `pending` starts draining within a cycle or two.
+
+---
+
 ## 2026-06-18 — Ledger starvation fix: wire the consensus detector to the ledger (Claude Code, branch `claude/keen-ride-do3ml2`)
 
 ### fix(edge): the whale-consensus detector now writes gradeable calls (HOLE 1)

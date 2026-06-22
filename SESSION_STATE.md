@@ -49,6 +49,16 @@
 
 ## Chronological log (newest first)
 
+## 2026-06-21 (Grader fix — resolved markets that aged out now grade)
+
+**Diagnosis (confirmed live):** pending climbed but graded frozen at 13. `resolveSignalOutcomes` runs fine; its only resolved-outcome source was a bounded recent/high-volume closed-market gamma fetch (~400 markets). WC matches settled days ago are in none of it → never grade, never expire (<60d) → pending forever. It was case (c).
+
+**Shipped (branch `claude/keen-ride-do3ml2`):** Source 4 — targeted resolution probe in `resolveSignalOutcomes` (`server.js:~58807`). Per still-unmatched pending call, search gamma CLOSED markets by question, pull settlement into priceLookup. Bounded 30/run, 200ms-spaced, deduped. Purely additive + conservative (only adds resolvable markets; still requires definitive 0/1 to grade) → no regression risk.
+
+**Open follow-up (#2, not done):** WC match FINAL pages 404 — `/api/worldcup/match/:slug` reads only the active alpha cache (`server.js:36022`); resolved matches left the `closed=false` feed. Same root (no resolved-market persistence). Fix: WC page falls back to a resolution lookup instead of 404.
+
+**Verify after deploy:** Railway `[intelligence] targeted resolution probe: searched N…` then `[intelligence] Resolved N signals` N>0; `/api/edge/track-record` last30d.graded off 0, pending draining.
+
 ## 2026-06-18b (Ledger starvation fix — wire consensus detector → ledger)
 
 **Diagnosis (confirmed live by Marc):** `/api/signals` returned ZERO whale_cluster (only 2 momentum). The `[whale-consensus]` detector fires reliably but only wrote `whale_consensus_signals` + feed — never `logSignalOutcome`. Two parallel detectors, never connected. signal_outcomes starved ~30d (13 decided + 8 pending, all >30d old).
