@@ -404,29 +404,60 @@ function buildNewsItem(item) {
 </div>`;
 }
 
+// Fetch JSON with a per-attempt timeout + silent auto-retry (backoff between
+// tries). `warming(data)` returning true means "server cache isn't ready yet —
+// keep retrying", so a cold cache reads as loading, never as failure. Never throws.
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function fetchFeed(url, opts) {
+  opts = opts || {};
+  const attempts = opts.attempts || 3;             // initial + 2 retries
+  const backoff  = opts.backoff  || [1000, 2000];  // 1s, 2s
+  const timeout  = opts.timeout  || 8000;
+  let result = { ok: false };
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), timeout);
+    try {
+      const resp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(tid);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      result = { ok: true, data };
+      if (opts.warming && opts.warming(data) && i < attempts - 1) { await sleep(backoff[i] || 2000); continue; }
+      return result;
+    } catch (e) {
+      clearTimeout(tid);
+      result = { ok: false, error: e };
+      if (i < attempts - 1) await sleep(backoff[i] || 2000);
+    }
+  }
+  return result;
+}
+
 async function loadNews() {
   const pane = document.getElementById('news-feed');
   pane.innerHTML = skeletonNews(6);
 
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const resp = await fetch('/api/news-feed', { signal: ctrl.signal });
-    clearTimeout(tid);
-    const data = await resp.json();
-    const items = data.items || [];
+  // A cold/warming cache (warming flag, or no items yet) is retryable, not a failure.
+  const res = await fetchFeed('/api/news-feed', {
+    warming: d => !!(d && (d.warming || !(d.items && d.items.length)))
+  });
+  const data = res.ok ? res.data : null;
+  const items = (data && data.items) || [];
+
+  if (items.length) {
     const matched = items.filter(x => x.market).length;
     document.getElementById('live-count').textContent = matched + ' matched';
-    if (!items.length) {
-      pane.innerHTML = '<div class="empty-state">No news available right now.</div>';
-      return;
-    }
     pane.innerHTML = items.map(buildNewsItem).join('');
-  } catch (e) {
-    clearTimeout(tid);
-    console.error('[news-feed]', e);
-    pane.innerHTML = '<div class="empty-state">Failed to load — <a href="javascript:location.reload()" style="color:#a78bfa">retry</a></div>';
+    return;
   }
+
+  // Retries exhausted with nothing to show — styled state with in-place retry,
+  // never a blank void, never a misleading "Failed" while the cache is warming.
+  const warming = res.ok && data && (data.warming || !items.length);
+  pane.innerHTML = '<div class="empty-state">' +
+    (warming ? 'Loading the latest news… ' : 'Couldn’t reach the feed. ') +
+    '<a href="javascript:void 0" onclick="loadNews();return false" style="color:#a78bfa">retry</a></div>';
 }
 
 // ── Edge tab ─────────────────────────────────────────────────────────────────
@@ -468,20 +499,17 @@ async function loadEdge() {
   const pane = document.getElementById('edge-feed');
   pane.innerHTML = skeletonEdge(5);
 
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const resp = await fetch('/api/edge-feed', { signal: ctrl.signal });
-    clearTimeout(tid);
-    const data = await resp.json();
-    edgeCache = data;
-    renderEdge(data);
-  } catch (e) {
-    clearTimeout(tid);
-    console.error('[edge-feed]', e);
-    document.getElementById('edge-feed').innerHTML =
-      '<div class="empty-state">Failed to load — <a href="javascript:switchTab(\'edge\')" onclick="edgeLoaded=false" style="color:#a78bfa">retry</a></div>';
+  // Edge analysis can run AI on a cold cache — give each attempt a longer window
+  // and retry on transient failure. Valid empty/stale payloads render their own
+  // styled state via renderEdge, so we don't re-hit the (capped) AI endpoint for those.
+  const res = await fetchFeed('/api/edge-feed', { timeout: 15000, backoff: [1500, 3000] });
+  if (res.ok && res.data) {
+    edgeCache = res.data;
+    renderEdge(res.data);
+    return;
   }
+  document.getElementById('edge-feed').innerHTML =
+    '<div class="empty-state">Couldn’t reach the edge feed. <a href="javascript:void 0" onclick="loadEdge();return false" style="color:#a78bfa">retry</a></div>';
 }
 
 function renderEdge(data) {

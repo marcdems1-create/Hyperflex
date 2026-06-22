@@ -46189,12 +46189,11 @@ async function _resolveMatchCached(headline, markets) {
   return market ? { market, edge } : null;
 }
 
-app.get('/api/news-feed', async (req, res) => {
+let _newsFeedBuilding = false;
+async function _buildNewsFeed() {
+  if (_newsFeedBuilding) return; // a build is already in flight — don't stampede
+  _newsFeedBuilding = true;
   try {
-    if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
-      return res.json(_newsFeedCache.data);
-    }
-
     // Fetch headlines from Google News RSS (multiple topic feeds in parallel)
     const [top, world, biz, tech, politics, crypto] = await Promise.all([
       fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 20),
@@ -46306,12 +46305,33 @@ app.get('/api/news-feed', async (req, res) => {
 
     _newsFeedCache = { ts: Date.now(), data: result };
     console.log(`[news-feed] ${withMarket.length}/${paired.length} headlines matched to markets`);
-    res.json(result);
   } catch (err) {
-    console.error('[news-feed]', err.message);
-    res.json(_newsFeedCache.data || { items: [] });
+    console.error('[news-feed] build error:', err.message);
+  } finally {
+    _newsFeedBuilding = false;
   }
+}
+
+// SWR route — never block on a cold build, never hand the client an error for a
+// cache that simply hasn't been built yet. Fresh → serve; stale → serve stale +
+// refresh in the background; cold → kick off the build and return a `warming`
+// flag the frontend treats as "loading", not "failed".
+app.get('/api/news-feed', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+  if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
+    return res.json(_newsFeedCache.data);
+  }
+  if (_newsFeedCache.data) {
+    _buildNewsFeed(); // fire-and-forget background refresh
+    return res.json({ ..._newsFeedCache.data, stale: true });
+  }
+  _buildNewsFeed(); // fire-and-forget cold build
+  return res.json({ items: [], warming: true });
 });
+
+// Warm the news cache shortly after boot so the first real visitor gets data,
+// not a cold build (gives the data-engine/screener a few seconds to populate).
+setTimeout(() => { _buildNewsFeed(); }, 4000);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EDGE FEED  —  /api/edge-feed
@@ -58783,6 +58803,58 @@ async function resolveSignalOutcomes() {
         }
       }
     } catch (e) { console.warn('[intelligence] closed-market lookup error:', e.message); }
+
+    // Source 4 — TARGETED resolution probe. Sources 1-3 only cover active markets
+    // plus the ~400 most-recent / highest-volume closed markets. A call on a market
+    // that settled days ago (e.g. a World Cup match that resolved a week back) is in
+    // NONE of them, so it never grades and pending grows forever. For each pending
+    // call still unmatched, search gamma's CLOSED markets for that exact market and
+    // pull its settlement into priceLookup. Bounded + spaced (gamma politeness).
+    // Purely additive: only ADDS resolvable markets — if a probe finds nothing, the
+    // grader behaves exactly as before (no regression), and grading still requires a
+    // definitive 0/1 settlement below, so a probe can never produce a wrong grade.
+    try {
+      const RESOLVE_PROBE_MAX = 30;
+      const probedQuestions = new Set();
+      let probed = 0;
+      const _isResolvable = (q) => {
+        if (priceLookup.has(q)) return true;
+        const pfx = q.substring(0, 50);
+        for (const k of priceLookup.keys()) if (k.startsWith(pfx)) return true;
+        return false;
+      };
+      for (const sig of pending) {
+        if (probed >= RESOLVE_PROBE_MAX) break;
+        const q = (sig.market_question || '').toLowerCase().trim();
+        if (!q || probedQuestions.has(q) || _isResolvable(q)) continue;
+        probedQuestions.add(q);
+        probed++;
+        try {
+          const term = (sig.market_question || '').substring(0, 60);
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(
+            'https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=5&order=end_date&ascending=false&search=' + encodeURIComponent(term),
+            { signal: ctrl.signal }
+          ).finally(() => clearTimeout(tid));
+          if (r && r.ok) {
+            const mkts = _gammaUnwrap(await r.json().catch(() => null));
+            for (const m of (Array.isArray(mkts) ? mkts : [])) {
+              if (!m.question || !m.outcomePrices) continue;
+              try {
+                const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+                const yesPrice = parseFloat(prices[0]);
+                if (!isNaN(yesPrice)) {
+                  priceLookup.set(m.question.toLowerCase().trim(), { price: yesPrice, end_date: m.endDate || m.end_date, closed: true });
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+        await new Promise(res => setTimeout(res, 200)); // spacing — gamma politeness
+      }
+      if (probed) console.log('[intelligence] targeted resolution probe: searched ' + probed + ' unmatched markets, lookup now ' + priceLookup.size);
+    } catch (e) { console.warn('[intelligence] targeted resolution probe error:', e.message); }
 
     let resolved = 0;
     let expired = 0;
