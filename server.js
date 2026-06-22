@@ -58731,8 +58731,20 @@ async function logEdgePicks(markets) {
 
 // 2. RESOLVE OUTCOMES — every 30 min
 // Checks ALL sources: screener cache, whale index cache, AND fetches resolved markets
-async function resolveSignalOutcomes() {
-  if (!pool) return;
+async function resolveSignalOutcomes(opts = {}) {
+  // Optional, NON-BEHAVIORAL instrumentation. Only the /api/admin/force-resolve
+  // diagnostic passes opts.instrument; the cron calls resolveSignalOutcomes()
+  // with no opts → stats is null → every collector below is a no-op → grading is
+  // byte-identical to the cron. Same code path, just observable.
+  const stats = opts.instrument ? { probed: 0, matched: 0, graded: 0, skipped: {}, sample_skips: [] } : null;
+  if (!pool) return stats;
+  const _skip = (sig, reason) => {
+    if (!stats) return;
+    stats.skipped[reason] = (stats.skipped[reason] || 0) + 1;
+    if (reason === 'no_market_match' && stats.sample_skips.length < 5) {
+      stats.sample_skips.push({ question: sig.market_question, predicted_side: sig.predicted_side, skip_reason: reason });
+    }
+  };
   try {
     const pending = await dbQuery(
       "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
@@ -58747,8 +58759,9 @@ async function resolveSignalOutcomes() {
     ).catch(() => []);
     for (const r of rescuable) r._wasExpired = true;
     pending.push(...rescuable);
+    if (stats) stats.probed = pending.length;
 
-    if (!pending.length) return;
+    if (!pending.length) return stats;
 
     // Build lookup from ALL available market data
     const priceLookup = new Map(); // question_lower → { price, end_date }
@@ -58881,6 +58894,9 @@ async function resolveSignalOutcomes() {
         if (!sig._wasExpired && sigAge > 60 * 86400000) {
           await dbQuery("UPDATE signal_outcomes SET outcome = 'expired', resolved_at = NOW() WHERE id = $1", [sig.id]);
           expired++;
+          _skip(sig, 'expired');
+        } else {
+          _skip(sig, 'no_market_match');
         }
         continue;
       }
@@ -58902,6 +58918,7 @@ async function resolveSignalOutcomes() {
           [correct ? 'correct' : 'wrong', pnl, edge, sig.id]);
         resolved++;
         if (sig._wasExpired) rescued++;
+        if (stats) { stats.matched++; stats.graded++; }
       }
       // Resolved NO (price < 5%)
       else if (price < 0.05) {
@@ -58912,7 +58929,10 @@ async function resolveSignalOutcomes() {
           [correct ? 'correct' : 'wrong', pnl, edge, sig.id]);
         resolved++;
         if (sig._wasExpired) rescued++;
+        if (stats) { stats.matched++; stats.graded++; }
       }
+      // Market matched in the lookup but not settled to 0/1 yet (still open).
+      else { _skip(sig, 'matched_unsettled'); }
     }
 
     if (resolved > 0 || expired > 0) {
@@ -58921,8 +58941,41 @@ async function resolveSignalOutcomes() {
       await updateConfidenceCalibration();
       await updatePlatformMetrics();
     }
-  } catch(e) { console.warn('[intelligence] resolve error:', e.message); }
+    return stats;
+  } catch(e) { console.warn('[intelligence] resolve error:', e.message); return stats; }
 }
+
+// ── DIAGNOSTIC: POST /api/admin/force-resolve ────────────────────────────────
+// Runs the REAL resolver (resolveSignalOutcomes) on demand with instrumentation
+// ON — identical code path to the 30-min cron, just observable. Reports what it
+// probed / matched / graded, the skip-reason histogram, and up to 5 sample rows
+// that failed to grade (with why). Does NOT change grading. Settles in one curl
+// whether a grading drought is deploy lag (graded>0) or a real match failure
+// (sample_skips show no_market_match on markets that have resolved).
+//   curl -X POST "https://hyperflex.network/api/admin/force-resolve?secret=$ADMIN_SECRET"
+app.post('/api/admin/force-resolve', requireAdminSecret, async (req, res) => {
+  try {
+    const _pendingCount = async () => {
+      const r = await dbQuery("SELECT COUNT(*)::int AS c FROM signal_outcomes WHERE outcome IS NULL").catch(() => null);
+      return (r && r[0]) ? r[0].c : null;
+    };
+    const pending_before = await _pendingCount();
+    const stats = await resolveSignalOutcomes({ instrument: true });
+    const pending_after = await _pendingCount();
+    res.json({
+      ran: true,
+      pending_before,
+      pending_after,
+      probed: stats ? stats.probed : 0,
+      matched: stats ? stats.matched : 0,
+      graded: stats ? stats.graded : 0,
+      skipped: stats ? stats.skipped : {},
+      sample_skips: stats ? stats.sample_skips : []
+    });
+  } catch (e) {
+    res.status(500).json({ ran: false, error: e.message });
+  }
+});
 
 // 3. SOURCE ACCURACY — honest recompute, keyed on signal MECHANISM.
 // Two corrections from the pooled-22.6% era:
