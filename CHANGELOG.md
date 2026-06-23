@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-06-22 — Grader matches ZERO: stable-key (conditionId) grading (Claude Code, branch `claude/keen-ride-do3ml2`)
+
+### fix(intelligence): grade by conditionId/slug, not drifting question text
+- **Root cause (confirmed live via force-resolve):** probed 400, matched 0, `no_market_match=400` — even a clean-titled prop ("Son Heungmin: 3+ shots") returned no_market_match. Two failures: (a) the Source-4 probe used `markets/keyset?closed=true&order=end_date&search=` — gamma does **not** honor `search` on that keyset combo (every proven search callsite uses `order=volume`), so it returned the wrong 5 markets every time; (b) the ledger joined on `market_question` **text**, which drifts for time-windowed/prop markets, and `signal_outcomes` persisted **no** stable key — the consensus detector even *discarded* the position's `conditionId`.
+- **Fix (one PR):**
+  1. **Persist `condition_id`** on `signal_outcomes` (additive column + partial index). `logSignalOutcome` now writes it.
+  2. **Capture the position's `conditionId`** in the consensus detector (it was on `p` all along — `p.conditionId`), authoritative over screener enrichment; passed through the HOLE-1 ledger call.
+  3. **Resolver Source 4 rewritten** to STABLE-KEY settlement: for each pending row with a `condition_id` (or a slug parsed from `market_url`), fetch the market DIRECTLY via gamma's **proven** `markets/keyset?condition_ids=` / `?slug=` (same shape as `_fetchPolymarketMeta`), read `outcomePrices`, accept **only a definitive 0/1**. The grade loop applies this exact match before any text fallback. No text drift, and a stale/active market can never produce a wrong grade.
+  4. **Stop logging noise:** consensus detector now applies buildAlphaList's "up or down" micro-resolution skip (these settle in hours, aren't edge, and were the bulk of the ungradeable 998).
+- **Don't break:** keep the 0/1 settlement requirement; the stable-key match is exact (conditionId/slug) — never loosen to a fuzzy/prefix match on time-windowed markets (different windows share prefixes → wrong grade). Legacy text fallback (Sources 1-3 + exact/50-char) retained for old rows.
+- **Honest scope:** fixes **future** inflow reliably (new consensus rows carry conditionId). Existing 998 rows mostly lack conditionId; those with a slug in `market_url` can still grade via the slug path, the rest stay ungradeable (largely the noise now filtered out). The point is unblocking n past 13 going forward.
+- **VERIFY (Marc, prod — I'm egress-blocked from gamma/prod + no ADMIN_SECRET):** `POST /api/admin/force-resolve?secret=$ADMIN_SECRET` → expect `[intelligence] stable-key settlement: probed N keys, settled M` in logs and `graded > 0` on rows that carry a conditionId/slug. If still 0, it means the existing rows predate key-capture — confirm new rows grade as fresh consensus resolves.
+
+---
+
 ## 2026-06-21 — Grader fix: resolved markets that aged out of the active feed now grade (Claude Code, branch `claude/keen-ride-do3ml2`)
 
 ### fix(intelligence): targeted resolution probe so pending calls actually grade (Source 4)
