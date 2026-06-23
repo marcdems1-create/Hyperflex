@@ -34941,17 +34941,27 @@ async function fetchWhalePositions() {
           const side = (p.side || 'YES').toUpperCase();
           const size = parseFloat(p.size) || 0;
           if (!mkt || size < 5000) continue; // skip small positions
+          // Skip micro-resolution noise (e.g. "Ethereum Up or Down - June 11,
+          // 8:00PM-12:00AM ET") — same filter buildAlphaList uses (~39480).
+          // These settle in hours, aren't real edge, and were polluting the
+          // ledger with ungradeable rows (drifting time-windowed titles).
+          const _mlow = mkt.toLowerCase();
+          if (/\d+(:\d+)?(am|pm)\s*(et|utc|gmt)/.test(_mlow) && _mlow.includes('up or down')) continue;
           const key = mkt + '||' + side;
           if (!consensusMap.has(key)) {
             consensusMap.set(key, {
               market: mkt, side: side, whales: new Set(),
               totalCapital: 0, priceSum: 0, priceCount: 0,
-              marketUrl: p.market_url || ''
+              marketUrl: p.market_url || '', conditionId: ''
             });
           }
           const c = consensusMap.get(key);
           c.whales.add(wallet);
           c.totalCapital += size;
+          // Capture the position's conditionId — the STABLE grading key. The
+          // screener enrichment below only fills it for markets still in the
+          // active feed; the position carries it even for ones that left.
+          if (!c.conditionId && (p.conditionId || p.condition_id)) c.conditionId = p.conditionId || p.condition_id;
           if (p.current_price > 0 && p.current_price < 1) {
             c.priceSum += parseFloat(p.current_price);
             c.priceCount++;
@@ -34970,8 +34980,9 @@ async function fetchWhalePositions() {
             total_capital: Math.round(c.totalCapital),
             avg_price: avgPrice ? parseFloat(avgPrice.toFixed(4)) : null,
             market_url: c.marketUrl,
-            // Enrich with slug + clobTokenIds from screener cache
-            slug: null, condition_id: null, clob_token_ids: null
+            // condition_id from the position is the stable grading key (screener
+            // enrich below may also set it, but only for still-active markets).
+            slug: null, condition_id: c.conditionId || null, clob_token_ids: null
           });
         }
       }
@@ -34984,7 +34995,7 @@ async function fetchWhalePositions() {
           const match = _screenerCache.data.find(m => (m.question || '').toLowerCase().trim() === qLower);
           if (match) {
             if (match.slug) sig.slug = match.slug;
-            if (match.market_id) sig.condition_id = match.market_id;
+            if (match.market_id && !sig.condition_id) sig.condition_id = match.market_id;
             if (match.clobTokenIds) sig.clob_token_ids = typeof match.clobTokenIds === 'string' ? match.clobTokenIds : JSON.stringify(match.clobTokenIds);
             if (match.yes_price != null && match.yes_price > 0 && match.yes_price < 1) sig.live_yes_price = match.yes_price;
           }
@@ -35114,6 +35125,7 @@ async function fetchWhalePositions() {
             confidence: sig.whale_count >= 10 ? 'HIGH' : sig.whale_count >= 7 ? 'MEDIUM' : 'LOW',
             whale_count: sig.whale_count,
             url: sig.market_url || (sig.slug ? 'https://hyperflex.network/market/' + sig.slug : ''),
+            condition_id: sig.condition_id || null, // STABLE grading key
           });
         } catch (sigErr) { console.warn('[whale-consensus] per-sig error:', sigErr.message); }
       }
@@ -58665,6 +58677,9 @@ async function logSignalOutcome(signal) {
 
     const whaleCount = signal.whale_count || 0;
     const url = (signal.url || '').substring(0, 500);
+    // STABLE grading key — Polymarket conditionId. Text matching drifts (esp.
+    // time-windowed / prop markets); the resolver grades by this when present.
+    const conditionId = (signal.condition_id || '').toString().substring(0, 100) || null;
 
     // Cross-cycle dedup: one OPEN row per (market_question, predicted_side).
     // The in-memory hash only suppresses re-logs within a single 20-min window;
@@ -58684,9 +58699,9 @@ async function logSignalOutcome(signal) {
     _loggedSignalHashes.add(hash); // only mark logged once we know we're inserting
     await dbQuery(`INSERT INTO signal_outcomes
       (signal_type, source, market_question, market_url, predicted_side,
-       predicted_at, market_price_at_signal, confidence_level, whale_count)
-      VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8)`,
-      [type, source, mkt, url, side, price, confidence, whaleCount]
+       predicted_at, market_price_at_signal, confidence_level, whale_count, condition_id)
+      VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9)`,
+      [type, source, mkt, url, side, price, confidence, whaleCount, conditionId]
     );
   } catch(e) { /* silent — don't break signal delivery */ }
 }
@@ -58747,7 +58762,7 @@ async function resolveSignalOutcomes(opts = {}) {
   };
   try {
     const pending = await dbQuery(
-      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
     );
 
     // Rescue pass: signals the OLD resolver aged out as 'expired' before the
@@ -58755,7 +58770,7 @@ async function resolveSignalOutcomes(opts = {}) {
     // them for real. Bounded to the same 60-day window so ancient rows (whose
     // markets will never appear in the recent-closed fetch) don't churn forever.
     const rescuable = await dbQuery(
-      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal FROM signal_outcomes WHERE outcome = 'expired' AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome = 'expired' AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
     ).catch(() => []);
     for (const r of rescuable) r._wasExpired = true;
     pending.push(...rescuable);
@@ -58817,72 +58832,84 @@ async function resolveSignalOutcomes(opts = {}) {
       }
     } catch (e) { console.warn('[intelligence] closed-market lookup error:', e.message); }
 
-    // Source 4 — TARGETED resolution probe. Sources 1-3 only cover active markets
-    // plus the ~400 most-recent / highest-volume closed markets. A call on a market
-    // that settled days ago (e.g. a World Cup match that resolved a week back) is in
-    // NONE of them, so it never grades and pending grows forever. For each pending
-    // call still unmatched, search gamma's CLOSED markets for that exact market and
-    // pull its settlement into priceLookup. Bounded + spaced (gamma politeness).
-    // Purely additive: only ADDS resolvable markets — if a probe finds nothing, the
-    // grader behaves exactly as before (no regression), and grading still requires a
-    // definitive 0/1 settlement below, so a probe can never produce a wrong grade.
+    // Source 4 — STABLE-KEY settlement (conditionId / slug). The old text-search
+    // probe was unreliable: gamma's keyset `search` isn't honored with
+    // closed=true+order=end_date, so it returned the wrong markets and matched 0
+    // (confirmed live — even clean-titled props returned no_market_match). Instead,
+    // for each pending row carrying a conditionId (or a slug in its market_url),
+    // fetch the market DIRECTLY via gamma's PROVEN by-id queries (the same
+    // condition_ids= shape _fetchPolymarketMeta uses) and read its settlement.
+    // Exact key → no text drift; we accept only a definitive 0/1, so a stale or
+    // still-active market can never produce a wrong grade. Result keyed by the
+    // stable key; the grade loop applies it before any text match.
+    const settlementByKey = new Map(); // conditionId|slug → yesPrice (0 or 1)
+    const _slugFromUrl = (u) => {
+      if (!u) return null;
+      const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
+      return m ? m[1].toLowerCase() : null;
+    };
     try {
-      const RESOLVE_PROBE_MAX = 30;
-      const probedQuestions = new Set();
+      const RESOLVE_PROBE_MAX = 40;
+      const seen = new Set();
       let probed = 0;
-      const _isResolvable = (q) => {
-        if (priceLookup.has(q)) return true;
-        const pfx = q.substring(0, 50);
-        for (const k of priceLookup.keys()) if (k.startsWith(pfx)) return true;
-        return false;
+      const _settled = (m) => {
+        if (!m || m.outcomePrices == null) return null;
+        try {
+          const pr = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          const yes = parseFloat(pr[0]);
+          return (!isNaN(yes) && (yes > 0.95 || yes < 0.05)) ? yes : null; // settled 0/1 only
+        } catch { return null; }
+      };
+      const _gammaArr = async (url) => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 8000);
+        try {
+          const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+          if (!r || !r.ok) return [];
+          const a = _gammaUnwrap(await r.json().catch(() => null));
+          return Array.isArray(a) ? a : [];
+        } catch { return []; }
       };
       for (const sig of pending) {
         if (probed >= RESOLVE_PROBE_MAX) break;
-        const q = (sig.market_question || '').toLowerCase().trim();
-        if (!q || probedQuestions.has(q) || _isResolvable(q)) continue;
-        probedQuestions.add(q);
+        const cid = sig.condition_id || null;
+        const slug = cid ? null : _slugFromUrl(sig.market_url);
+        const key = cid || slug;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
         probed++;
-        try {
-          const term = (sig.market_question || '').substring(0, 60);
-          const ctrl = new AbortController();
-          const tid = setTimeout(() => ctrl.abort(), 8000);
-          const r = await fetch(
-            'https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=5&order=end_date&ascending=false&search=' + encodeURIComponent(term),
-            { signal: ctrl.signal }
-          ).finally(() => clearTimeout(tid));
-          if (r && r.ok) {
-            const mkts = _gammaUnwrap(await r.json().catch(() => null));
-            for (const m of (Array.isArray(mkts) ? mkts : [])) {
-              if (!m.question || !m.outcomePrices) continue;
-              try {
-                const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
-                const yesPrice = parseFloat(prices[0]);
-                if (!isNaN(yesPrice)) {
-                  priceLookup.set(m.question.toLowerCase().trim(), { price: yesPrice, end_date: m.endDate || m.end_date, closed: true });
-                }
-              } catch {}
-            }
-          }
-        } catch {}
-        await new Promise(res => setTimeout(res, 200)); // spacing — gamma politeness
+        const url = cid
+          ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
+          : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
+        const mkts = await _gammaArr(url);
+        for (const m of mkts) {
+          const yes = _settled(m);
+          if (yes != null) { settlementByKey.set(key, yes); break; }
+        }
+        await new Promise(res => setTimeout(res, 200)); // gamma politeness
       }
-      if (probed) console.log('[intelligence] targeted resolution probe: searched ' + probed + ' unmatched markets, lookup now ' + priceLookup.size);
-    } catch (e) { console.warn('[intelligence] targeted resolution probe error:', e.message); }
+      if (probed) console.log('[intelligence] stable-key settlement: probed ' + probed + ' keys, settled ' + settlementByKey.size);
+    } catch (e) { console.warn('[intelligence] stable-key settlement error:', e.message); }
 
     let resolved = 0;
     let expired = 0;
     let rescued = 0;
 
     for (const sig of pending) {
-      const q = (sig.market_question || '').toLowerCase().trim();
-      if (!q) continue;
+      // STABLE-KEY settlement first (conditionId / slug) — exact, drift-proof.
+      const _sk = sig.condition_id || _slugFromUrl(sig.market_url);
+      let match = (_sk && settlementByKey.has(_sk)) ? { price: settlementByKey.get(_sk), closed: true } : null;
 
-      // Exact match first, then fuzzy (first 50 chars)
-      let match = priceLookup.get(q);
+      const q = (sig.market_question || '').toLowerCase().trim();
       if (!match) {
-        const prefix = q.substring(0, 50);
-        for (const [k, v] of priceLookup) {
-          if (k.startsWith(prefix)) { match = v; break; }
+        if (!q) { _skip(sig, 'no_market_match'); continue; }
+        // Legacy text fallback — exact, then first-50-char prefix.
+        match = priceLookup.get(q);
+        if (!match) {
+          const prefix = q.substring(0, 50);
+          for (const [k, v] of priceLookup) {
+            if (k.startsWith(prefix)) { match = v; break; }
+          }
         }
       }
 
@@ -59552,6 +59579,8 @@ setTimeout(() => {
   // Fresh-DB safety: CREATE TABLE signal_outcomes omits these, but the logger
   // INSERTs market_url and the resolver UPDATEs the other two.
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_url TEXT').catch(() => {});
+  dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS condition_id TEXT').catch(() => {});
+  dbQuery('CREATE INDEX IF NOT EXISTS idx_signal_outcomes_condition ON signal_outcomes(condition_id) WHERE condition_id IS NOT NULL AND outcome IS NULL').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_price_at_close NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
