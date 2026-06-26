@@ -46328,7 +46328,45 @@ async function _buildNewsFeed() {
 // cache that simply hasn't been built yet. Fresh → serve; stale → serve stale +
 // refresh in the background; cold → kick off the build and return a `warming`
 // flag the frontend treats as "loading", not "failed".
-app.get('/api/news-feed', (req, res) => {
+app.get('/api/news-feed', async (req, res) => {
+  // DIAGNOSTIC: ?debug=1 introspects the matcher in one curl — names (a) empty/
+  // thin pool vs (b) match-failure without log-digging. Read-only: does NOT touch
+  // the production cache or matching behavior.
+  if (req.query.debug === '1') {
+    try {
+      let pool = [];
+      let poolRaw = 0, poolSrc = 'data-engine';
+      try {
+        const dm = await dataEngine.getMarkets({ source: 'polymarket', status: 'active', limit: 200 });
+        poolRaw = (dm.markets || []).length;
+        pool = (dm.markets || []).map(m => ({
+          slug: m.source_id, question: m.title, description: m.description || '',
+          yes_price: (m.outcomes && m.outcomes[0]) ? m.outcomes[0].price : null,
+        }));
+      } catch (e) { /* report via pool_raw=0 */ }
+      if (!pool.length && _screenerCache && Array.isArray(_screenerCache.data)) { pool = _screenerCache.data; poolSrc = 'screener-fallback'; }
+      const markets = pool.filter(m => m.question && m.yes_price != null);
+      const aiEnabled = process.env.NEWS_AI_MATCHING !== 'false' && !!process.env.ANTHROPIC_API_KEY && markets.length > 0;
+      const probes = ['Iran strikes vessel in Strait of Hormuz', 'Bitcoin hits a new all-time high', 'Trump signs executive order'];
+      const sample_probes = probes.map(t => {
+        const cands = _getCandidateMarkets({ title: t }, markets, 5);
+        return { headline: t, candidates_found: cands.length, top_candidate: cands[0] ? (cands[0].question || cands[0].title) : null };
+      });
+      const hormuz = markets.find(m => ((m.slug || '') + ' ' + (m.question || '')).toLowerCase().includes('hormuz'));
+      return res.json({
+        debug: true,
+        pool_raw_from_dataengine: poolRaw,
+        pool_source: poolSrc,
+        pool_filtered: markets.length,
+        ai_enabled: aiEnabled,
+        has_anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+        news_ai_matching_env: process.env.NEWS_AI_MATCHING || '(unset→on)',
+        hormuz_market_in_pool: hormuz ? (hormuz.slug || hormuz.question) : null,
+        sample_probes,
+        sample_pool_questions: markets.slice(0, 8).map(m => m.question || m.title),
+      });
+    } catch (e) { return res.status(500).json({ debug: true, error: e.message }); }
+  }
   res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   if (_newsFeedCache.data && Date.now() - _newsFeedCache.ts < NEWS_FEED_TTL) {
     return res.json(_newsFeedCache.data);
