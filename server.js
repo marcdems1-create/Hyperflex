@@ -23009,10 +23009,10 @@ app.get('/api/takes/recently-resolved', optionalAuth, async (req, res) => {
     const rows = await dbQuery(`
       SELECT t.id, t.question, t.side, t.entry_price, t.is_correct, t.resolved_at,
              t.market_slug, t.agree_count, t.disagree_count, t.source,
-             u.username, u.display_name, u.tier
+             u.username, u.display_name, u.flex_tier AS tier
       FROM takes t
       LEFT JOIN users u ON u.id = t.user_id
-      WHERE t.resolved_at > now() - ($2 || ' hours')::interval
+      WHERE t.resolved_at > now() - make_interval(hours => $2::int)
         AND t.is_correct IS NOT NULL
         AND t.source = 'user'
       ORDER BY t.resolved_at DESC

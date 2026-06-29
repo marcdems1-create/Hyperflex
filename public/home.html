@@ -1415,7 +1415,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       document.querySelectorAll('[id^="cd-"]').forEach(function(el){
         var slug = el.id.replace('cd-','');
         var card = document.querySelector('[data-slug="'+slug+'"]');
-        var m = card && primary.concat(byWhale||[],byVol||[]).find(function(x){return getSlug(x)===slug;});
+        var m = card && primary.concat(whaleMarkets||[],byVol||[]).find(function(x){return getSlug(x)===slug;});
         var ed = m && (m.end_date||m.endDate||null);
         if(ed) window.HFX.watchCountdown(el, ed);
       });
