@@ -46180,10 +46180,12 @@ No other text.`;
 // The dataEngine pool is top-by-volume → flooded with live-sports / esports
 // micro-markets, ZERO geopolitics/macro. So world-news headlines have nothing to
 // match. Fix: per-headline targeted search of OPEN markets by the headline's
-// proper-noun entities, using the PROVEN gamma shape (closed=false + order=volume
-// + search — the same shape working elsewhere; note the grader's closed=true +
-// order=end_date + search shape does NOT honor search, which is why that path
-// failed). This brings the RIGHT markets (e.g. the Hormuz market) into the
+// proper-noun entities, using Polymarket's REAL search endpoint /public-search
+// (the same relevance-ranked path the site's global market search uses,
+// server.js ~33544). NOTE: /markets/keyset?search= silently IGNORES the search
+// term and returns top-by-volume junk (tennis/esports for "Iran") — an earlier
+// pass used it and surfaced wrong markets. /public-search is server-side semantic
+// ranked, so it brings the RIGHT markets (e.g. the Hormuz market) into the
 // candidate set regardless of volume rank; Haiku still judges precisely, so
 // quality is preserved — this is coverage, not loosening.
 const _NEWS_SEARCH_STOP = new Set(['The','This','That','These','New','After','Amid','How','Why','What','When','Where','Who','Is','Are','Will','Says','Could','Would','BREAKING','WATCH','LIVE','Report','Reports','News','Update']);
@@ -46193,8 +46195,8 @@ function _headlineSearchTerms(headline) {
   // most distinct so we don't over-constrain (gamma search is single-term-ish).
   const caps = (title.match(/\b[A-Z][a-zA-Z.&'-]{2,}\b/g) || []).filter(w => !_NEWS_SEARCH_STOP.has(w));
   const uniq = [...new Set(caps)];
-  if (uniq.length) return uniq.slice(0, 2);
-  return [...new Set((title.toLowerCase().match(/[a-z]{5,}/g) || []))].slice(0, 1);
+  if (uniq.length) return uniq.slice(0, 3);
+  return [...new Set((title.toLowerCase().match(/[a-z]{5,}/g) || []))].slice(0, 2);
 }
 
 const _newsSearchCache = new Map(); // term(lower) -> { markets, ts }
@@ -46203,40 +46205,59 @@ async function _gammaSearchOpen(term) {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=' + encodeURIComponent(term),
+    // /public-search → { events: [ { slug, title, markets: [ {question,outcomePrices,closed,...} ] } ] }
+    // Relevance-ranked server-side; this is the path the site's global search uses.
+    const r = await fetch('https://gamma-api.polymarket.com/public-search?q=' + encodeURIComponent(term) + '&limit_per_type=20',
       { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/2.0' } }).finally(() => clearTimeout(tid));
     if (!r || !r.ok) return [];
-    const arr = _gammaUnwrap(await r.json().catch(() => null));
-    if (!Array.isArray(arr)) return [];
-    return arr.map(m => {
-      let yes = null;
-      try { yes = m.outcomePrices ? parseFloat((typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices)[0]) : null; } catch {}
-      return {
-        slug: m.slug || m.conditionId || '',
-        question: m.question || m.title || '',
-        description: m.description || '',
-        yes_price: (yes != null && !isNaN(yes)) ? yes : null,
-        volume: parseFloat(m.volume || m.volumeNum || 0),
-        end_date: m.endDate || m.endDateIso || null,
-        image: m.image || (m.events && m.events[0] && m.events[0].image) || m.icon || null,
-        event_image_url: (m.events && m.events[0] && m.events[0].image) || m.image || null,
-        category: null, edge_score: 0, whale_count: 0,
-      };
-    }).filter(m => m.slug && m.question && m.yes_price != null && m.yes_price > 0.01 && m.yes_price < 0.99);
+    const raw = await r.json().catch(() => null);
+    const events = (raw && raw.events) || (Array.isArray(raw) ? raw : []);
+    if (!Array.isArray(events)) return [];
+    const out = [];
+    for (const evt of events) {
+      const evtSlug = evt.slug || '';
+      const evtImg = evt.image || evt.icon || null;
+      const nested = Array.isArray(evt.markets) && evt.markets.length ? evt.markets : [evt];
+      for (const m of nested) {
+        if (m.closed) continue;
+        const question = m.question || m.groupItemTitle || m.title || evt.title || '';
+        if (!question) continue;
+        let yes = null;
+        try {
+          const op = m.outcomePrices || evt.outcomePrices;
+          if (op) yes = parseFloat((typeof op === 'string' ? JSON.parse(op) : op)[0]);
+        } catch {}
+        if ((yes == null || isNaN(yes)) && m.bestAsk != null) yes = parseFloat(m.bestAsk);
+        out.push({
+          slug: m.slug || m.eventSlug || evtSlug || '',
+          question,
+          description: m.description || evt.description || '',
+          yes_price: (yes != null && !isNaN(yes)) ? yes : null,
+          volume: parseFloat(m.volume || m.volumeNum || evt.volume || 0),
+          end_date: m.endDate || m.endDateIso || evt.endDate || null,
+          image: m.image || m.icon || evtImg || null,
+          event_image_url: evtImg || m.image || null,
+          category: null, edge_score: 0, whale_count: 0,
+        });
+      }
+    }
+    return out.filter(m => m.slug && m.question && m.yes_price != null && m.yes_price > 0.01 && m.yes_price < 0.99);
   } catch { return []; }
 }
 async function _searchHeadlineMarkets(headline) {
   const terms = _headlineSearchTerms(headline);
   if (!terms.length) return [];
-  const out = []; const seen = new Set();
-  for (const term of terms) {
+  // Search all terms in parallel (each /public-search call is independent).
+  const lists = await Promise.all(terms.map(async (term) => {
     const k = term.toLowerCase();
-    let hits;
     const c = _newsSearchCache.get(k);
-    if (c && Date.now() - c.ts < NEWS_SEARCH_TTL) hits = c.markets;
-    else { hits = await _gammaSearchOpen(term); _newsSearchCache.set(k, { markets: hits, ts: Date.now() }); }
-    for (const m of hits) { if (m.slug && !seen.has(m.slug)) { seen.add(m.slug); out.push(m); } }
-  }
+    if (c && Date.now() - c.ts < NEWS_SEARCH_TTL) return c.markets;
+    const hits = await _gammaSearchOpen(term);
+    _newsSearchCache.set(k, { markets: hits, ts: Date.now() });
+    return hits;
+  }));
+  const out = []; const seen = new Set();
+  for (const hits of lists) for (const m of hits) { if (m.slug && !seen.has(m.slug)) { seen.add(m.slug); out.push(m); } }
   return out;
 }
 
@@ -46248,8 +46269,10 @@ async function _combinedCandidates(headline, markets) {
   const poolCands = _getCandidateMarkets(headline, markets, 5) || [];
   let searched = [];
   try { searched = await _searchHeadlineMarkets(headline); } catch {}
+  // Searched (relevance-ranked /public-search) first so the most topical markets
+  // win the 8-slot cap; pool overlap (top-by-volume) fills the remainder.
   const seen = new Set(); const out = [];
-  for (const m of [...poolCands, ...searched]) {
+  for (const m of [...searched, ...poolCands]) {
     if (m && m.slug && !seen.has(m.slug)) { seen.add(m.slug); out.push(m); }
   }
   return out.slice(0, 8);
