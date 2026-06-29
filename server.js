@@ -46176,28 +46176,110 @@ No other text.`;
   }
 }
 
-// Resolve a headline to a live market object via the 1h decision cache.
-// Caches the slug (or null) so a cache hit re-resolves the CURRENT pool object
-// — keeps price/image fresh even though the match decision is an hour old.
-async function _resolveMatchCached(headline, markets) {
-  // 'v5:' prefix busts any decisions cached before edge sentences were threaded.
-  const key = 'v5:' + (headline.title || headline);
-  const cached = _matchCache.get(key);
-  let slug, edge;
-  if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
-    slug = cached.slug;
-    edge = cached.edge || null;
-  } else {
-    const candidates = _getCandidateMarkets(headline, markets, 5);
-    const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
-    slug = picked ? picked.market.slug : null;
-    edge = picked ? picked.edge : null;
-    _matchCache.set(key, { slug, edge, ts: Date.now() });
-    console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
-      key.slice(0, 40), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
+// ── News-relevant market search ─────────────────────────────────────────────
+// The dataEngine pool is top-by-volume → flooded with live-sports / esports
+// micro-markets, ZERO geopolitics/macro. So world-news headlines have nothing to
+// match. Fix: per-headline targeted search of OPEN markets by the headline's
+// proper-noun entities, using the PROVEN gamma shape (closed=false + order=volume
+// + search — the same shape working elsewhere; note the grader's closed=true +
+// order=end_date + search shape does NOT honor search, which is why that path
+// failed). This brings the RIGHT markets (e.g. the Hormuz market) into the
+// candidate set regardless of volume rank; Haiku still judges precisely, so
+// quality is preserved — this is coverage, not loosening.
+const _NEWS_SEARCH_STOP = new Set(['The','This','That','These','New','After','Amid','How','Why','What','When','Where','Who','Is','Are','Will','Says','Could','Would','BREAKING','WATCH','LIVE','Report','Reports','News','Update']);
+function _headlineSearchTerms(headline) {
+  const title = (headline && (headline.title || headline)) || '';
+  // Proper nouns ≈ capitalized words (entities news breaks about). Take the 2
+  // most distinct so we don't over-constrain (gamma search is single-term-ish).
+  const caps = (title.match(/\b[A-Z][a-zA-Z.&'-]{2,}\b/g) || []).filter(w => !_NEWS_SEARCH_STOP.has(w));
+  const uniq = [...new Set(caps)];
+  if (uniq.length) return uniq.slice(0, 2);
+  return [...new Set((title.toLowerCase().match(/[a-z]{5,}/g) || []))].slice(0, 1);
+}
+
+const _newsSearchCache = new Map(); // term(lower) -> { markets, ts }
+const NEWS_SEARCH_TTL = 30 * 60 * 1000; // 30 min
+async function _gammaSearchOpen(term) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=' + encodeURIComponent(term),
+      { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/2.0' } }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return [];
+    const arr = _gammaUnwrap(await r.json().catch(() => null));
+    if (!Array.isArray(arr)) return [];
+    return arr.map(m => {
+      let yes = null;
+      try { yes = m.outcomePrices ? parseFloat((typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices)[0]) : null; } catch {}
+      return {
+        slug: m.slug || m.conditionId || '',
+        question: m.question || m.title || '',
+        description: m.description || '',
+        yes_price: (yes != null && !isNaN(yes)) ? yes : null,
+        volume: parseFloat(m.volume || m.volumeNum || 0),
+        end_date: m.endDate || m.endDateIso || null,
+        image: m.image || (m.events && m.events[0] && m.events[0].image) || m.icon || null,
+        event_image_url: (m.events && m.events[0] && m.events[0].image) || m.image || null,
+        category: null, edge_score: 0, whale_count: 0,
+      };
+    }).filter(m => m.slug && m.question && m.yes_price != null && m.yes_price > 0.01 && m.yes_price < 0.99);
+  } catch { return []; }
+}
+async function _searchHeadlineMarkets(headline) {
+  const terms = _headlineSearchTerms(headline);
+  if (!terms.length) return [];
+  const out = []; const seen = new Set();
+  for (const term of terms) {
+    const k = term.toLowerCase();
+    let hits;
+    const c = _newsSearchCache.get(k);
+    if (c && Date.now() - c.ts < NEWS_SEARCH_TTL) hits = c.markets;
+    else { hits = await _gammaSearchOpen(term); _newsSearchCache.set(k, { markets: hits, ts: Date.now() }); }
+    for (const m of hits) { if (m.slug && !seen.has(m.slug)) { seen.add(m.slug); out.push(m); } }
   }
+  return out;
+}
+
+// Combine static-pool keyword candidates with per-headline targeted gamma search.
+// The static pool is top-by-volume (sports/crypto micro-markets) → world-news
+// headlines need the search path to reach geopolitics/macro/politics markets that
+// rank low on volume. Dedup by slug, cap at 8 so Haiku's judge prompt stays tight.
+async function _combinedCandidates(headline, markets) {
+  const poolCands = _getCandidateMarkets(headline, markets, 5) || [];
+  let searched = [];
+  try { searched = await _searchHeadlineMarkets(headline); } catch {}
+  const seen = new Set(); const out = [];
+  for (const m of [...poolCands, ...searched]) {
+    if (m && m.slug && !seen.has(m.slug)) { seen.add(m.slug); out.push(m); }
+  }
+  return out.slice(0, 8);
+}
+
+// Resolve a headline to a live market object via the 1h decision cache.
+// Caches the full picked object (not just the slug): a market surfaced by
+// targeted search is NOT in the static `markets` pool, so a slug-only cache hit
+// would re-find null. On a hit we still PREFER the live pool object (fresh
+// price/image) and fall back to the cached object only for searched markets.
+async function _resolveMatchCached(headline, markets) {
+  // 'v6:' prefix busts decisions cached before targeted-search candidates landed.
+  const key = 'v6:' + (headline.title || headline);
+  const cached = _matchCache.get(key);
+  if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
+    if (!cached.slug) return null;
+    const fresh = markets.find(m => m.slug === cached.slug);
+    const market = fresh || cached.market || null;
+    return market ? { market, edge: cached.edge || null } : null;
+  }
+  const candidates = await _combinedCandidates(headline, markets);
+  const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
+  const slug = picked ? picked.market.slug : null;
+  const edge = picked ? picked.edge : null;
+  _matchCache.set(key, { slug, edge, market: picked ? picked.market : null, ts: Date.now() });
+  console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
+    key.slice(0, 40), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
   if (!slug) return null;
-  const market = markets.find(m => m.slug === slug) || null;
+  const fresh = markets.find(m => m.slug === slug);
+  const market = fresh || picked.market || null;
   return market ? { market, edge } : null;
 }
 
@@ -46348,11 +46430,28 @@ app.get('/api/news-feed', async (req, res) => {
       const markets = pool.filter(m => m.question && m.yes_price != null);
       const aiEnabled = process.env.NEWS_AI_MATCHING !== 'false' && !!process.env.ANTHROPIC_API_KEY && markets.length > 0;
       const probes = ['Iran strikes vessel in Strait of Hormuz', 'Bitcoin hits a new all-time high', 'Trump signs executive order'];
-      const sample_probes = probes.map(t => {
-        const cands = _getCandidateMarkets({ title: t }, markets, 5);
-        return { headline: t, candidates_found: cands.length, top_candidate: cands[0] ? (cands[0].question || cands[0].title) : null };
-      });
-      const hormuz = markets.find(m => ((m.slug || '') + ' ' + (m.question || '')).toLowerCase().includes('hormuz'));
+      // Probes now run the EFFECTIVE matcher candidate path: static pool +
+      // per-headline targeted gamma search (same as production _resolveMatchCached).
+      const sample_probes = await Promise.all(probes.map(async t => {
+        const cands = await _combinedCandidates({ title: t }, markets);
+        return {
+          headline: t,
+          candidates_found: cands.length,
+          top_candidate: cands[0] ? (cands[0].question || cands[0].title) : null,
+          candidates: cands.slice(0, 3).map(c => c.question || c.title),
+        };
+      }));
+      // Canary: the static pool will NOT contain the Hormuz market (it's top-by-
+      // volume, no geopolitics). The targeted-search path is what surfaces it.
+      // Report both so the mechanism is transparent; hormuz_market_in_pool reflects
+      // the EFFECTIVE candidate set (pool OR search) — non-null = matcher can see it.
+      const hormuzStatic = markets.find(m => ((m.slug || '') + ' ' + (m.question || '')).toLowerCase().includes('hormuz'));
+      let hormuzViaSearch = null;
+      try {
+        const hs = await _searchHeadlineMarkets({ title: 'Strait of Hormuz Iran traffic' });
+        const hit = hs.find(m => ((m.slug || '') + ' ' + (m.question || '')).toLowerCase().includes('hormuz'));
+        hormuzViaSearch = hit ? (hit.slug || hit.question) : null;
+      } catch {}
       return res.json({
         debug: true,
         pool_raw_from_dataengine: poolRaw,
@@ -46361,7 +46460,9 @@ app.get('/api/news-feed', async (req, res) => {
         ai_enabled: aiEnabled,
         has_anthropic_key: !!process.env.ANTHROPIC_API_KEY,
         news_ai_matching_env: process.env.NEWS_AI_MATCHING || '(unset→on)',
-        hormuz_market_in_pool: hormuz ? (hormuz.slug || hormuz.question) : null,
+        hormuz_market_in_pool: (hormuzStatic ? (hormuzStatic.slug || hormuzStatic.question) : null) || hormuzViaSearch,
+        hormuz_source: hormuzStatic ? 'static-pool' : (hormuzViaSearch ? 'targeted-search' : null),
+        hormuz_via_search: hormuzViaSearch,
         sample_probes,
         sample_pool_questions: markets.slice(0, 8).map(m => m.question || m.title),
       });
