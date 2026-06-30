@@ -46132,8 +46132,11 @@ function _getCandidateMarkets(headline, markets, limit = 5) {
 }
 
 // Stage 2: Haiku picks the one genuinely-related market, or none (0).
+// Diagnostic: the last _haikuPickMarket call's raw response + outcome, surfaced
+// by ?debug=1 so the selector's verdict is visible in one curl (no log-digging).
+let _lastHaikuDebug = null;
 async function _haikuPickMarket(headline, candidates) {
-  if (!candidates || candidates.length === 0) return null;
+  if (!candidates || candidates.length === 0) { _lastHaikuDebug = { reason: 'no_candidates' }; return null; }
   const hText = headline.title || headline;
   console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
@@ -46159,20 +46162,34 @@ No other text.`;
     console.log('[haiku-match] calling Haiku...');
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 80,
+      max_tokens: 200,
       messages: [{ role: 'user', content: prompt }]
     });
     const text = (resp.content && resp.content[0] && resp.content[0].text || '').trim();
-    console.log('[haiku-match] raw response:', JSON.stringify(text));
-    let parsed;
-    try { parsed = JSON.parse(text); }
-    catch { console.log('[haiku-match] JSON parse failed'); return null; }
-    const pick = parseInt(parsed.pick, 10);
-    if (isNaN(pick) || pick < 1 || pick > candidates.length) return null;
+    const stop = resp.stop_reason || null;
+    console.log('[haiku-match] raw response:', JSON.stringify(text), '| stop:', stop);
+    // Robust parse: the model may wrap JSON in prose or ```json fences, or the
+    // edge sentence may run long. Extract the first {...} object, then parse.
+    // (The naive JSON.parse(text) used before failed on any wrapper — that was
+    // the divergence: candidates were found but the selector silently nulled.)
+    let parsed = null;
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
+    if (!parsed) { try { parsed = JSON.parse(text); } catch {} }
+    const pick = parsed ? parseInt(parsed.pick, 10) : NaN;
+    const ok = !!parsed && !isNaN(pick) && pick >= 1 && pick <= candidates.length;
+    _lastHaikuDebug = {
+      headline: hText.slice(0, 70), candidates: candidates.length,
+      stop_reason: stop, raw: text.slice(0, 240),
+      parsed_pick: parsed ? parsed.pick : null, ok,
+      picked: ok ? (candidates[pick - 1].question || '').slice(0, 60) : null,
+    };
+    if (!ok) { console.log('[haiku-match] no usable pick. parsed:', JSON.stringify(parsed)); return null; }
     const edge = (parsed.edge && String(parsed.edge).trim()) || null;
     console.log('[news-edge]', hText.slice(0, 30), '| pick:', pick, '| edge:', edge ? edge.slice(0, 40) : 'none');
     return { market: candidates[pick - 1], edge };
   } catch (e) {
+    _lastHaikuDebug = { headline: hText.slice(0, 70), candidates: candidates.length, error: e.message };
     console.log('[haiku-match] AI call failed — no match. msg:', e.message);
     return null; // fail safe: no match rather than a bad match
   }
@@ -46502,13 +46519,26 @@ app.get('/api/news-feed', async (req, res) => {
         const hit = hs.find(m => ((m.slug || '') + ' ' + (m.question || '')).toLowerCase().includes('hormuz'));
         hormuzViaSearch = hit ? (hit.slug || hit.question) : null;
       } catch {}
+      // SELECTOR DIAGNOSIS: run a FRESH (cache-bypassed) Haiku pick on the Iran
+      // probe's real candidates and surface its raw response + parse outcome.
+      // This is the divergence point — candidates are found, but the selector may
+      // null. One curl now shows exactly why (raw text / stop_reason / pick / error).
+      let haiku_diag = null;
+      try {
+        const iranCands = await _combinedCandidates({ title: probes[0] }, markets);
+        _lastHaikuDebug = null;
+        if (aiEnabled && iranCands.length) await _haikuPickMarket({ title: probes[0] }, iranCands);
+        haiku_diag = _lastHaikuDebug;
+      } catch (e) { haiku_diag = { error: e.message }; }
       return res.json({
         debug: true,
         pool_raw_from_dataengine: poolRaw,
         pool_source: poolSrc,
         pool_filtered: markets.length,
         ai_enabled: aiEnabled,
+        anthropic_client_exists: !!anthropic,
         has_anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+        haiku_diag,
         news_ai_matching_env: process.env.NEWS_AI_MATCHING || '(unset→on)',
         hormuz_market_in_pool: (hormuzStatic ? (hormuzStatic.slug || hormuzStatic.question) : null) || hormuzViaSearch,
         hormuz_source: hormuzStatic ? 'static-pool' : (hormuzViaSearch ? 'targeted-search' : null),
