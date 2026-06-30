@@ -46135,6 +46135,8 @@ function _getCandidateMarkets(headline, markets, limit = 5) {
 // Diagnostic: the last _haikuPickMarket call's raw response + outcome, surfaced
 // by ?debug=1 so the selector's verdict is visible in one curl (no log-digging).
 let _lastHaikuDebug = null;
+// [NEWSMATCH-LIVE] log budget — reset per feed build; first N live resolves log.
+let _nmLiveLogBudget = 0;
 async function _haikuPickMarket(headline, candidates) {
   if (!candidates || candidates.length === 0) { _lastHaikuDebug = { reason: 'no_candidates' }; return null; }
   const hText = headline.title || headline;
@@ -46333,6 +46335,21 @@ async function _resolveMatchCached(headline, markets, aiOn) {
       picked = m ? { market: m, edge: null } : null;
     }
   }
+  // [NEWSMATCH-LIVE] — runtime proof of the EXACT live path: candidates the
+  // resolver got + the selector's verdict. Budgeted to the first few headlines
+  // per build so the logs stay readable. Same data is also in ?debug=1.haiku_diag.
+  if (_nmLiveLogBudget > 0) {
+    _nmLiveLogBudget--;
+    console.log('[NEWSMATCH-LIVE]', JSON.stringify({
+      headline: (headline.title || headline).slice(0, 80),
+      aiOn,
+      candidate_count: candidates.length,
+      candidates: candidates.map(c => (c.question || c.title || '').slice(0, 50)),
+      selector: aiOn ? 'haiku' : 'keyword',
+      verdict: picked ? (picked.market.question || '').slice(0, 60) : 'NULL',
+      haiku: aiOn ? _lastHaikuDebug : undefined,
+    }));
+  }
   const slug = picked ? picked.market.slug : null;
   const edge = picked ? picked.edge : null;
   _matchCache.set(key, { slug, edge, market: picked ? picked.market : null, ts: Date.now() });
@@ -46348,6 +46365,7 @@ let _newsFeedBuilding = false;
 async function _buildNewsFeed() {
   if (_newsFeedBuilding) return; // a build is already in flight — don't stampede
   _newsFeedBuilding = true;
+  _nmLiveLogBudget = 3; // log the first 3 live resolves of this build ([NEWSMATCH-LIVE])
   try {
     // Fetch headlines from Google News RSS (multiple topic feeds in parallel)
     const [top, world, biz, tech, politics, crypto] = await Promise.all([
