@@ -46137,7 +46137,9 @@ async function _haikuPickMarket(headline, candidates) {
   const hText = headline.title || headline;
   console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
-  const prompt = `A news headline and a list of prediction markets. Pick the ONE market a reader of this headline would most want to bet on. The market must be genuinely topically related — same people, same event, same domain. If NONE are genuinely related, pick 0.
+  const prompt = `A news headline and a list of prediction markets. Pick the market most related to this headline — same subject, people, country, event, or ongoing situation. A reader of this headline would want to bet on it.
+
+Be decisive: real headlines and market titles are worded differently, so pick a market that is clearly about the same subject EVEN IF the wording differs (e.g. a headline about U.S.–Iran talks resuming matches a "US x Iran diplomatic meeting" market). Only answer 0 if NO market is about the headline's subject — do not force unrelated matches (a sports market for a politics headline is 0).
 
 Headline: "${hText}"
 
@@ -46145,7 +46147,7 @@ Markets:
 ${list}
 
 Respond with ONLY a JSON object on one line: {"pick": N, "edge": "one dry sentence on how this news moves that market's probability"}
-If none are related: {"pick": 0, "edge": ""}
+If none relate: {"pick": 0, "edge": ""}
 No other text.`;
   try {
     // Direct anthropic.messages.create — deliberately BYPASSES backgroundClaudeCall
@@ -46278,14 +46280,18 @@ async function _combinedCandidates(headline, markets) {
   return out.slice(0, 8);
 }
 
-// Resolve a headline to a live market object via the 1h decision cache.
-// Caches the full picked object (not just the slug): a market surfaced by
-// targeted search is NOT in the static `markets` pool, so a slug-only cache hit
+// THE single headline→market resolver. Used by BOTH the live feed loop AND the
+// ?debug=1 probe so they can never diverge again. Candidate-finding is identical
+// in every mode (pool overlap + /public-search via _combinedCandidates); only the
+// SELECTOR differs: Haiku when AI is available, keyword-over-the-same-candidates
+// otherwise. Caches the full picked object (not just the slug): a market surfaced
+// by targeted search is NOT in the static `markets` pool, so a slug-only cache hit
 // would re-find null. On a hit we still PREFER the live pool object (fresh
 // price/image) and fall back to the cached object only for searched markets.
-async function _resolveMatchCached(headline, markets) {
-  // 'v6:' prefix busts decisions cached before targeted-search candidates landed.
-  const key = 'v6:' + (headline.title || headline);
+async function _resolveMatchCached(headline, markets, aiOn) {
+  // 'v7:' + mode prefix busts decisions cached before the live/probe unification
+  // (and keeps AI vs keyword decisions in separate cache slots).
+  const key = 'v7:' + (aiOn ? 'ai:' : 'kw:') + (headline.title || headline);
   const cached = _matchCache.get(key);
   if (cached && Date.now() - cached.ts < MATCH_CACHE_TTL) {
     if (!cached.slug) return null;
@@ -46294,12 +46300,27 @@ async function _resolveMatchCached(headline, markets) {
     return market ? { market, edge: cached.edge || null } : null;
   }
   const candidates = await _combinedCandidates(headline, markets);
-  const picked = candidates.length ? await _haikuPickMarket(headline, candidates) : null;
+  let picked = null;
+  if (candidates.length) {
+    if (aiOn) {
+      picked = await _haikuPickMarket(headline, candidates); // {market, edge} | null
+    } else {
+      // No AI: strict keyword match first; if that finds nothing, accept the top
+      // relevance-ranked /public-search candidate that shares a real (4+ char)
+      // token with the headline — keeps junk out without an LLM judge.
+      let m = _matchHeadlineToMarket(headline, candidates);
+      if (!m) {
+        const hTok = new Set(_tokenize(headline.title || headline));
+        m = candidates.find(c => (_tokenize(c.question || '')).some(t => t.length >= 4 && hTok.has(t))) || null;
+      }
+      picked = m ? { market: m, edge: null } : null;
+    }
+  }
   const slug = picked ? picked.market.slug : null;
   const edge = picked ? picked.edge : null;
   _matchCache.set(key, { slug, edge, market: picked ? picked.market : null, ts: Date.now() });
-  console.log('[news-feed] haiku judged', candidates.length, 'candidates for:',
-    key.slice(0, 40), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
+  console.log('[news-feed] resolved', candidates.length, 'candidates (' + (aiOn ? 'haiku' : 'keyword') + ') for:',
+    key.slice(0, 44), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
   if (!slug) return null;
   const fresh = markets.find(m => m.slug === slug);
   const market = fresh || picked.market || null;
@@ -46373,9 +46394,11 @@ async function _buildNewsFeed() {
     // cached, and cheap — see _haikuPickMarket). Dedicated off switch:
     // NEWS_AI_MATCHING=false. Falls back to free keyword top-1 when off or
     // when no API key is configured.
+    // AI availability is NOT gated on pool size — _combinedCandidates pulls
+    // candidates from /public-search even when the static pool is cold/empty, so a
+    // cold-pool build must NOT silently fall back to the old pool-only matcher.
     const aiMatching = process.env.NEWS_AI_MATCHING !== 'false'
-      && !!process.env.ANTHROPIC_API_KEY
-      && markets.length > 0;
+      && !!process.env.ANTHROPIC_API_KEY;
 
     console.log(`[news-feed] using market pool size: ${markets.length}`);
     console.log('[news-feed] ai_enabled:', aiMatching,
@@ -46403,17 +46426,14 @@ async function _buildNewsFeed() {
       } : null
     });
 
-    let paired;
-    if (aiMatching) {
-      // Two-stage: keyword candidates → Haiku judge, concurrency-capped at 5.
-      paired = await _mapLimit(allHeadlines, 5, async (h) => {
-        const r = await _resolveMatchCached(h, markets);
-        return buildItem(h, r ? r.market : null, r ? r.edge : null);
-      });
-    } else {
-      // Free keyword fallback (strict gate, top-1) — no edge sentence (no AI).
-      paired = allHeadlines.map(h => buildItem(h, markets.length ? _matchHeadlineToMarket(h, markets) : null, null));
-    }
+    // SINGLE unified path — every headline goes through _resolveMatchCached
+    // (pool + /public-search candidates, then Haiku or keyword selection). No
+    // separate pool-only branch: the live feed and the ?debug=1 probe now share
+    // the exact same candidate-finding, so they can't diverge.
+    const paired = await _mapLimit(allHeadlines, 5, async (h) => {
+      const r = await _resolveMatchCached(h, markets, aiMatching);
+      return buildItem(h, r ? r.market : null, r ? r.edge : null);
+    });
 
     // Prioritize items that have a matched market
     const withMarket    = paired.filter(p => p.market);
@@ -46451,19 +46471,26 @@ app.get('/api/news-feed', async (req, res) => {
       } catch (e) { /* report via pool_raw=0 */ }
       if (!pool.length && _screenerCache && Array.isArray(_screenerCache.data)) { pool = _screenerCache.data; poolSrc = 'screener-fallback'; }
       const markets = pool.filter(m => m.question && m.yes_price != null);
-      const aiEnabled = process.env.NEWS_AI_MATCHING !== 'false' && !!process.env.ANTHROPIC_API_KEY && markets.length > 0;
+      const aiEnabled = process.env.NEWS_AI_MATCHING !== 'false' && !!process.env.ANTHROPIC_API_KEY;
       const probes = ['Iran strikes vessel in Strait of Hormuz', 'Bitcoin hits a new all-time high', 'Trump signs executive order'];
-      // Probes now run the EFFECTIVE matcher candidate path: static pool +
-      // per-headline targeted gamma search (same as production _resolveMatchCached).
+      // Probes run the EXACT live path now: _combinedCandidates (pool + /public-
+      // search) AND _resolveMatchCached (the selector the live feed uses). live_match
+      // non-null = the live feed would match this headline. (Caches 3 test-string
+      // decisions only — no effect on real-headline matching.)
       const sample_probes = await Promise.all(probes.map(async t => {
         const cands = await _combinedCandidates({ title: t }, markets);
+        const live = await _resolveMatchCached({ title: t }, markets, aiEnabled);
         return {
           headline: t,
           candidates_found: cands.length,
           top_candidate: cands[0] ? (cands[0].question || cands[0].title) : null,
           candidates: cands.slice(0, 3).map(c => c.question || c.title),
+          live_match: live && live.market ? live.market.question : null,
         };
       }));
+      // Current cached live feed (what real users see) — matched vs total.
+      const feedItems = (_newsFeedCache.data && _newsFeedCache.data.items) || [];
+      const live_feed_cached_matched = feedItems.filter(i => i.market).length;
       // Canary: the static pool will NOT contain the Hormuz market (it's top-by-
       // volume, no geopolitics). The targeted-search path is what surfaces it.
       // Report both so the mechanism is transparent; hormuz_market_in_pool reflects
@@ -46486,6 +46513,9 @@ app.get('/api/news-feed', async (req, res) => {
         hormuz_market_in_pool: (hormuzStatic ? (hormuzStatic.slug || hormuzStatic.question) : null) || hormuzViaSearch,
         hormuz_source: hormuzStatic ? 'static-pool' : (hormuzViaSearch ? 'targeted-search' : null),
         hormuz_via_search: hormuzViaSearch,
+        live_feed_cached_matched,
+        live_feed_cached_total: feedItems.length,
+        live_feed_age_sec: _newsFeedCache.ts ? Math.round((Date.now() - _newsFeedCache.ts) / 1000) : null,
         sample_probes,
         sample_pool_questions: markets.slice(0, 8).map(m => m.question || m.title),
       });
