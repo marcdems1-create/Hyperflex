@@ -444,32 +444,32 @@ footer{
   .btn-yes, .btn-no, .btn-info { font-size: 14px; padding: 13px 30px; }
 
   /* ticker */
-  .ticker-item  { font-size: 14px !important; }
-  .ticker-label { font-size: 12px; }
+  .ticker-item  { font-size: 15px !important; }
+  .ticker-label { font-size: 13px; }
 
   /* row headers */
-  .row-title   { font-size: 26px !important; font-weight: 800; }
-  .row-tag     { font-size: 11px; }
-  .row-see-all { font-size: 12px; }
-  .home-chip   { font-size: 13px; padding: 7px 16px; }
+  .row-title   { font-size: 28px !important; font-weight: 800; }
+  .row-tag     { font-size: 12px; }
+  .row-see-all { font-size: 13px; }
+  .home-chip   { font-size: 14px; padding: 8px 18px; }
 
   /* market cards */
-  .mcard-q       { font-size: 18px !important; line-height: 1.3; }
-  .mcard-vol     { font-size: 12px; }
-  .mcard-pill    { font-size: 10px; }
-  .mcard-summary { font-size: 12px; }
-  .mcard-yes-pct, .mcard-no-pct { font-size: 17px; }
-  .mcard-yes-pct small, .mcard-no-pct small { font-size: 10px; }
+  .mcard-q       { font-size: 19px !important; line-height: 1.3; }
+  .mcard-vol     { font-size: 14px; }
+  .mcard-pill    { font-size: 11px; }
+  .mcard-summary { font-size: 14px; }
+  .mcard-yes-pct, .mcard-no-pct { font-size: 19px; }
+  .mcard-yes-pct small, .mcard-no-pct small { font-size: 11px; }
 
   /* wide (featured) cards */
-  .wcard-q        { font-size: 21px !important; line-height: 1.22; }
-  .wcard-category { font-size: 11px; }
-  .wcard-vol      { font-size: 12px; }
+  .wcard-q        { font-size: 22px !important; line-height: 1.22; }
+  .wcard-category { font-size: 12px; }
+  .wcard-vol      { font-size: 14px; }
 
   /* challenge / take-of-the-day strip */
-  .ct-label    { font-size: 12px; }
+  .ct-label    { font-size: 13px; }
   .ct-headline { font-size: 28px !important; }
-  .ct-sub      { font-size: 15px; }
+  .ct-sub      { font-size: 16px; }
 
   /* nav chrome — scoped to this page's stylesheet, so only the homepage nav
      scales up; the shared nav.js defaults are untouched on other pages. */
@@ -480,28 +480,47 @@ footer{
 
 @media (min-width: 1200px) {
   #hero-title  { font-size: 68px !important; }
-  .row-title   { font-size: 30px !important; }
-  .mcard-q     { font-size: 19px !important; }
-  .wcard-q     { font-size: 23px !important; }
+  .row-title   { font-size: 32px !important; }
+  .mcard-q     { font-size: 20px !important; }
+  .wcard-q     { font-size: 24px !important; }
   .ct-headline { font-size: 34px !important; }
 }
 
 /* ── Desktop layout: fill the viewport, kill the dead space ──────────────────
-   Earlier the post-hero content was capped at a narrow 1200px column, which
-   left ~700px of empty space on a 1900px screen and read as "stretched mobile."
-   Now content centers in a wide min(1760px, 94vw) column so wide desktops
-   actually use their real estate. The full-bleed hero keeps its background; its
-   text column is shifted to align with the same content gutter (container edge
-   + the 48px row padding). Cards grow for desktop presence and the horizontal
-   rows show more tiles per row, so rows fill horizontally instead of trailing
-   off into empty space. All min-width:1024px — mobile (≤1023px) is untouched. */
+   Content centers in a wide min(1760px, 94vw) column so wide desktops actually
+   use their real estate, and the cards/text inside are scaled up so the column
+   reads dense and premium rather than a few small tiles floating in black.
+
+   Density pass:
+   - Hero was a full 100vh band (≈900px) with its text pinned to the bottom, so
+     the top ~350px was an empty void. Capped to ~60vh / 640px max so the hero is
+     a tight band, not a black hole. Its text still aligns to the row gutter.
+   - Cards grow to 360px (≈4 large tiles per row at common widths, plus a peek)
+     with proportionally taller bodies; the row text was bumped in the tiers above.
+   - Section margins and the standalone banners (Take-of-the-Day, quiz strip) are
+     tightened and aligned to the same content width so nothing floats in voids.
+   All min-width:1024px — mobile (≤1023px) is untouched. */
 @media (min-width: 1024px) {
   .rows-wrap, .home-topics { max-width: min(1760px, 94vw); margin-left: auto; margin-right: auto; }
   .hero-content { max-width: 820px; margin-left: max(0px, calc((100% - min(1760px, 94vw)) / 2)); }
-  .row-section { margin-top: 44px; }
-  .row-scroll { gap: 16px; }
-  .mcard, .sk-card { width: 272px; height: 376px; }
-  .wcard, .sk-wcard { width: 468px; height: 264px; }
+
+  /* hero: tight band instead of a 900px void */
+  #hero { height: 60vh; min-height: 520px; max-height: 640px; }
+  .hero-content { padding-bottom: 56px; }
+
+  /* density: pull sections together */
+  .row-section { margin-top: 30px; }
+  .rows-wrap   { padding-bottom: 56px; }
+  .home-value-strip { padding-top: 10px; padding-bottom: 10px; }
+
+  /* quiz banner: align to the content column (it lives outside .rows-wrap), trim padding.
+     The .challenge-teaser already aligns via its 48px inset inside the capped .rows-wrap. */
+  #quizBannerWrap { max-width: min(1760px, 94vw) !important; padding: 16px 48px 0 !important; }
+
+  /* bigger cards — ~4 large tiles per row, taller poster bodies */
+  .row-scroll { gap: 18px; }
+  .mcard, .sk-card { width: 360px; height: 440px; }
+  .wcard, .sk-wcard { width: 560px; height: 300px; }
 }
 </style>
 </head>
