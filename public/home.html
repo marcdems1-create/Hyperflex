@@ -479,6 +479,18 @@ footer{
   .wcard-q     { font-size: 20px !important; }
   .ct-headline { font-size: 28px !important; }
 }
+
+/* ── Desktop layout: stop content stretching the full viewport ──────────────
+   Center post-hero content in a 1200px column (the full-bleed hero keeps its
+   background; its text column is shifted to align with the centered content).
+   Cards get a touch larger for desktop presence. Font scale is handled by the
+   768/1200 tiers above. All min-width:1024px — mobile (≤1023px) is untouched. */
+@media (min-width: 1024px) {
+  .rows-wrap, .home-topics { max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .hero-content { margin-left: max(48px, calc((100% - 1200px) / 2 + 24px)); }
+  .mcard { width: 244px; height: 336px; }
+  .wcard { width: 424px; height: 240px; }
+}
 </style>
 </head>
 <body>
