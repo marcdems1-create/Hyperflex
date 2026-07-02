@@ -59244,6 +59244,157 @@ app.post('/api/admin/force-resolve', requireAdminSecret, async (req, res) => {
   }
 });
 
+// ── DIAGNOSTIC: GET /api/admin/edge-audit ────────────────────────────────────
+// Read-only forensic on the PUBLISHED whale-edge population. Answers "is the hit
+// rate real, or did the June grading bugs regress?" WITHOUT changing any grade or
+// publishing anything. For the distinct decided whale events (the exact set the
+// receipts headline counts) it reports, per event and in aggregate:
+//   - market_price_at_signal: confirm in-band 0.15-0.85, and how many sit near the
+//     edges (< 0.25 / > 0.75) where the outcome was already leaning at call time.
+//   - grading key: condition_id present (stable, drift-proof settlement) vs
+//     text-only (graded by the resolver's first-50-char prefix match — the
+//     collision-prone path for templated / date-windowed markets).
+//   - hours predicted_at -> resolved_at: a very short gap = logged near resolution.
+//   - dedup: raw re-logged rows vs distinct events, PLUS near-duplicate prefix
+//     clusters that share a 50-char prefix + side but differ in full question —
+//     these are both DISTINCT-ON escapees (denominator inflation) AND the rows the
+//     resolver can mis-grade by prefix-collision against the wrong templated market.
+//   - legacy out-of-band decided rows: ungated pre-0.15/0.85 rows (excluded from
+//     the 49 by the read gate, reported here so we can see the gate is doing work).
+// Nothing here writes; grades and the published number are untouched.
+//   curl "https://hyperflex.network/api/admin/edge-audit?secret=$ADMIN_SECRET"
+app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const [events, rawRows, leak] = await Promise.all([
+      // The exact distinct decided set the receipts headline counts.
+      dbQuery(`
+        WITH whale_events AS (${WHALE_EVENTS_CTE})
+        SELECT market_question, predicted_side, market_price_at_signal, whale_count,
+               condition_id, market_url, outcome, pnl_if_followed, edge_cents,
+               predicted_at, resolved_at,
+               EXTRACT(EPOCH FROM (resolved_at - predicted_at)) / 3600 AS hours_to_resolve
+        FROM whale_events
+        WHERE outcome IN ('correct','wrong')
+        ORDER BY predicted_at ASC
+      `),
+      // Raw decided whale rows (pre-dedup) — to show the collapse ratio + near-dupes.
+      dbQuery(`
+        SELECT market_question, predicted_side, market_price_at_signal,
+               condition_id, outcome, predicted_at
+        FROM signal_outcomes
+        WHERE ${WHALE_EDGE_SQL} AND outcome IN ('correct','wrong')
+        ORDER BY predicted_at ASC
+        LIMIT 2000
+      `).catch(() => []),
+      // Decided whale rows OUTSIDE the band or with NULL price — legacy ungated rows.
+      dbQuery(`
+        SELECT COUNT(*)::int AS c
+        FROM signal_outcomes
+        WHERE signal_type = 'whale_cluster' AND whale_count >= 3
+          AND outcome IN ('correct','wrong')
+          AND (market_price_at_signal IS NULL
+               OR market_price_at_signal < ${EDGE_BAND_LO}
+               OR market_price_at_signal > ${EDGE_BAND_HI})
+      `).catch(() => [{ c: 0 }]),
+    ]);
+
+    const evs = events || [];
+    const num = (v) => (v == null ? null : parseFloat(v));
+    const inBand = (p) => p != null && p >= EDGE_BAND_LO && p <= EDGE_BAND_HI;
+
+    let correct = 0, wrong = 0, viaConditionId = 0, viaTextOnly = 0;
+    let nearEdge = 0, midBand = 0, outOfBandInSet = 0, fastResolve = 0;
+    const buckets = { '0.15-0.25': 0, '0.25-0.40': 0, '0.40-0.60': 0, '0.60-0.75': 0, '0.75-0.85': 0 };
+    const sample = [];
+    for (const e of evs) {
+      const p = num(e.market_price_at_signal);
+      if (e.outcome === 'correct') correct++; else if (e.outcome === 'wrong') wrong++;
+      if (e.condition_id) viaConditionId++; else viaTextOnly++;
+      if (!inBand(p)) outOfBandInSet++;
+      else if (p < 0.25 || p > 0.75) nearEdge++; else midBand++;
+      if (p != null) {
+        if (p < 0.25) buckets['0.15-0.25']++;
+        else if (p < 0.40) buckets['0.25-0.40']++;
+        else if (p < 0.60) buckets['0.40-0.60']++;
+        else if (p < 0.75) buckets['0.60-0.75']++;
+        else buckets['0.75-0.85']++;
+      }
+      const hrs = e.hours_to_resolve != null ? parseFloat(e.hours_to_resolve) : null;
+      if (hrs != null && hrs < 24) fastResolve++;
+      if (sample.length < 25) {
+        sample.push({
+          market_question: e.market_question,
+          side: (e.predicted_side || '').toUpperCase(),
+          entry_yes_cents: p != null ? Math.round(p * 100) : null,
+          whale_count: e.whale_count != null ? parseInt(e.whale_count) : null,
+          graded_via: e.condition_id ? 'condition_id' : 'text_match',
+          outcome: e.outcome,
+          pnl_if_followed: e.pnl_if_followed != null ? Math.round(parseFloat(e.pnl_if_followed) * 100) / 100 : null,
+          hours_to_resolve: hrs != null ? Math.round(hrs * 10) / 10 : null,
+          predicted_at: e.predicted_at,
+          resolved_at: e.resolved_at,
+        });
+      }
+    }
+
+    // Near-duplicate prefix clusters among the RAW decided rows: same first-50-char
+    // prefix + side but > 1 distinct full question. These rows are the most exposed
+    // to (a) DISTINCT ON not collapsing a re-worded re-log (denominator inflation)
+    // and (b) the resolver grading via 50-char-prefix collision against the wrong
+    // templated / date-windowed market.
+    const clusterMap = new Map();
+    for (const r of (rawRows || [])) {
+      const q = (r.market_question || '').toLowerCase().trim();
+      const side = (r.predicted_side || '').toUpperCase();
+      const key = q.substring(0, 50) + ' :: ' + side;
+      if (!clusterMap.has(key)) clusterMap.set(key, { prefix: q.substring(0, 50), side, questions: new Set(), rows: 0, withCid: 0 });
+      const c = clusterMap.get(key);
+      c.questions.add(q); c.rows++; if (r.condition_id) c.withCid++;
+    }
+    const prefixCollisions = [];
+    for (const c of clusterMap.values()) {
+      if (c.questions.size > 1) {
+        prefixCollisions.push({
+          prefix_50: c.prefix, side: c.side,
+          distinct_questions: c.questions.size,
+          raw_rows: c.rows, rows_with_condition_id: c.withCid,
+          examples: Array.from(c.questions).slice(0, 4),
+        });
+      }
+    }
+    prefixCollisions.sort((a, b) => b.distinct_questions - a.distinct_questions);
+
+    const graded = correct + wrong;
+    const rawDecided = (rawRows || []).length;
+    res.json({
+      note: 'INTERNAL AUDIT — do not publish. Read-only; grades and the published number are unchanged.',
+      population: 'whale_cluster · 3+ whales · price 0.15-0.85 at signal · decided · deduped to distinct (market,side)',
+      band: { lo: EDGE_BAND_LO, hi: EDGE_BAND_HI },
+      headline: { graded, correct, wrong, hit_rate_pct: graded ? Math.round(correct / graded * 1000) / 10 : null },
+      dedup: { distinct_decided: graded, raw_decided_rows: rawDecided, ratio: graded ? Math.round(rawDecided / graded * 10) / 10 : null },
+      grading_key: {
+        via_condition_id: viaConditionId,        // stable, drift-proof settlement
+        via_text_match_only: viaTextOnly,        // graded by 50-char prefix — collision-prone
+        text_only_pct: graded ? Math.round(viaTextOnly / graded * 1000) / 10 : null,
+      },
+      price_position: {
+        mid_band_0p25_0p75: midBand,
+        near_edge_inband: nearEdge,              // in-band but < 0.25 or > 0.75
+        out_of_band_in_set: outOfBandInSet,      // MUST be 0 — nonzero = read-gate failure
+        buckets,
+      },
+      timing: { resolved_within_24h_of_signal: fastResolve },
+      legacy_out_of_band_decided_rows: (leak && leak[0] ? leak[0].c : 0),
+      prefix_collision_cluster_count: prefixCollisions.length,
+      prefix_collision_clusters: prefixCollisions.slice(0, 25),
+      sample_events: sample,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 3. SOURCE ACCURACY — honest recompute, keyed on signal MECHANISM.
 // Two corrections from the pooled-22.6% era:
 //   (a) GROUP BY signal_type, not the polluted `source` column (which held
