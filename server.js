@@ -46137,8 +46137,13 @@ function _getCandidateMarkets(headline, markets, limit = 5) {
 let _lastHaikuDebug = null;
 // [NEWSMATCH-LIVE] log budget — reset per feed build; first N live resolves log.
 let _nmLiveLogBudget = 0;
+// Returns { result, apiError }. result is {market, edge} | null (null = no
+// candidate genuinely relates, per Haiku's own judgment — trust it as-is).
+// apiError=true means the CALL ITSELF failed (billing, rate limit, network,
+// unparseable response) — the caller falls back to keyword matching only in
+// this case, never when Haiku ran fine and judged "no match".
 async function _haikuPickMarket(headline, candidates) {
-  if (!candidates || candidates.length === 0) { _lastHaikuDebug = { reason: 'no_candidates' }; return null; }
+  if (!candidates || candidates.length === 0) { _lastHaikuDebug = { reason: 'no_candidates' }; return { result: null, apiError: false }; }
   const hText = headline.title || headline;
   console.log('[haiku-match] CALLED:', hText.slice(0, 40), '| candidates:', candidates.length, '| ai_enabled:', process.env.NEWS_AI_MATCHING !== 'false');
   const list = candidates.map((m, i) => `${i + 1}. ${m.question || m.title}`).join('\n');
@@ -46186,14 +46191,14 @@ No other text.`;
       parsed_pick: parsed ? parsed.pick : null, ok,
       picked: ok ? (candidates[pick - 1].question || '').slice(0, 60) : null,
     };
-    if (!ok) { console.log('[haiku-match] no usable pick. parsed:', JSON.stringify(parsed)); return null; }
+    if (!ok) { console.log('[haiku-match] no usable pick. parsed:', JSON.stringify(parsed)); return { result: null, apiError: false }; }
     const edge = (parsed.edge && String(parsed.edge).trim()) || null;
     console.log('[news-edge]', hText.slice(0, 30), '| pick:', pick, '| edge:', edge ? edge.slice(0, 40) : 'none');
-    return { market: candidates[pick - 1], edge };
+    return { result: { market: candidates[pick - 1], edge }, apiError: false };
   } catch (e) {
     _lastHaikuDebug = { headline: hText.slice(0, 70), candidates: candidates.length, error: e.message };
-    console.log('[haiku-match] AI call failed — no match. msg:', e.message);
-    return null; // fail safe: no match rather than a bad match
+    console.log('[haiku-match] AI call failed — falling back to keyword match. msg:', e.message);
+    return { result: null, apiError: true }; // call itself failed — let the caller degrade to keyword
   }
 }
 
@@ -46299,6 +46304,27 @@ async function _combinedCandidates(headline, markets) {
   return out.slice(0, 8);
 }
 
+// Deterministic fallback selector — strict keyword match first; if that finds
+// nothing, accept the top relevance-ranked /public-search candidate that shares
+// a real (4+ char) token with the headline. Used when AI matching is off, AND
+// as the degrade-gracefully path when a live Haiku call fails (see apiError in
+// _resolveMatchCached below) — an AI outage should fall back to this, not
+// silently null every headline.
+function _keywordPickMarket(headline, candidates) {
+  let m = _matchHeadlineToMarket(headline, candidates);
+  if (!m) {
+    const hTok = new Set(_tokenize(headline.title || headline));
+    m = candidates.find(c => (_tokenize(c.question || '')).some(t => t.length >= 4 && hTok.has(t))) || null;
+  }
+  return m ? { market: m, edge: null } : null;
+}
+
+// Count of headlines this build that fell back from Haiku to keyword because
+// the Haiku CALL failed (not because it judged "no match"). Reset per build;
+// surfaced in ?debug=1 so an AI outage (billing, rate limit) is visible in one
+// curl instead of silently reading as "matching regressed".
+let _nmAiFailuresThisBuild = 0;
+
 // THE single headline→market resolver. Used by BOTH the live feed loop AND the
 // ?debug=1 probe so they can never diverge again. Candidate-finding is identical
 // in every mode (pool overlap + /public-search via _combinedCandidates); only the
@@ -46320,19 +46346,23 @@ async function _resolveMatchCached(headline, markets, aiOn) {
   }
   const candidates = await _combinedCandidates(headline, markets);
   let picked = null;
+  let aiFellBack = false;
   if (candidates.length) {
     if (aiOn) {
-      picked = await _haikuPickMarket(headline, candidates); // {market, edge} | null
-    } else {
-      // No AI: strict keyword match first; if that finds nothing, accept the top
-      // relevance-ranked /public-search candidate that shares a real (4+ char)
-      // token with the headline — keeps junk out without an LLM judge.
-      let m = _matchHeadlineToMarket(headline, candidates);
-      if (!m) {
-        const hTok = new Set(_tokenize(headline.title || headline));
-        m = candidates.find(c => (_tokenize(c.question || '')).some(t => t.length >= 4 && hTok.has(t))) || null;
+      const { result, apiError } = await _haikuPickMarket(headline, candidates);
+      if (apiError) {
+        // The Haiku CALL failed (billing exhausted, rate limit, network) — fall
+        // back to keyword matching over the SAME candidates instead of losing
+        // every match while AI is unavailable. A real Haiku verdict of "no
+        // match" (apiError=false, result=null) is trusted as-is.
+        picked = _keywordPickMarket(headline, candidates);
+        aiFellBack = true;
+        _nmAiFailuresThisBuild++;
+      } else {
+        picked = result;
       }
-      picked = m ? { market: m, edge: null } : null;
+    } else {
+      picked = _keywordPickMarket(headline, candidates);
     }
   }
   // [NEWSMATCH-LIVE] — runtime proof of the EXACT live path: candidates the
@@ -46345,7 +46375,7 @@ async function _resolveMatchCached(headline, markets, aiOn) {
       aiOn,
       candidate_count: candidates.length,
       candidates: candidates.map(c => (c.question || c.title || '').slice(0, 50)),
-      selector: aiOn ? 'haiku' : 'keyword',
+      selector: aiOn ? (aiFellBack ? 'haiku_failed_to_keyword' : 'haiku') : 'keyword',
       verdict: picked ? (picked.market.question || '').slice(0, 60) : 'NULL',
       haiku: aiOn ? _lastHaikuDebug : undefined,
     }));
@@ -46353,7 +46383,7 @@ async function _resolveMatchCached(headline, markets, aiOn) {
   const slug = picked ? picked.market.slug : null;
   const edge = picked ? picked.edge : null;
   _matchCache.set(key, { slug, edge, market: picked ? picked.market : null, ts: Date.now() });
-  console.log('[news-feed] resolved', candidates.length, 'candidates (' + (aiOn ? 'haiku' : 'keyword') + ') for:',
+  console.log('[news-feed] resolved', candidates.length, 'candidates (' + (aiOn ? (aiFellBack ? 'haiku-failed->keyword' : 'haiku') : 'keyword') + ') for:',
     key.slice(0, 44), '-> pick:', picked ? (picked.market.question || '').slice(0, 40) : 'NONE');
   if (!slug) return null;
   const fresh = markets.find(m => m.slug === slug);
@@ -46366,6 +46396,7 @@ async function _buildNewsFeed() {
   if (_newsFeedBuilding) return; // a build is already in flight — don't stampede
   _newsFeedBuilding = true;
   _nmLiveLogBudget = 3; // log the first 3 live resolves of this build ([NEWSMATCH-LIVE])
+  _nmAiFailuresThisBuild = 0; // reset the Haiku-call-failed-to-keyword counter for this build
   try {
     // Fetch headlines from Google News RSS (multiple topic feeds in parallel)
     const [top, world, biz, tech, politics, crypto] = await Promise.all([
@@ -46476,7 +46507,8 @@ async function _buildNewsFeed() {
     const result = { items: [...withMarket, ...withoutMarket].slice(0, 30) };
 
     _newsFeedCache = { ts: Date.now(), data: result };
-    console.log(`[news-feed] ${withMarket.length}/${paired.length} headlines matched to markets`);
+    console.log(`[news-feed] ${withMarket.length}/${paired.length} headlines matched to markets`
+      + (_nmAiFailuresThisBuild ? ` (${_nmAiFailuresThisBuild} fell back haiku->keyword — AI call failing, check ANTHROPIC key/billing)` : ''));
   } catch (err) {
     console.error('[news-feed] build error:', err.message);
   } finally {
@@ -46554,6 +46586,7 @@ app.get('/api/news-feed', async (req, res) => {
         pool_source: poolSrc,
         pool_filtered: markets.length,
         ai_enabled: aiEnabled,
+        ai_failures_last_build: _nmAiFailuresThisBuild, // count of headlines that fell back haiku->keyword because the Haiku CALL failed (billing/rate-limit/network), not because it judged "no match"
         anthropic_client_exists: !!anthropic,
         has_anthropic_key: !!process.env.ANTHROPIC_API_KEY,
         haiku_diag,
