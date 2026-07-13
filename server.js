@@ -59356,6 +59356,15 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
     // the published hit rate — read-only split of data already fetched above.
     let slowCorrect = 0, slowWrong = 0, fastCorrect = 0, fastWrong = 0;
     const excludedSample = [];
+    // Resolver bug check (resolveSignalOutcomes, ~line 59214/59225): correct is
+    // computed as `side === 'YES'` / `side === 'NO'` — a literal string compare.
+    // Any signal whose predicted_side is a named outcome (e.g. a player name on
+    // a head-to-head market) can NEVER satisfy either branch, so it grades
+    // 'wrong' unconditionally regardless of the real result. This counts how
+    // many of the distinct decided events have a non-YES/NO side, and how many
+    // of THOSE ever come back correct (should be ~0 if the bug is real).
+    let nonBinaryGraded = 0, nonBinaryCorrect = 0, nonBinaryWrong = 0;
+    const nonBinarySample = [];
     for (const e of evs) {
       const p = num(e.market_price_at_signal);
       if (e.outcome === 'correct') correct++; else if (e.outcome === 'wrong') wrong++;
@@ -59382,6 +59391,14 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
           outcome: e.outcome, hours_to_resolve: hrs != null ? Math.round(hrs * 10) / 10 : null,
           matched_sports_regex: _isSportsLikeQuestion(e.market_question),
         });
+      }
+      const sideUpper = (e.predicted_side || '').toUpperCase();
+      if ((e.outcome === 'correct' || e.outcome === 'wrong') && sideUpper !== 'YES' && sideUpper !== 'NO') {
+        nonBinaryGraded++;
+        if (e.outcome === 'correct') nonBinaryCorrect++; else nonBinaryWrong++;
+        if (nonBinarySample.length < 15) {
+          nonBinarySample.push({ market_question: e.market_question, side: sideUpper, outcome: e.outcome });
+        }
       }
       if (sample.length < 25) {
         sample.push({
@@ -59465,6 +59482,15 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
           hit_rate_pct: (slowCorrect + slowWrong) ? Math.round(slowCorrect / (slowCorrect + slowWrong) * 1000) / 10 : null,
         },
         excluded_sample: excludedSample,
+      },
+      // Resolver correctness bug check — see comment above nonBinaryGraded.
+      // nonBinaryGraded>0 with nonBinaryCorrect===0 confirms every named-outcome
+      // signal (e.g. player-vs-player side values) is graded 'wrong' by
+      // construction, independent of the actual result.
+      non_yes_no_side_check: {
+        note: "resolveSignalOutcomes computes correct as side==='YES'/side==='NO' (literal string compare). A named-outcome side (e.g. a player name) can never match either, so it grades 'wrong' unconditionally — this is NOT evidence the pick was actually wrong.",
+        graded: nonBinaryGraded, correct: nonBinaryCorrect, wrong: nonBinaryWrong,
+        sample: nonBinarySample,
       },
       sample_events: sample,
     });
