@@ -59019,6 +59019,48 @@ async function logEdgePicks(markets) {
 
 // 2. RESOLVE OUTCOMES — every 30 min
 // Checks ALL sources: screener cache, whale index cache, AND fetches resolved markets
+// Shared by resolveSignalOutcomes (live cron) AND POST /api/admin/regrade-named-outcomes
+// (one-time correction below) — single source of truth so the two paths can't drift.
+async function _fetchGammaKeyset(url) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return [];
+    const a = _gammaUnwrap(await r.json().catch(() => null));
+    return Array.isArray(a) ? a : [];
+  } catch { return []; }
+}
+
+// Parses a gamma market's outcomePrices (+ outcomes, when present) into
+// { price, winnerName }. `price` is outcomePrices[0] — kept for backward
+// compatibility with the existing YES/NO grading math (market_price_at_close,
+// pnl_if_followed, edge_cents all assume it's "the YES price"). `winnerName`
+// is the outcome NAME whose price settled to ~1, populated only once the
+// market is decisively settled (some price > 0.95) — used to grade
+// named-outcome (non-YES/NO) predicted_side values correctly instead of the
+// old side==='YES'/side==='NO' literal compare, which can never match a name
+// and graded every such signal 'wrong' unconditionally (confirmed via
+// /api/admin/edge-audit: 32/32 non-YES/NO-side signals graded wrong).
+function _parseOutcomeSettlement(m) {
+  if (!m || m.outcomePrices == null) return null;
+  try {
+    const prices = (typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices).map(p => parseFloat(p));
+    const price0 = prices[0];
+    if (isNaN(price0)) return null;
+    let winnerName = null;
+    if (price0 > 0.95 || price0 < 0.05) {
+      let outcomes = null;
+      try { outcomes = typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : m.outcomes; } catch {}
+      if (Array.isArray(outcomes)) {
+        const winIdx = prices.findIndex(p => !isNaN(p) && p > 0.95);
+        if (winIdx >= 0 && outcomes[winIdx] != null) winnerName = String(outcomes[winIdx]);
+      }
+    }
+    return { price: price0, winnerName };
+  } catch { return null; }
+}
+
 async function resolveSignalOutcomes(opts = {}) {
   // Optional, NON-BEHAVIORAL instrumentation. Only the /api/admin/force-resolve
   // diagnostic passes opts.instrument; the cron calls resolveSignalOutcomes()
@@ -59094,13 +59136,10 @@ async function resolveSignalOutcomes(opts = {}) {
         const mkts = _gammaUnwrap(await r.json().catch(() => null));
         for (const m of mkts) {
           if (!m.question || !m.outcomePrices) continue;
-          try {
-            const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
-            const yesPrice = parseFloat(prices[0]);
-            if (!isNaN(yesPrice)) {
-              priceLookup.set(m.question.toLowerCase().trim(), { price: yesPrice, end_date: m.endDate || m.end_date, closed: true });
-            }
-          } catch {}
+          const st = _parseOutcomeSettlement(m);
+          if (st) {
+            priceLookup.set(m.question.toLowerCase().trim(), { price: st.price, winnerName: st.winnerName, end_date: m.endDate || m.end_date, closed: true });
+          }
         }
       }
     } catch (e) { console.warn('[intelligence] closed-market lookup error:', e.message); }
@@ -59115,7 +59154,7 @@ async function resolveSignalOutcomes(opts = {}) {
     // Exact key → no text drift; we accept only a definitive 0/1, so a stale or
     // still-active market can never produce a wrong grade. Result keyed by the
     // stable key; the grade loop applies it before any text match.
-    const settlementByKey = new Map(); // conditionId|slug → yesPrice (0 or 1)
+    const settlementByKey = new Map(); // conditionId|slug → { price, winnerName }
     const _slugFromUrl = (u) => {
       if (!u) return null;
       const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
@@ -59126,22 +59165,8 @@ async function resolveSignalOutcomes(opts = {}) {
       const seen = new Set();
       let probed = 0;
       const _settled = (m) => {
-        if (!m || m.outcomePrices == null) return null;
-        try {
-          const pr = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
-          const yes = parseFloat(pr[0]);
-          return (!isNaN(yes) && (yes > 0.95 || yes < 0.05)) ? yes : null; // settled 0/1 only
-        } catch { return null; }
-      };
-      const _gammaArr = async (url) => {
-        const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 8000);
-        try {
-          const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
-          if (!r || !r.ok) return [];
-          const a = _gammaUnwrap(await r.json().catch(() => null));
-          return Array.isArray(a) ? a : [];
-        } catch { return []; }
+        const st = _parseOutcomeSettlement(m);
+        return (st && (st.price > 0.95 || st.price < 0.05)) ? st : null; // settled 0/1 only
       };
       for (const sig of pending) {
         if (probed >= RESOLVE_PROBE_MAX) break;
@@ -59154,10 +59179,10 @@ async function resolveSignalOutcomes(opts = {}) {
         const url = cid
           ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
           : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
-        const mkts = await _gammaArr(url);
+        const mkts = await _fetchGammaKeyset(url);
         for (const m of mkts) {
-          const yes = _settled(m);
-          if (yes != null) { settlementByKey.set(key, yes); break; }
+          const st = _settled(m);
+          if (st) { settlementByKey.set(key, st); break; }
         }
         await new Promise(res => setTimeout(res, 200)); // gamma politeness
       }
@@ -59171,7 +59196,7 @@ async function resolveSignalOutcomes(opts = {}) {
     for (const sig of pending) {
       // STABLE-KEY settlement first (conditionId / slug) — exact, drift-proof.
       const _sk = sig.condition_id || _slugFromUrl(sig.market_url);
-      let match = (_sk && settlementByKey.has(_sk)) ? { price: settlementByKey.get(_sk), closed: true } : null;
+      let match = (_sk && settlementByKey.has(_sk)) ? { ...settlementByKey.get(_sk), closed: true } : null;
 
       const q = (sig.market_question || '').toLowerCase().trim();
       if (!match) {
@@ -59208,10 +59233,17 @@ async function resolveSignalOutcomes(opts = {}) {
       const rawEntry = parseFloat(sig.market_price_at_signal);
       const entryPrice = (!isNaN(rawEntry) && rawEntry > 0 && rawEntry < 1) ? rawEntry : null;
       const side = (sig.predicted_side || '').toUpperCase();
+      // Named-outcome side (e.g. a player/team name, not literally YES/NO) —
+      // the literal side==='YES'/side==='NO' compare below can never match a
+      // name, so it graded these 'wrong' unconditionally regardless of the
+      // real result. Compare against the actual winning outcome name instead.
+      const isNamedSide = side !== 'YES' && side !== 'NO';
+      const winnerName = match.winnerName ? String(match.winnerName).trim().toUpperCase() : null;
 
       // Resolved YES (price > 95%)
       if (price > 0.95) {
-        const correct = side === 'YES';
+        if (isNamedSide && winnerName == null) { _skip(sig, 'no_market_match'); continue; } // can't verify — don't guess wrong
+        const correct = isNamedSide ? (side === winnerName) : (side === 'YES');
         const pnl = entryPrice == null ? null : (correct ? Math.round((1 / entryPrice - 1) * 100) / 100 : -1);
         const edge = entryPrice == null ? null : Math.round((price - entryPrice) * 100); // cents of edge
         await dbQuery('UPDATE signal_outcomes SET outcome=$1, market_price_at_close=1, pnl_if_followed=$2, edge_cents=$3, resolved_at=NOW() WHERE id=$4',
@@ -59222,7 +59254,8 @@ async function resolveSignalOutcomes(opts = {}) {
       }
       // Resolved NO (price < 5%)
       else if (price < 0.05) {
-        const correct = side === 'NO';
+        if (isNamedSide && winnerName == null) { _skip(sig, 'no_market_match'); continue; } // can't verify — don't guess wrong
+        const correct = isNamedSide ? (side === winnerName) : (side === 'NO');
         const pnl = entryPrice == null ? null : (correct ? Math.round((1 / (1 - entryPrice) - 1) * 100) / 100 : -1);
         const edge = entryPrice == null ? null : Math.round((entryPrice - price) * 100);
         await dbQuery('UPDATE signal_outcomes SET outcome=$1, market_price_at_close=0, pnl_if_followed=$2, edge_cents=$3, resolved_at=NOW() WHERE id=$4',
@@ -59244,6 +59277,115 @@ async function resolveSignalOutcomes(opts = {}) {
     return stats;
   } catch(e) { console.warn('[intelligence] resolve error:', e.message); return stats; }
 }
+
+// ── ONE-TIME CORRECTION: POST /api/admin/regrade-named-outcomes ─────────────
+// Fixes the confirmed resolver bug for rows already graded before the fix
+// above: any signal whose predicted_side is a named outcome (a player/team
+// name, not literally YES/NO) was graded 'wrong' unconditionally by a literal
+// side==='YES'/side==='NO' string compare that can never match a name.
+// Confirmed via /api/admin/edge-audit: 32 of 32 such signals graded wrong,
+// including BOTH sides of the same match — statistically impossible if the
+// grading were real.
+//
+// Scans ALL signal_outcomes (every signal_type, no price-band filter — the
+// bug isn't whale_cluster-specific) already graded correct/wrong with a
+// non-YES/NO side, re-fetches each one's real settlement via the SAME
+// condition_id/slug lookup the live resolver now uses (_parseOutcomeSettlement
+// + _fetchGammaKeyset — shared code, can't drift), and regrades against the
+// actual winning outcome name. Also recomputes pnl_if_followed/edge_cents so
+// a flipped outcome doesn't leave a stale -1 loss sitting next to 'correct'.
+//
+// Rows whose settlement can no longer be found (market aged out of gamma,
+// data gap) are left UNTOUCHED and reported in `still_unresolved` — a guessed
+// correction is worse than staying wrong-and-flagged. Read the response, not
+// the DB, to see what changed: `flips` lists every wrong→correct correction
+// with the winning outcome name that proved it.
+//   curl -X POST "https://hyperflex.network/api/admin/regrade-named-outcomes?secret=$ADMIN_SECRET"
+app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const rows = await dbQuery(`
+      SELECT id, market_question, predicted_side, market_price_at_signal, condition_id, market_url, outcome
+      FROM signal_outcomes
+      WHERE outcome IN ('correct','wrong')
+        AND UPPER(TRIM(predicted_side)) NOT IN ('YES','NO')
+      ORDER BY predicted_at ASC
+    `);
+    const _slugFromUrl = (u) => {
+      if (!u) return null;
+      const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
+      return m ? m[1].toLowerCase() : null;
+    };
+    let checked = 0, flippedToCorrect = 0, confirmedStillWrong = 0, unresolvable = 0;
+    const flips = [];
+    const stillUnresolved = [];
+    for (const r of rows) {
+      checked++;
+      const cid = r.condition_id || null;
+      const slug = cid ? null : _slugFromUrl(r.market_url);
+      const key = cid || slug;
+      let settlement = null;
+      if (key) {
+        const url = cid
+          ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
+          : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
+        const mkts = await _fetchGammaKeyset(url);
+        for (const m of mkts) {
+          const st = _parseOutcomeSettlement(m);
+          if (st && (st.price > 0.95 || st.price < 0.05) && st.winnerName) { settlement = st; break; }
+        }
+      }
+      if (!settlement) {
+        unresolvable++;
+        if (stillUnresolved.length < 15) {
+          stillUnresolved.push({ market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome });
+        }
+        await new Promise(res2 => setTimeout(res2, 150));
+        continue;
+      }
+      const side = (r.predicted_side || '').trim().toUpperCase();
+      const winnerName = settlement.winnerName.trim().toUpperCase();
+      const correct = side === winnerName;
+      const rawEntry = parseFloat(r.market_price_at_signal);
+      const entryPrice = (!isNaN(rawEntry) && rawEntry > 0 && rawEntry < 1) ? rawEntry : null;
+      const priceAtClose = settlement.price > 0.95 ? 1 : 0;
+      const pnl = entryPrice == null ? null : (correct
+        ? (priceAtClose === 1 ? Math.round((1 / entryPrice - 1) * 100) / 100 : Math.round((1 / (1 - entryPrice) - 1) * 100) / 100)
+        : -1);
+      const edge = entryPrice == null ? null : Math.round((priceAtClose === 1 ? (settlement.price - entryPrice) : (entryPrice - settlement.price)) * 100);
+      const newOutcome = correct ? 'correct' : 'wrong';
+      await dbQuery(
+        'UPDATE signal_outcomes SET outcome=$1, market_price_at_close=$2, pnl_if_followed=$3, edge_cents=$4 WHERE id=$5',
+        [newOutcome, priceAtClose, pnl, edge, r.id]
+      );
+      if (newOutcome !== r.outcome) {
+        flippedToCorrect++;
+        if (flips.length < 50) {
+          flips.push({ market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome, new_outcome: newOutcome, winning_outcome: settlement.winnerName });
+        }
+      } else {
+        confirmedStillWrong++;
+      }
+      await new Promise(res2 => setTimeout(res2, 150)); // gamma politeness
+    }
+    if (flippedToCorrect > 0 || confirmedStillWrong > 0) {
+      await updateSourceAccuracy();
+      await updateConfidenceCalibration();
+      await updatePlatformMetrics();
+    }
+    res.json({
+      note: 'One-time correction for the named-outcome grading bug. Rows with no findable settlement are left untouched, not guessed — see still_unresolved.',
+      checked,
+      flipped_to_correct: flippedToCorrect,
+      confirmed_still_wrong: confirmedStillWrong,
+      unresolvable,
+      flips,
+      still_unresolved: stillUnresolved,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── DIAGNOSTIC: POST /api/admin/force-resolve ────────────────────────────────
 // Runs the REAL resolver (resolveSignalOutcomes) on demand with instrumentation
@@ -59309,7 +59451,7 @@ function _isSportsLikeQuestion(q) {
 app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no db' });
-    const [events, rawRows, leak] = await Promise.all([
+    const [events, rawRows, leak, bothSides] = await Promise.all([
       // The exact distinct decided set the receipts headline counts.
       dbQuery(`
         WITH whale_events AS (${WHALE_EVENTS_CTE})
@@ -59340,6 +59482,22 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
                OR market_price_at_signal < ${EDGE_BAND_LO}
                OR market_price_at_signal > ${EDGE_BAND_HI})
       `).catch(() => [{ c: 0 }]),
+      // Item 3 (confirm, not fix): empirical proof of the both-sides-logged
+      // consensus-detector bug — every whale_cluster market_question where 2+
+      // DISTINCT predicted_side values were ever logged (any outcome state,
+      // not just decided). Corroborates the code-level finding (consensusMap
+      // keyed by market+'||'+side, server.js ~34950-34988, no cross-side
+      // check) with the actual data.
+      dbQuery(`
+        SELECT market_question, COUNT(DISTINCT predicted_side)::int AS distinct_sides,
+               ARRAY_AGG(DISTINCT predicted_side) AS sides, COUNT(*)::int AS row_count
+        FROM signal_outcomes
+        WHERE signal_type = 'whale_cluster' AND whale_count >= 3
+        GROUP BY market_question
+        HAVING COUNT(DISTINCT predicted_side) >= 2
+        ORDER BY row_count DESC
+        LIMIT 25
+      `).catch(() => []),
     ]);
 
     const evs = events || [];
@@ -59491,6 +59649,22 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
         note: "resolveSignalOutcomes computes correct as side==='YES'/side==='NO' (literal string compare). A named-outcome side (e.g. a player name) can never match either, so it grades 'wrong' unconditionally — this is NOT evidence the pick was actually wrong.",
         graded: nonBinaryGraded, correct: nonBinaryCorrect, wrong: nonBinaryWrong,
         sample: nonBinarySample,
+      },
+      // Item 3 — CONFIRM only, not fixed here. Empirical proof the whale
+      // consensus detector logs both sides of the same event as separate
+      // signals: markets where 2+ distinct predicted_side values were ever
+      // recorded. Matches the code-level finding (consensusMap keyed by
+      // market+'||'+side, server.js ~34950, no cross-side check before
+      // pushing a candidate).
+      both_sides_logged_check: {
+        note: 'markets where 2+ distinct predicted_side values were logged as separate whale_cluster signals — normal two-sided liquidity being counted as consensus on both sides, not a real signal. Not fixed here (detection-side change, separate from the grading fix in this deploy).',
+        market_count: (bothSides || []).length,
+        markets: (bothSides || []).map(b => ({
+          market_question: b.market_question,
+          distinct_sides: b.distinct_sides,
+          sides: b.sides,
+          row_count: b.row_count,
+        })),
       },
       sample_events: sample,
     });
