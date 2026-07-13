@@ -59296,6 +59296,16 @@ app.post('/api/admin/force-resolve', requireAdminSecret, async (req, res) => {
 //     the 49 by the read gate, reported here so we can see the gate is doing work).
 // Nothing here writes; grades and the published number are untouched.
 //   curl "https://hyperflex.network/api/admin/edge-audit?secret=$ADMIN_SECRET"
+// Text heuristic for "is this a fast head-to-head sports/live market" — used
+// ONLY by the read-only audit below to test whether whale_cluster's hit rate
+// holds on the slower conviction markets (politics/macro/geo) it was meant
+// for, once live sports matches are excluded. Not wired into logging, grading,
+// or the published population — diagnostic-only, matches nothing upstream.
+const _SPORTS_LIKE_RE = /\b(vs\.?|wimbledon|us open|french open|australian open|roland garros|atp|wta|grand slam|nba|nfl|nhl|mlb|mls|ufc|mma|premier league|champions league|europa league|la liga|bundesliga|serie a|ligue 1|world cup|fifa|olympics|super bowl|world series|stanley cup|playoffs?|quarterfinal|semifinal|round of \d+|set \d|tiebreak|moneyline)\b/i;
+function _isSportsLikeQuestion(q) {
+  return _SPORTS_LIKE_RE.test(q || '');
+}
+
 app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no db' });
@@ -59340,6 +59350,12 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
     let nearEdge = 0, midBand = 0, outOfBandInSet = 0, fastResolve = 0;
     const buckets = { '0.15-0.25': 0, '0.25-0.40': 0, '0.40-0.60': 0, '0.60-0.75': 0, '0.75-0.85': 0 };
     const sample = [];
+    // The "wrong thing entirely" test (see comment above _isSportsLikeQuestion):
+    // split the exact same distinct decided population into (sports-like OR
+    // resolves <24h) vs the rest, and grade each half separately. Doesn't touch
+    // the published hit rate — read-only split of data already fetched above.
+    let slowCorrect = 0, slowWrong = 0, fastCorrect = 0, fastWrong = 0;
+    const excludedSample = [];
     for (const e of evs) {
       const p = num(e.market_price_at_signal);
       if (e.outcome === 'correct') correct++; else if (e.outcome === 'wrong') wrong++;
@@ -59355,6 +59371,18 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
       }
       const hrs = e.hours_to_resolve != null ? parseFloat(e.hours_to_resolve) : null;
       if (hrs != null && hrs < 24) fastResolve++;
+      const isFastOrSports = (hrs != null && hrs < 24) || _isSportsLikeQuestion(e.market_question);
+      if (e.outcome === 'correct' || e.outcome === 'wrong') {
+        if (isFastOrSports) { if (e.outcome === 'correct') fastCorrect++; else fastWrong++; }
+        else { if (e.outcome === 'correct') slowCorrect++; else slowWrong++; }
+      }
+      if (isFastOrSports && excludedSample.length < 15) {
+        excludedSample.push({
+          market_question: e.market_question, side: (e.predicted_side || '').toUpperCase(),
+          outcome: e.outcome, hours_to_resolve: hrs != null ? Math.round(hrs * 10) / 10 : null,
+          matched_sports_regex: _isSportsLikeQuestion(e.market_question),
+        });
+      }
       if (sample.length < 25) {
         sample.push({
           market_question: e.market_question,
@@ -59421,6 +59449,23 @@ app.get('/api/admin/edge-audit', requireAdminSecret, async (req, res) => {
       legacy_out_of_band_decided_rows: (leak && leak[0] ? leak[0].c : 0),
       prefix_collision_cluster_count: prefixCollisions.length,
       prefix_collision_clusters: prefixCollisions.slice(0, 25),
+      // Q3 test: exclude sports-like-question OR resolves-<24h from the exact
+      // same distinct decided population above, and grade what's left. This is
+      // the thesis test for whether whale_cluster carries information on the
+      // slower conviction markets it was meant for (politics/macro/geo),
+      // independent of whether the noisy fast/sports slice is a data bug.
+      thesis_test_excluding_fast_and_sports: {
+        method: 'exclude if hours_to_resolve < 24 OR market_question matches a sports/head-to-head regex (see _isSportsLikeQuestion) — same distinct decided set as `headline` above, just partitioned',
+        excluded: {
+          graded: fastCorrect + fastWrong, correct: fastCorrect, wrong: fastWrong,
+          hit_rate_pct: (fastCorrect + fastWrong) ? Math.round(fastCorrect / (fastCorrect + fastWrong) * 1000) / 10 : null,
+        },
+        retained_slow_non_sports: {
+          graded: slowCorrect + slowWrong, correct: slowCorrect, wrong: slowWrong,
+          hit_rate_pct: (slowCorrect + slowWrong) ? Math.round(slowCorrect / (slowCorrect + slowWrong) * 1000) / 10 : null,
+        },
+        excluded_sample: excludedSample,
+      },
       sample_events: sample,
     });
   } catch (e) {
