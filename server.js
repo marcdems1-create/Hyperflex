@@ -59300,27 +59300,42 @@ async function resolveSignalOutcomes(opts = {}) {
 // correction is worse than staying wrong-and-flagged. Read the response, not
 // the DB, to see what changed: `flips` lists every wrong→correct correction
 // with the winning outcome name that proved it.
+// BOUNDED to REGRADE_BATCH_MAX rows per call + processed at concurrency 5 via
+// _mapLimit — a fully-sequential loop over potentially hundreds of rows, each
+// doing a live gamma fetch, risks exceeding Railway's/any front proxy's request
+// timeout and returning a truncated non-JSON response (curl "Invalid numeric
+// literal" is the signature of exactly that). Idempotent + resumable: call it
+// repeatedly — `remaining` tells you if another call is needed. Safe to re-run:
+// already-correct rows just get re-confirmed (no-op update), never re-broken.
 //   curl -X POST "https://hyperflex.network/api/admin/regrade-named-outcomes?secret=$ADMIN_SECRET"
+const REGRADE_BATCH_MAX = 60;
 app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no db' });
-    const rows = await dbQuery(`
-      SELECT id, market_question, predicted_side, market_price_at_signal, condition_id, market_url, outcome
-      FROM signal_outcomes
-      WHERE outcome IN ('correct','wrong')
-        AND UPPER(TRIM(predicted_side)) NOT IN ('YES','NO')
-      ORDER BY predicted_at ASC
-    `);
+    const [rows, totalRow] = await Promise.all([
+      dbQuery(`
+        SELECT id, market_question, predicted_side, market_price_at_signal, condition_id, market_url, outcome
+        FROM signal_outcomes
+        WHERE outcome IN ('correct','wrong')
+          AND UPPER(TRIM(predicted_side)) NOT IN ('YES','NO')
+        ORDER BY predicted_at ASC
+        LIMIT ${REGRADE_BATCH_MAX}
+      `),
+      dbQuery(`
+        SELECT COUNT(*)::int AS c FROM signal_outcomes
+        WHERE outcome IN ('correct','wrong') AND UPPER(TRIM(predicted_side)) NOT IN ('YES','NO')
+      `).catch(() => [{ c: 0 }]),
+    ]);
+    const totalAffected = (totalRow && totalRow[0]) ? totalRow[0].c : rows.length;
     const _slugFromUrl = (u) => {
       if (!u) return null;
       const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
       return m ? m[1].toLowerCase() : null;
     };
-    let checked = 0, flippedToCorrect = 0, confirmedStillWrong = 0, unresolvable = 0;
+    let flippedToCorrect = 0, confirmedStillWrong = 0, unresolvable = 0;
     const flips = [];
     const stillUnresolved = [];
-    for (const r of rows) {
-      checked++;
+    await _mapLimit(rows, 5, async (r) => {
       const cid = r.condition_id || null;
       const slug = cid ? null : _slugFromUrl(r.market_url);
       const key = cid || slug;
@@ -59340,8 +59355,7 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
         if (stillUnresolved.length < 15) {
           stillUnresolved.push({ market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome });
         }
-        await new Promise(res2 => setTimeout(res2, 150));
-        continue;
+        return;
       }
       const side = (r.predicted_side || '').trim().toUpperCase();
       const winnerName = settlement.winnerName.trim().toUpperCase();
@@ -59366,16 +59380,17 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
       } else {
         confirmedStillWrong++;
       }
-      await new Promise(res2 => setTimeout(res2, 150)); // gamma politeness
-    }
+    });
     if (flippedToCorrect > 0 || confirmedStillWrong > 0) {
       await updateSourceAccuracy();
       await updateConfidenceCalibration();
       await updatePlatformMetrics();
     }
     res.json({
-      note: 'One-time correction for the named-outcome grading bug. Rows with no findable settlement are left untouched, not guessed — see still_unresolved.',
-      checked,
+      note: 'One-time correction for the named-outcome grading bug. Rows with no findable settlement are left untouched, not guessed — see still_unresolved. Bounded per call — re-run this same curl if `remaining` > 0.',
+      checked: rows.length,
+      total_affected: totalAffected,
+      remaining: Math.max(0, totalAffected - rows.length),
       flipped_to_correct: flippedToCorrect,
       confirmed_still_wrong: confirmedStillWrong,
       unresolvable,
