@@ -59335,25 +59335,40 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
     let flippedToCorrect = 0, confirmedStillWrong = 0, unresolvable = 0;
     const flips = [];
     const stillUnresolved = [];
+    const reasonCounts = {};
     await _mapLimit(rows, 5, async (r) => {
       const cid = r.condition_id || null;
       const slug = cid ? null : _slugFromUrl(r.market_url);
       const key = cid || slug;
       let settlement = null;
-      if (key) {
+      let reason = null;
+      let gammaMatchCount = 0;
+      if (!key) {
+        reason = 'no_key'; // no condition_id AND market_url didn't parse to a slug
+      } else {
         const url = cid
           ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
           : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
         const mkts = await _fetchGammaKeyset(url);
-        for (const m of mkts) {
-          const st = _parseOutcomeSettlement(m);
-          if (st && (st.price > 0.95 || st.price < 0.05) && st.winnerName) { settlement = st; break; }
+        gammaMatchCount = mkts.length;
+        if (!mkts.length) {
+          reason = 'no_gamma_match'; // key present, gamma returned nothing for it
+        } else {
+          for (const m of mkts) {
+            const st = _parseOutcomeSettlement(m);
+            if (st && (st.price > 0.95 || st.price < 0.05) && st.winnerName) { settlement = st; break; }
+          }
+          if (!settlement) reason = 'gamma_matched_but_not_decisive_or_no_outcomes_array';
         }
       }
       if (!settlement) {
         unresolvable++;
+        reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
         if (stillUnresolved.length < 15) {
-          stillUnresolved.push({ market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome });
+          stillUnresolved.push({
+            market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome,
+            reason, condition_id: cid, market_url: r.market_url, gamma_matches_found: gammaMatchCount,
+          });
         }
         return;
       }
@@ -59394,6 +59409,7 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
       flipped_to_correct: flippedToCorrect,
       confirmed_still_wrong: confirmedStillWrong,
       unresolvable,
+      unresolvable_reason_counts: reasonCounts,
       flips,
       still_unresolved: stillUnresolved,
     });
