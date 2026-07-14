@@ -49,6 +49,40 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-14 (MAJOR: resolver bug found — 23.6% was false, real number is 58.3% / n=24)
+
+**The single most important finding to date. Read this before touching the edge/grading system.**
+
+**What happened:** The edge hit rate showed 23.6-24.5% (worse than random) and looked like the whale-cluster thesis was dead. Full audit (`/api/admin/edge-audit`, extended this session with `thesis_test_excluding_fast_and_sports`, `non_yes_no_side_check`, `both_sides_logged_check`) proved it was a GRADING BUG, not a signal failure.
+
+**The bug:** `resolveSignalOutcomes` compared `predicted_side` against string literals `'YES'`/`'NO'`. But multi-outcome markets have named sides ("NOVAK DJOKOVIC", "MOROCCO", "ADOLFO VALLEJO"). Those can NEVER match `'YES'`/`'NO'`, so they were graded `wrong` unconditionally — regardless of the real outcome. 32-35 rows (grew slightly as more signals resolved mid-investigation) were structurally incapable of ever grading correct. Zero of them did.
+
+**Confirmed clean (NOT the cause):** no out-of-band leakage (`out_of_band_in_set: 0`), no dupe/prefix-collision inflation (`prefix_collision_cluster_count: 0`), price well-distributed across the band. So this was NOT a regression of the June 22.6% three-bug incident — different bug entirely.
+
+**Also found (confirmed, not fixed):** signal was firing mostly on fast-resolving LIVE SPORTS (42 of 55 resolved <24h — Wimbledon matches, MLB games), and the whale-consensus detector logs BOTH sides of the same event as separate signals whenever 3+ whales sit on each side (`consensusMap` keyed by `market+'||'+side`, server.js ~34950, no cross-side check before pushing a candidate) — confirmed empirically at massive scale (25 markets, up to 954 raw rows on one NBA futures market alone, spanning sports AND politics/macro/crypto). This is a real, separate detection-side bug — NOT fixed this session, deliberately deferred.
+
+**Fixes shipped (all on `main`):**
+- PR #204 (squash `a52e352`): resolver now compares named-outcome sides against the ACTUAL winning outcome name (case-insensitive, trimmed) via new shared helpers `_parseOutcomeSettlement` + `_fetchGammaKeyset`. Literal YES/NO signals keep byte-identical behavior. New signals grade correctly going forward.
+- PR #205 (squash `07fb8b3`): bounded the new `POST /api/admin/regrade-named-outcomes` one-time-correction endpoint to `REGRADE_BATCH_MAX=60`/call at concurrency 5 (`_mapLimit`) — the original fully-sequential version timed out (truncated non-JSON response) against the real row count.
+- PR #206 (squash `6348b4c`): instrumented *why* rows fail to regrade (`no_key` / `no_gamma_match` / `gamma_matched_but_not_decisive_or_no_outcomes_array`) — all affected rows came back `no_gamma_match`: their source markets (resolved Mar–Jun 2026) have aged out of gamma's direct condition_id/slug lookup retention. Condition_ids verified well-formed (66-char bytes32); same query shape as 5 other working call sites in the file. Not a code bug — a hard data-availability wall.
+- Commit `b724f9d` (merged directly by Marc, `git merge` — GitHub connector was mid-reauth): the regrade endpoint now STAMPS unrecoverable rows `outcome='void_ungradeable'` (previously reported-only, left untouched) — excluded from correct/wrong and hit-rate math everywhere. `GET /api/edge/receipts` → `record.alltime.void_ungradeable` (count) + `void_reason` (full explanation), computed from the same deduped population as `graded`/`correct`/`wrong`. **The wound is visible, not hidden — this is deliberate and must stay: a track-record product cannot silently shrink its denominator.**
+
+**The real number now (live-verified post-deploy):** `alltime` = graded 24, correct 14, wrong 10, **hit_rate 58.3%**, avg_pnl_per_dollar 0.92, void_ungradeable 35.
+
+**Against the publish gate (n≥30 AND ≥58%):** hit rate CLEARS 58% (58.3%); sample size does NOT (n=24, need 30). **STILL UNPUBLISHED.** Do not publish the hit rate, do not touch landing, no founder posting until n≥30 holds ≥58%.
+
+**Status of the thesis:** was "possibly broken," now "looks real, unproven — needs ~6 more decided events to cross n=30." Fundamentally healthier failure mode. The resolver fix means n now climbs cleanly on its own; the moat (compounding graded record) is finally accumulating instead of being corrupted.
+
+**Next when picking this back up:** re-run `/api/admin/edge-audit` once n has grown past 30; confirm 58%+ holds before any publish decision. Separately, the both-sides-logged detection bug is CONFIRMED but UNFIXED — decide whether whale_cluster should exclude fast-resolving sports/live markets entirely, add a mutual-exclusivity check (suppress logging both sides of one event), or both. Not scoped yet — Marc's call on priority.
+
+## 2026-07-14 (Mantra change, Anthropic credit outage, desktop UI status)
+
+**Mantra changed** (in CLAUDE.md): from "industry standard for building on top of Polymarket" → **"On-chain needs a real track record. HYPERFLEX is the verified track record layer for on-chain traders."** Mission is on-chain-wide; Polymarket is venue #1, not the identity or ceiling. On-chain expansion (Hyperliquid named as first candidate, per PR on branch `claude/onchain-expansion-thesis-9trllr`) is DOCUMENTED but PARKED — no second venue until the Polymarket grader produces a defensible number. Perps = a second grading engine (entry/exit, leverage, funding, no resolution event), not a config change.
+
+**⚠️ Anthropic API was OUT OF CREDITS** (platform-wide) as of this session. The single `ANTHROPIC_API_KEY` powers news→market matching, market auto-creation, YouTube scanner, news-impact sentiment, thesis generation. **IMPORTANT: grading does NOT depend on Anthropic** — traced the whole whale_cluster grade pipeline, it's 100% deterministic SQL/arithmetic (confirmed again independently by the resolver-bug investigation above). So the credit outage never affected the edge number. News-feed matching itself was hardened separately (PR #200, squash `f73f579`): `_haikuPickMarket` now returns `{result, apiError}` and `_resolveMatchCached` falls back to keyword matching only when the Haiku CALL fails (billing/rate-limit/network), never when Haiku genuinely judges "no match" — so a future outage degrades to keyword matching instead of silently nulling every headline.
+
+**Desktop homepage UI:** still not right per Marc as of last check. Cards were resized via inline-style fix (CSS was being overridden by JS inline styles — that was the recurring "nothing changes" bug). Cards now larger, but Marc reported text still too small + dead space remains. Some dead space is empty AI-fed rows (was credit-blocked). Font sizing may be the same inline-style issue one layer over (card title/label fonts set inline in JS). Viewport meta confirmed correct (`width=device-width,initial-scale=1`) — NOT a viewport bug. Not picked back up this session — still open if Marc wants it next.
+
 ## 2026-06-21 (Grader fix — resolved markets that aged out now grade)
 
 **Diagnosis (confirmed live):** pending climbed but graded frozen at 13. `resolveSignalOutcomes` runs fine; its only resolved-outcome source was a bounded recent/high-volume closed-market gamma fetch (~400 markets). WC matches settled days ago are in none of it → never grade, never expire (<60d) → pending forever. It was case (c).
@@ -240,124 +274,3 @@
 - Second action: if Marc has the FLEX rebuild curl result, run the diag and ship the surgical fix.
 - Messages nav link is auth-only — logged-out users won't see it. Unread badge polls `/api/messages/unread-count` every 30s from nav.js.
 
-## 2026-05-10 (pool hotfix + homepage scale + rolling banner + flex instrumentation)
-
-**Shipped (with hashes):**
-- PR #98: db pool max 5→25, idle 30s, connect 5s — production triage under +133% traffic (squash `26ee7ab`)
-- PR #101: homepage desktop scale-up — body font 15→18, layout max-width 1440→1600, mobile `<768px` reverts (squash `8fd07b4`)
-- PR #100: `_fetchFlexStats` + `recomputeFlexScore` + `/api/admin/flex/rebuild` instrumentation — three-tier UPDATE fallback (full → existing-schema → minimal `flex_computed_at` stamp), diag captures all intermediate counts + previously-swallowed `.catch` errors, response surfaces diag for one-curl diagnosis (squash `6a75543`)
-
-**Open PRs (not yet merged):**
-- PR #102: rolling hero banner v1 — `lib/hero-banner.js` (selection + cache + resolution-check), `GET /api/hero-banner`, `POST /api/admin/hero-banner/refresh`, 1-min cron for cache bust on resolution, `public/hero-banner.js` dual-mode (imminent ≤7d / anchor >7d), script-tag swap in `feed.html` + `explore.html` (commit `2a0a25f`). Replaces dead UFC 328 banner (KILL_AT passed 03:00 UTC today). Awaiting Marc's visual verify on `/feed` + `/` after Railway redeploys.
-- PR #103: this entry — SESSION_STATE.md 2026-05-10 ledger + locked decision capture (commit `30ba19c` + follow-up locking Decision #1 to Option C).
-
-**Active blockers:**
-- **Marc's curl on `/api/admin/flex/rebuild` for LaBradford** → diag paste → drives surgical FLEX fix queue position #1.
-
-**Queued (priority order):**
-1. **Surgical FLEX fix** — based on PR #100 diag (pending curl). Expected small targeted PR. Diag triplet `(rt_rows_returned, rt_dedup_keyset_size, rt_contributed.rtCount)` identifies dedup-wipe vs query-path vs writer-side. Branch: TBD (`claude/flex-surgical-<cause>` once diag names it).
-2. **WHALE SCORE label split** — claude/whale-score-label-split. Pure UI work, no data migration. See Decision #1 (LOCKED) below for full spec. Ships AFTER surgical FLEX fix so the FLEX SCORE side of the split has real numbers populating for whale-imported users.
-3. **dog-card-v1** (UNBLOCKED) — UPDATED per Decision #2 (RESOLVED): parallel FLEX-sharps section (reads `flex_score`, `flex_qualifies=true` filter) + WHALES-on-side section (reads `flex_score_90d` top 3, no qualification gate). Two parallel lineups, distinct labels. Spec body needs an addendum but otherwise complete. Ships after WHALE SCORE label split lands so the UI surfaces it parallels exist.
-4. (Inherited from 2026-05-09 entry) Passport ↔ main profile reconciliation, messaging-v1 UI, etc.
-
-**Decision items:**
-
-### Decision #1 — Canonical scoring system — **LOCKED 2026-05-10: Option C (semantic split)**
-
-Marc confirmed "both" — two scores, two labels, no overlap. No column changes, no data migration. Pure UI + label work.
-
-**FLEX SCORE** (`flex_score` column, calibration path):
-- Brand framing: "Demonstrated ROI through settled predictions"
-- Writer: `/api/admin/flex/rebuild` + 04:30 cron, formula `lib/flex-score.js`
-- Surfaces: profile hero gate, FLEX leaderboard, dog-card sharps lineup
-- Qualification: `flex_qualifies = true` (25-settled threshold remains)
-
-**WHALE SCORE** (`flex_score_90d` column, heuristic path):
-- Brand framing: "Capital-weighted Polymarket signal"
-- Writer: `ensureWhaleProfile()` leaderboard sweep, formula `computePolymarketFlexScore` at server.js:17651
-- Surfaces: Top Whales rail (relabel from "Top Predictors"), whale-flow surfaces, profile WHALE SCORE badge
-- No qualification gate — heuristic populates for any user with whale data
-
-**UI changes required (single PR — `claude/whale-score-label-split`):**
-1. Top Predictors rail → rename to "Top Whales", read from `flex_score_90d`
-2. Profile: keep existing "FLEX SCORE" hero card reading `flex_score` (the Building/locked badge today)
-3. Profile: add new "WHALE SCORE" badge below FLEX, reading `flex_score_90d` (LaBradford's 65 surfaces here — profile no longer feels empty)
-4. Leaderboards page: add FLEX leaderboard + WHALES leaderboard as separate tabs
-
-Ship order: PR #100 instrumentation (DONE) → surgical FLEX fix → WHALE SCORE label split → dog-card V1 with parallel sections.
-
-### Decision #2 — dog-card-v1 sharps-query — **RESOLVED 2026-05-10 (follows from Option C)**
-
-Spec stays as written for the FLEX sharps lineup: `sharps_on_dog_side` reads `flex_score`, `flex_qualifies = true` filter remains. **Addition:** parallel "WHALES ON THIS SIDE" section below the FLEX sharps, reading `flex_score_90d` top 3 from users with a take on the dog side, no qualification filter. Two parallel lineups, distinct labels — same semantic pattern as the two scores. The dog-card spec body needs this addendum captured before implementation.
-
-**Open questions / unverified:**
-- **Actual cause of LaBradford `flex_settled_events=0`** — pending diag curl from PR #100. `close_reason` filter ruled out (doesn't exist in code, verified twice). Ranked hypotheses, each tied to its diag signature:
-  1. **Dedup wipes everything** — polymarket_trades has rows with `(condition_id, side)` collisions against realized_trades. Signature: `rt_rows_returned: 747, rt_dedup_keyset_size: >0, rt_contributed.rtSkippedDedup: 747, rt_contributed.rtCount: 0`. **Highest likelihood.** If confirmed: surgical fix is dropping the `if (polyStats.has_trades > 0)` gate at `server.js:19294`, OR fixing the underlying `polymarket_trades` row population for whale-imported users (deeper cause).
-  2. **Wallet lookup spurious-positive** — polymarket_address populated despite whale-import; polymarket_trades count query then matches on the proxy. Signature: `wallet_addr_present: true, poly_stats_after_pt.has_trades: >0`. Surgical fix: stricter wallet filter (e.g., require wallet_verified=true) or distinct `polymarket_proxy` vs `polymarket_address` semantics.
-  3. **Silent error in realized_trades query** (transient pool-exhaustion pre-PR #98). Signature: `rt_rows_returned: 0, errors[]` contains `{stage:'rt_query',...}`. Lower likelihood now that pool was bumped, and PR #100's instrumented `.catch` writes to `errors[]` instead of swallowing. Surgical fix: probably none, just re-run rebuild.
-  4. **Schema drift** — `flex_c_consistency` or another column missing → UPDATE throws → previously caught silently. Signature: `update.stage: 'fallback_existing'` or `'minimal_stamp'` with `errors[]` containing `{stage:'full_update',...}`. PR #100's Tier 2/3 fallback surfaces it directly. Surgical fix: add missing migration.
-
-**Notes for next session:**
-- **First action:** if Marc hasn't curled `/api/admin/flex/rebuild` for LaBradford yet, that's the gate. Once paste lands, the diag triplet names the surgical fix in one read.
-- **Second action:** PR #102 verify on `/feed` + `/`. If something off-brand surfaces from the rolling banner, `HERO_BANNER_BLACKLIST=<slug>` env var + `POST /api/admin/hero-banner/refresh` clears it without a code deploy.
-- **Third action:** queue position #2 (WHALE SCORE label split) is a clean, scoped UI PR. Spec is locked in Decision #1 — execute when surgical FLEX fix lands.
-- **Fourth action:** dog-card V1 spec body needs the "WHALES ON THIS SIDE" parallel section added before implementation. The spec currently lives in this session's chat history; capture the addendum into a real spec file (e.g., `docs/specs/dog-card-v1.md`) when starting that ticket.
-
-**Process notes / lessons committed (don't re-learn these):**
-- "Filter exists, drop it" diagnoses get verified against the actual current code (`git show <pr-commit>`) before drafting a fix. PR #100 was almost shipped as a no-op `close_reason` filter drop based on a wrong premise; refused, instrumented instead.
-- File-isolation scoping is a valid alternative to selector-scoping when CSS lives inline in a single HTML file. PR #101 didn't need a `.home` class because `feed.html`'s `<style>` block can't bleed into other pages — they don't load it.
-- Speculative retries / mutations on write paths are forbidden (already in CLAUDE.md #14). PR #100's three-tier UPDATE fallback is the *correct* shape: each tier is structurally distinct, errors surface to `errors[]`, no silent state mutation. Speculative *retries that change parameters* are the anti-pattern; *fallbacks that degrade gracefully* are fine.
-- One-min crons that look heavy are fine when they're guarded — PR #102's `checkCachedEventResolved` is a no-op on cold cache and does one gamma-cached fetch on warm cache. The lightweight signature was important enough to surface in the PR body up front.
-- When two systems with the same brand label coexist, the resolution isn't always unification. Option C (split the labels) preserves both signals without forcing a value judgment between calibration and capital-flow, and avoids the "leaderboard goes thin" outcome that Option A would have produced post-FLEX-fix.
-
----
-
-## 2026-05-09 (recovery + messaging-v1 schema)
-
-**Shipped (with hashes):**
-- PR #91: takes hotfix — drop broken `cs.avatar_url` SELECT (squash `951d292`)
-- PR #92: redeem-grader URL-filter classifier (squash `e2390c2`) — **shipped with structurally broken logic, see PR #93**
-- PR #93: redeem grader — `cashPnl` truth signal + paginate the fetch (squash `8b85c9c`)
-- PR #94: messaging-v1 schema + 5 endpoints + tests, no UI (commit `0fc851c`, **awaiting merge**)
-
-**Active blockers:**
-- (none)
-
-**Queued (priority order):**
-1. **Passport ↔ main profile reconciliation** — pre-work: 3-5 whale divergence query (sample LaBradford + 4 others, capture passport vs main-profile values per field, check whether deltas are consistent or random). If consistent: factor `lib/profile-stats.js` shared aggregator, both endpoints import. **Collapses Finding 1 (FLEX Score "Building" gate) into the same fix** — gate threshold is correct by design (formula needs settled signal); bug is `settled_predictions` reads from `polymarket_trades` (empty for whale-imported users) instead of `realized_trades`.
-2. **messaging-v1 UI** — `/messages` dashboard tab, `<ConversationList>` + `<MessageThread>` components, nav badge with unread count, Message button on profile pages in the slot Copy Link will vacate.
-3. **Drop Copy Link from profile action row** — single-line removal, bundle with #2.
-4. **Operational + side log triage** (none blocking, all filed):
-   - `[data-engine] (raw || []).map is not a function` on every refresh — gamma envelope unwrap regression, single-callsite hunt
-   - `dbQuery connect timeout` cascading across crons — pool exhaustion or one cron starving others
-   - `column "video_url" does not exist` — migration #59 not applied to Railway
-   - `mention_events_dominant_stance_check` constraint violation — clusterer producing `'deescalatory'` outside enum
-   - `[intelligence] Platform: 0.4% accuracy` log line — separate from `realized_trades`, separate diagnosis when prioritized
-5. **`users.username` NULL backfill** — affects display name fallback chain on takes + profile rendering.
-6. **`polymarket_proxy` vs `polymarket_address` semantics doc** — CLAUDE.md addition; both columns hold the same value (proxy) for whale-imported users; semantics drift across new vs legacy code paths.
-
-**Open questions / unverified:**
-- **Will the 3 AM cron `computeWalletScores` heal LaBradford's `wallet_scores` row?** Destructive UPDATE earlier in session (NOT from any session-Claude) corrupted `sharpness_score: 63 → 0.0786`, `realized_pnl_usd: +$87,397 → -$3,461,027`, `closed_positions: 0 → 623`. The cron rewrites from `polymarket_trades` + `whale_pnl`, not `realized_trades`, so should restore. **Morning check (one-line SQL):**
-  ```sql
-  SELECT u.id, u.whale_pnl, ws.realized_pnl_usd, ws.computed_at,
-         (ws.realized_pnl_usd - u.whale_pnl) AS delta
-    FROM users u LEFT JOIN wallet_scores ws ON ws.user_id = u.id
-   WHERE u.id = '7dc1a4b0-1966-4777-85fa-3b0ac3761e3a';
-  ```
-  - If `delta = 0`: cron healed it, prior gap was staleness. Question closed.
-  - If `delta ≠ 0`: there's a transformation in `_scoreWallet`'s P&L picker (server.js:3581-3583, the `Math.abs(tradePnl) >= 1 ? tradePnl : whalePnl` branch). Trace and file.
-- **Did anyone actually run the regrade curl post-merge of PR #93?** Unknown. If yes, paste response (`regraded`/`fetched` counts + `sample` payload). If `regraded > fetched` flagged earlier — halt before sweep, run dedupe diagnostic on `external_sync_id`.
-- **Does the `[intelligence] Platform: 0.4% accuracy` aggregator read from `realized_trades`?** Unverified. Pre-work for queue item: `grep -n "0.4% accuracy\|resolved signals\|Platform: " server.js lib/`. If the JOIN graph touches `realized_trades`, expect partial (not full) movement after PR #93 + sweep land. Verify-then-claim, not the other way.
-
-**Notes for next session:**
-- First action: run the morning `wallet_scores` vs `whale_pnl` SQL above. Two-second answer to a question that's been hanging.
-- Second action: PR #94 merge if not already done, then trigger Railway deploy verification (boot logs should show `[boot] Auto-migration complete` with no new errors).
-- Third action: pick up queue item 1 (Passport reconciliation) starting with the 5-whale divergence query — single-source-of-truth fix collapses two findings.
-
-**Process notes / lessons committed (don't re-learn these):**
-- API-shape claim → curl/query producing the response on-screen first, code second. PR #92 was shipped on a hypothesized URL-filter behavior that one curl would have falsified in 30 seconds. Three strikes this session.
-- Tool counts (`regraded: N`, `fetched: M`) get a reconciliation question before "ship it" reading. `regraded: 890` was a warning sign (bigger than the loss-row count we expected to flip), not a success number.
-- "The fix is correct under either hypothesis" only applies when the hypotheses are well-formed. When the hypothesis is "the API does X" and you haven't checked, the fix is correct under one branch and destructive under the other.
-- Branch protection on `main`: every change goes through PR. Direct push to main returns a misleading 403/sideband-disconnect. Push to feature branch + open PR + use the GitHub MCP merge tool when ready.
-- `users.id` is `TEXT` on Railway, not UUID. Foreign keys to `users(id)` use `TEXT`. Some legacy tables (e.g. `realized_trades.user_id`) declare UUID and need explicit `$1::uuid` casts in queries.
-- Two source-of-truth tables for trader data: `polymarket_trades` (legacy, requires user wallet connect, empty for whale-imported leaderboard users) and `realized_trades` (new, populated by `backfillRealizedTrades` from Polymarket `/activity` + `/positions?redeemed=true`). Surfaces that read from only one undercount whale-imported users. The reconciliation queue item factors a shared aggregator that reads from both.
