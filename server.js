@@ -59296,10 +59296,16 @@ async function resolveSignalOutcomes(opts = {}) {
 // a flipped outcome doesn't leave a stale -1 loss sitting next to 'correct'.
 //
 // Rows whose settlement can no longer be found (market aged out of gamma,
-// data gap) are left UNTOUCHED and reported in `still_unresolved` — a guessed
-// correction is worse than staying wrong-and-flagged. Read the response, not
-// the DB, to see what changed: `flips` lists every wrong→correct correction
-// with the winning outcome name that proved it.
+// data gap) are STAMPED outcome='void_ungradeable' — never guessed as correct
+// or wrong, and never silently dropped either. Excluded from correct/wrong and
+// from hit-rate math everywhere (every aggregate filters outcome IN
+// ('correct','wrong')), but publicly counted and explained on
+// /api/edge/receipts (void_ungradeable + void_reason) — the wound stays
+// visible, the denominator never quietly shrinks. This also makes the
+// endpoint properly convergent: voided rows no longer match this query's
+// WHERE clause, so re-running won't keep re-checking permanently-unresolvable
+// rows forever. Read the response to see what changed: `flips` lists every
+// wrong→correct correction with the winning outcome name that proved it.
 // BOUNDED to REGRADE_BATCH_MAX rows per call + processed at concurrency 5 via
 // _mapLimit — a fully-sequential loop over potentially hundreds of rows, each
 // doing a live gamma fetch, risks exceeding Railway's/any front proxy's request
@@ -59332,7 +59338,7 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
       const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
       return m ? m[1].toLowerCase() : null;
     };
-    let flippedToCorrect = 0, confirmedStillWrong = 0, unresolvable = 0;
+    let flippedToCorrect = 0, confirmedStillWrong = 0, voided = 0;
     const flips = [];
     const stillUnresolved = [];
     const reasonCounts = {};
@@ -59362,8 +59368,16 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
         }
       }
       if (!settlement) {
-        unresolvable++;
+        voided++;
         reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+        // Stamp, don't drop — void_ungradeable is a distinct outcome value,
+        // never counted as correct or wrong (every aggregate filters outcome
+        // IN ('correct','wrong')), but permanently visible on receipts. Null
+        // out pnl/edge — the old bugged-'wrong' values are meaningless now.
+        await dbQuery(
+          "UPDATE signal_outcomes SET outcome='void_ungradeable', pnl_if_followed=NULL, edge_cents=NULL WHERE id=$1",
+          [r.id]
+        );
         if (stillUnresolved.length < 15) {
           stillUnresolved.push({
             market_question: r.market_question, side: r.predicted_side, old_outcome: r.outcome,
@@ -59396,20 +59410,20 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
         confirmedStillWrong++;
       }
     });
-    if (flippedToCorrect > 0 || confirmedStillWrong > 0) {
+    if (flippedToCorrect > 0 || confirmedStillWrong > 0 || voided > 0) {
       await updateSourceAccuracy();
       await updateConfidenceCalibration();
       await updatePlatformMetrics();
     }
     res.json({
-      note: 'One-time correction for the named-outcome grading bug. Rows with no findable settlement are left untouched, not guessed — see still_unresolved. Bounded per call — re-run this same curl if `remaining` > 0.',
+      note: 'One-time correction for the named-outcome grading bug. Rows with no findable settlement are STAMPED void_ungradeable (never guessed, never dropped) — see still_unresolved + /api/edge/receipts.void_ungradeable. Bounded per call — re-run this same curl if `remaining` > 0.',
       checked: rows.length,
       total_affected: totalAffected,
       remaining: Math.max(0, totalAffected - rows.length),
       flipped_to_correct: flippedToCorrect,
       confirmed_still_wrong: confirmedStillWrong,
-      unresolvable,
-      unresolvable_reason_counts: reasonCounts,
+      voided,
+      voided_reason_counts: reasonCounts,
       flips,
       still_unresolved: stillUnresolved,
     });
@@ -59967,6 +59981,7 @@ app.get('/api/edge/receipts', async (req, res) => {
           COUNT(*) FILTER (WHERE outcome='correct') as correct,
           COUNT(*) FILTER (WHERE outcome='wrong') as wrong,
           COUNT(*) FILTER (WHERE outcome IS NULL) as pending,
+          COUNT(*) FILTER (WHERE outcome='void_ungradeable') as void_ungradeable,
           AVG(pnl_if_followed) FILTER (WHERE outcome IN ('correct','wrong')) as avg_pnl,
           COUNT(*) FILTER (WHERE outcome IN ('correct','wrong') AND resolved_at > NOW() - INTERVAL '30 days') as graded_30d,
           COUNT(*) FILTER (WHERE outcome='correct' AND resolved_at > NOW() - INTERVAL '30 days') as correct_30d,
@@ -60030,7 +60045,17 @@ app.get('/api/edge/receipts', async (req, res) => {
         correct: parseInt(t.correct) || 0,
         wrong: parseInt(t.wrong) || 0,
         hit_rate_pct: pct(parseInt(t.correct) || 0, graded),
-        avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null
+        avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null,
+        // Never quietly shrink the denominator. These events WERE logged and
+        // decided, but the resolver graded them via a literal side==='YES'/
+        // 'NO' compare that can never match a named outcome (e.g. a player
+        // name) — every one graded 'wrong' regardless of the real result.
+        // Fixed going forward; these specific historical rows' source markets
+        // have since aged out of gamma's direct-lookup retention and can no
+        // longer be re-verified, so they're voided rather than left as false
+        // losses or silently dropped from the count.
+        void_ungradeable: parseInt(t.void_ungradeable) || 0,
+        void_reason: "resolver compared named-outcome sides (e.g. a player/team name on a multi-outcome market) against literal 'YES'/'NO' — those signals graded 'wrong' unconditionally regardless of the real result. Fixed going forward (server.js resolveSignalOutcomes); these specific historical rows' source markets have aged out of gamma's direct-lookup retention and can no longer be re-verified, so they're voided rather than left as false losses or silently dropped.",
       },
       pending: parseInt(t.pending) || 0,
       // Dedup transparency: distinct events vs raw re-logged rows, all-time.
