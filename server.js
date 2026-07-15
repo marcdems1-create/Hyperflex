@@ -59464,6 +59464,121 @@ app.post('/api/admin/force-resolve', requireAdminSecret, async (req, res) => {
   }
 });
 
+// ── DIAGNOSTIC: GET /api/admin/pending-recoverability ────────────────────────
+// Read-only. Does NOT call resolveSignalOutcomes, does NOT write anything.
+//
+// force-resolve showed probed 400 / matched 0 / graded 0, all no_market_match,
+// with pending at 1,472 and climbing. The live resolver's discovery is bounded
+// in two ways: (a) the stable-key (condition_id/slug) direct-lookup source caps
+// at RESOLVE_PROBE_MAX=40 UNIQUE keys per cycle, out of up to 400 examined —
+// most of the backlog never even gets a real lookup attempt; (b) the text-match
+// fallback only covers markets still in the top-200-by-recency or top-200-by-
+// volume gamma closed-market fetch — a month-old, low-volume prop market (a
+// player shot-count, an F1 fastest-lap side bet) scrolls off both windows fast.
+//
+// This endpoint bypasses both bounds — direct condition_id/slug lookup on every
+// row in the batch, bounded concurrency via _mapLimit, no 40-key cap — to answer
+// the question that actually matters: of the pending backlog, how much is
+// GENUINELY recoverable right now (a key exists, gamma confirms it settled —
+// the live resolver should be able to grade it, just isn't reaching it in time),
+// how much has hit the SAME retention wall the 35 void-ungradeable rows hit
+// (a key exists, gamma returns nothing — permanently unrecoverable, not a
+// resolver bug), how much is correctly still pending (market genuinely still
+// open), and how much never had a condition_id captured at signal-log time at
+// all (a logging-side gap, separate root cause from a resolver/matching gap).
+//
+// Bounded to PENDING_CHECK_BATCH per call, oldest-first; resumable — re-run if
+// `remaining` > 0 to characterize progressively more of the backlog.
+//   curl -s "https://hyperflex.network/api/admin/pending-recoverability?secret=$ADMIN_SECRET"
+const PENDING_CHECK_BATCH = 80;
+app.get('/api/admin/pending-recoverability', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const [rows, totalRow] = await Promise.all([
+      dbQuery(`
+        SELECT id, market_question, predicted_side, predicted_at, condition_id, market_url
+        FROM signal_outcomes
+        WHERE outcome IS NULL
+        ORDER BY predicted_at ASC
+        LIMIT ${PENDING_CHECK_BATCH}
+      `),
+      dbQuery(`SELECT COUNT(*)::int AS c FROM signal_outcomes WHERE outcome IS NULL`).catch(() => [{ c: 0 }]),
+    ]);
+    const totalPending = (totalRow && totalRow[0]) ? totalRow[0].c : rows.length;
+    const _slugFromUrl = (u) => {
+      if (!u) return null;
+      const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
+      return m ? m[1].toLowerCase() : null;
+    };
+    const now = Date.now();
+    const ageBucketName = (ms) => {
+      const d = ms / 86400000;
+      if (d < 7) return '<7d';
+      if (d < 30) return '7-30d';
+      if (d < 60) return '30-60d';
+      return '>60d';
+    };
+    let noKey = 0, stillOpen = 0, agedOut = 0, recoverableNow = 0, gammaError = 0;
+    const ageBuckets = {};
+    const sampleAgedOut = [], sampleRecoverable = [], sampleNoKey = [];
+    await _mapLimit(rows, 5, async (r) => {
+      const age = now - new Date(r.predicted_at || 0).getTime();
+      const bucket = ageBucketName(age);
+      if (!ageBuckets[bucket]) ageBuckets[bucket] = { recoverable_now: 0, aged_out_permanently: 0, still_genuinely_open: 0, no_condition_id: 0 };
+      const cid = r.condition_id || null;
+      const slug = cid ? null : _slugFromUrl(r.market_url);
+      const key = cid || slug;
+      if (!key) {
+        noKey++;
+        ageBuckets[bucket].no_condition_id++;
+        if (sampleNoKey.length < 10) sampleNoKey.push({ market_question: r.market_question, age_days: Math.round(age / 86400000) });
+        return;
+      }
+      const url = cid
+        ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
+        : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
+      let mkts;
+      try { mkts = await _fetchGammaKeyset(url); } catch { gammaError++; return; }
+      if (!mkts.length) {
+        agedOut++;
+        ageBuckets[bucket].aged_out_permanently++;
+        if (sampleAgedOut.length < 10) sampleAgedOut.push({ market_question: r.market_question, condition_id: cid, market_url: r.market_url, age_days: Math.round(age / 86400000) });
+        return;
+      }
+      let settledFound = false;
+      for (const m of mkts) {
+        const st = _parseOutcomeSettlement(m);
+        if (st && (st.price > 0.95 || st.price < 0.05)) { settledFound = true; break; }
+      }
+      if (settledFound) {
+        recoverableNow++;
+        ageBuckets[bucket].recoverable_now++;
+        if (sampleRecoverable.length < 10) sampleRecoverable.push({ market_question: r.market_question, age_days: Math.round(age / 86400000) });
+      } else {
+        stillOpen++;
+        ageBuckets[bucket].still_genuinely_open++;
+      }
+    });
+    res.json({
+      note: 'Read-only. Does not call resolveSignalOutcomes, does not write anything. Bypasses the live resolver\'s 40-key probe cap and top-200-recency/volume text-match windows via a direct per-row gamma lookup.',
+      total_pending: totalPending,
+      checked_this_batch: rows.length,
+      remaining: Math.max(0, totalPending - rows.length),
+      recoverable_now: recoverableNow,
+      aged_out_permanently: agedOut,
+      still_genuinely_open: stillOpen,
+      no_condition_id: noKey,
+      gamma_fetch_errors: gammaError,
+      by_age: ageBuckets,
+      sample_recoverable_now: sampleRecoverable,
+      sample_aged_out: sampleAgedOut,
+      sample_no_condition_id: sampleNoKey,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── DIAGNOSTIC: GET /api/admin/edge-audit ────────────────────────────────────
 // Read-only forensic on the PUBLISHED whale-edge population. Answers "is the hit
 // rate real, or did the June grading bugs regress?" WITHOUT changing any grade or
