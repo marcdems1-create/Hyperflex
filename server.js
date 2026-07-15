@@ -59518,6 +59518,24 @@ app.get('/api/admin/pending-recoverability', requireAdminSecret, async (req, res
       if (d < 60) return '30-60d';
       return '>60d';
     };
+    // Duplication check — pending signals should be deduped to one OPEN row per
+    // (market_question, predicted_side) at insert time (logSignalOutcome's
+    // open-row SELECT). If that check is failing (race condition on the
+    // SELECT-then-INSERT, or text drift in market_question between re-logs),
+    // the SAME position gets re-logged every detector cycle while still open —
+    // inflating "pending" with copies of a handful of positions, not genuinely
+    // new distinct signals.
+    const distinctPairs = new Map(); // "question||side" -> count
+    for (const r of rows) {
+      const k = (r.market_question || '').trim() + '||' + (r.predicted_side || '').toUpperCase();
+      distinctPairs.set(k, (distinctPairs.get(k) || 0) + 1);
+    }
+    const dupeGroups = Array.from(distinctPairs.entries())
+      .filter(([, c]) => c > 1)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([k, c]) => ({ market_question_and_side: k, open_row_count: c }));
+
     let noKey = 0, stillOpen = 0, agedOut = 0, recoverableNow = 0, gammaError = 0;
     const ageBuckets = {};
     const sampleAgedOut = [], sampleRecoverable = [], sampleNoKey = [];
@@ -59564,6 +59582,11 @@ app.get('/api/admin/pending-recoverability', requireAdminSecret, async (req, res
       total_pending: totalPending,
       checked_this_batch: rows.length,
       remaining: Math.max(0, totalPending - rows.length),
+      dedup: {
+        distinct_market_side_pairs_in_batch: distinctPairs.size,
+        duplication_ratio: distinctPairs.size ? Math.round(rows.length / distinctPairs.size * 10) / 10 : null,
+        top_duplicated: dupeGroups,
+      },
       recoverable_now: recoverableNow,
       aged_out_permanently: agedOut,
       still_genuinely_open: stillOpen,
