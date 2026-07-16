@@ -58957,23 +58957,26 @@ async function logSignalOutcome(signal) {
     // Cross-cycle dedup: one OPEN row per (market_question, predicted_side).
     // The in-memory hash only suppresses re-logs within a single 20-min window;
     // this covers the across-window/restart case that bloated the ledger (same
-    // Nuggets position re-logged ~17x). Once the event resolves the open row is
-    // no longer NULL, and a closed market won't re-signal (the gate rejects
-    // >0.85), so this never blocks a genuinely new event. If the check itself
-    // errors we fall through and insert — read-time dedup still protects counts.
-    try {
-      const open = await dbQuery(
-        `SELECT 1 FROM signal_outcomes WHERE market_question = $1 AND predicted_side = $2 AND outcome IS NULL LIMIT 1`,
-        [mkt, side]
-      );
-      if (open && open.length) { _loggedSignalHashes.add(hash); return; }
-    } catch (e) { /* fall through to insert */ }
-
+    // Nuggets position re-logged ~17x — and confirmed still happening: one
+    // market alone accumulated 20 duplicate open rows over ~34 days, 8.9x
+    // duplication ratio across a pending-backlog sample). Once the event
+    // resolves the open row is no longer NULL, and a closed market won't
+    // re-signal (the gate rejects >0.85), so this never blocks a genuinely new
+    // event.
+    //
+    // FIX (2026-07-14): the old check was a SELECT-then-INSERT — two
+    // near-simultaneous cycles (e.g. around a restart) can both see "no open
+    // row" and both insert, which is exactly what happened. Atomic now: a
+    // partial UNIQUE index (uq_signal_outcomes_open_dedup, boot migration
+    // below) enforces at most one outcome-IS-NULL row per (market_question,
+    // predicted_side) at the DB level; ON CONFLICT DO NOTHING makes the
+    // conflicting insert a silent no-op instead of a race.
     _loggedSignalHashes.add(hash); // only mark logged once we know we're inserting
     await dbQuery(`INSERT INTO signal_outcomes
       (signal_type, source, market_question, market_url, predicted_side,
        predicted_at, market_price_at_signal, confidence_level, whale_count, condition_id)
-      VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9)`,
+      VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9)
+      ON CONFLICT (market_question, predicted_side) WHERE outcome IS NULL DO NOTHING`,
       [type, source, mkt, url, side, price, confidence, whaleCount, conditionId]
     );
   } catch(e) { /* silent — don't break signal delivery */ }
@@ -60447,10 +60450,40 @@ setTimeout(() => {
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS market_price_at_close NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
-  // Speeds the write-time dedup check (open row per market+side) and the
-  // read-time DISTINCT ON dedup. Partial (NULL outcome) index = small + hot.
-  dbQuery(`CREATE INDEX IF NOT EXISTS idx_signal_outcomes_open_event ON signal_outcomes(market_question, predicted_side) WHERE outcome IS NULL`).catch(() => {});
   dbQuery(`CREATE INDEX IF NOT EXISTS idx_signal_outcomes_event ON signal_outcomes(market_question, predicted_side, predicted_at)`).catch(() => {});
+  // ⛔ RACE FIX (2026-07-14): idx_signal_outcomes_open_event used to be a PLAIN
+  // index here — it sped up the write-time SELECT-then-INSERT dedup check but
+  // did NOT enforce it. Two near-simultaneous logSignalOutcome calls (e.g.
+  // around a Railway restart) could both see "no open row" and both insert.
+  // Live-confirmed at scale: one market alone had 20 duplicate open YES rows
+  // + 7 duplicate open NO rows over ~34 days (8.9x duplication ratio across a
+  // sample of the pending backlog, via /api/admin/pending-recoverability).
+  // A unique index can't be created over data that already violates it, so:
+  // one-time cleanup (collapse to the earliest open row per market+side, never
+  // touches a decided row) THEN drop the old plain index and create a real
+  // partial UNIQUE constraint. logSignalOutcome's INSERT now targets it with
+  // ON CONFLICT ... DO NOTHING — atomic, no more race.
+  (async () => {
+    try {
+      const cleanup = await dbQuery(`
+        DELETE FROM signal_outcomes a
+        USING signal_outcomes b
+        WHERE a.outcome IS NULL AND b.outcome IS NULL
+          AND a.market_question = b.market_question
+          AND a.predicted_side = b.predicted_side
+          AND (a.predicted_at > b.predicted_at
+               OR (a.predicted_at = b.predicted_at AND a.id > b.id))
+        RETURNING a.id
+      `);
+      if (cleanup && cleanup.length) console.log(`[boot] open-signal dedup cleanup: removed ${cleanup.length} duplicate open rows`);
+      await dbQuery(`DROP INDEX IF EXISTS idx_signal_outcomes_open_event`);
+      await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS uq_signal_outcomes_open_dedup ON signal_outcomes(market_question, predicted_side) WHERE outcome IS NULL`);
+      console.log('[boot] uq_signal_outcomes_open_dedup: unique constraint active');
+    } catch (e) {
+      console.warn('[boot] open-signal unique index migration failed (duplicates may remain, old plain index kept as fallback):', e.message);
+      dbQuery(`CREATE INDEX IF NOT EXISTS idx_signal_outcomes_open_event ON signal_outcomes(market_question, predicted_side) WHERE outcome IS NULL`).catch(() => {});
+    }
+  })();
   // Boot-time first rule pass so we don't wait 15min for the first run.
   // LLM pass deferred to its hourly schedule — no need to burn budget on boot.
   mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) }).catch(e => _logError('boot/mentionSyncRule', e));
