@@ -12412,8 +12412,149 @@ app.get('/api/predictors/top-call-week', async (req, res) => {
 
 // the canonical source for the new /predictors page tabs.
 const _predictorsLbCache = { ts: { flex: 0, whale: 0 }, data: { flex: null, whale: null } };
+
+// ── ROI leaderboard (time-weighted, capital-weighted, confidence-adjusted) ──
+// Distinct from FLEX Score (a blend of accuracy/calibration/pnl/consistency/
+// breadth across takes AND trades — see recomputeFlexScore) and from the
+// existing "MOST PROFITABLE" tab (raw unweighted whale_pnl $ figure). This is
+// realized ROI specifically, on realized_trades (the same deterministic,
+// already-live per-position ledger backfillRealizedTrades populates from
+// Polymarket's own redeemed-position cashPnl / FIFO-matched sell events — no
+// new resolution/matching logic, no Anthropic calls anywhere in this path).
+//
+// Formula per wallet, per window:
+//   weight_i    = entry_cost_usd_i * 0.5^(days_since_closed_i / HALF_LIFE_DAYS)
+//   weighted_roi = Σ(realized_roi_i * weight_i) / Σ(weight_i)
+//   shrunk_roi   = (n/(n+K)) * weighted_roi + (K/(n+K)) * population_mean_roi
+// K pulls small-sample wallets toward the population mean so a 10-trade lucky
+// streak can't outrank a 300-trade solid record — same shrinkage logic as the
+// n>=30 edge-grade publish gate elsewhere in this file. Ranking eligibility
+// floors at ROI_MIN_N regardless of the min_n query param (a caller loosening
+// the filter can raise the bar, never lower it below the integrity floor).
+const ROI_HALF_LIFE_DAYS = 90;
+const ROI_SHRINK_K = 20;
+const ROI_MIN_N_FLOOR = 10;
+const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
+
+function _roiWindowClause(window) {
+  if (window === '30d') return "AND rt.closed_at >= NOW() - INTERVAL '30 days'";
+  if (window === '90d') return "AND rt.closed_at >= NOW() - INTERVAL '90 days'";
+  return ''; // all-time
+}
+
+async function _computeRoiLeaderboard(window, minN) {
+  const windowClause = _roiWindowClause(window);
+  const baseWhere = `
+    FROM realized_trades rt
+    JOIN users u ON u.id = rt.user_id::text
+    WHERE u.is_whale = true
+      AND rt.realized_roi IS NOT NULL
+      AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0
+      AND rt.closed_at IS NOT NULL
+      ${windowClause}
+  `;
+  const weightExpr = `rt.entry_cost_usd * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - rt.closed_at)) / 86400.0 / ${ROI_HALF_LIFE_DAYS})`;
+
+  // Per-user aggregate + population aggregate (for the shrinkage prior) in
+  // one pass via GROUPING SETS so the prior reflects the exact same
+  // eligible-trade universe the per-user numbers are drawn from.
+  const rows = await dbQuery(`
+    SELECT rt.user_id::text AS user_id,
+           COUNT(*)::int AS n,
+           SUM(rt.entry_cost_usd)::numeric AS total_capital,
+           SUM(rt.realized_roi * (${weightExpr}))::numeric AS wroi_num,
+           SUM(${weightExpr})::numeric AS wroi_den
+    ${baseWhere}
+    GROUP BY GROUPING SETS ((rt.user_id), ())
+  `).catch(e => { console.warn('[roi-leaderboard] query error:', e.message); return null; });
+  if (rows == null) return null;
+
+  const popRow = rows.find(r => r.user_id == null);
+  const popWeightedRoi = (popRow && Number(popRow.wroi_den) > 0)
+    ? Number(popRow.wroi_num) / Number(popRow.wroi_den) : 0;
+
+  // Trend: last-90d vs prior-90d (90-180 days ago) shrunk score, independent
+  // of the selected window — "is this wallet hot or cooling" regardless of
+  // which lookback the viewer picked.
+  const trendRows = await dbQuery(`
+    SELECT rt.user_id::text AS user_id,
+      COUNT(*) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::int AS n_recent,
+      SUM(rt.realized_roi * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::numeric AS num_recent,
+      SUM(${weightExpr}) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::numeric AS den_recent,
+      COUNT(*) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::int AS n_prior,
+      SUM(rt.realized_roi * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS num_prior,
+      SUM(${weightExpr}) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS den_prior
+    FROM realized_trades rt
+    JOIN users u ON u.id = rt.user_id::text
+    WHERE u.is_whale = true AND rt.realized_roi IS NOT NULL
+      AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0 AND rt.closed_at IS NOT NULL
+    GROUP BY rt.user_id
+  `).catch(() => []);
+  const trendByUser = new Map();
+  for (const t of (trendRows || [])) {
+    const nR = Number(t.n_recent) || 0, nP = Number(t.n_prior) || 0;
+    const roiR = Number(t.den_recent) > 0 ? Number(t.num_recent) / Number(t.den_recent) : null;
+    const roiP = Number(t.den_prior) > 0 ? Number(t.num_prior) / Number(t.den_prior) : null;
+    const shrunkR = roiR != null ? (nR / (nR + ROI_SHRINK_K)) * roiR + (ROI_SHRINK_K / (nR + ROI_SHRINK_K)) * popWeightedRoi : null;
+    const shrunkP = roiP != null ? (nP / (nP + ROI_SHRINK_K)) * roiP + (ROI_SHRINK_K / (nP + ROI_SHRINK_K)) * popWeightedRoi : null;
+    let trend = null;
+    if (shrunkR != null && shrunkP != null && nP >= 3) {
+      const delta = shrunkR - shrunkP;
+      trend = Math.abs(delta) < 0.01 ? 'flat' : (delta > 0 ? 'up' : 'down');
+    }
+    trendByUser.set(t.user_id, trend);
+  }
+
+  const perUser = rows.filter(r => r.user_id != null && Number(r.n) >= minN);
+  const userIds = perUser.map(r => r.user_id);
+  if (!userIds.length) return [];
+
+  const userRows = await dbQuery(
+    `SELECT id, display_name, username, polymarket_address, whale_rank FROM users WHERE id = ANY($1)`,
+    [userIds]
+  ).catch(() => []);
+  const userById = new Map(userRows.map(u => [u.id, u]));
+
+  const result = perUser.map(r => {
+    const n = Number(r.n);
+    const weightedRoi = Number(r.wroi_den) > 0 ? Number(r.wroi_num) / Number(r.wroi_den) : 0;
+    const shrunk = (n / (n + ROI_SHRINK_K)) * weightedRoi + (ROI_SHRINK_K / (n + ROI_SHRINK_K)) * popWeightedRoi;
+    const u = userById.get(r.user_id) || {};
+    return {
+      user_id: r.user_id,
+      display_name: resolveDisplayName(u) || 'Trader',
+      username: u.username || null,
+      polymarket_address: u.polymarket_address || null,
+      whale_rank: u.whale_rank != null ? Number(u.whale_rank) : null,
+      n,
+      total_capital_usd: Math.round(Number(r.total_capital) || 0),
+      raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
+      score_pct: Math.round(shrunk * 1000) / 10,
+      trend: trendByUser.get(r.user_id) || null,
+    };
+  }).sort((a, b) => b.score_pct - a.score_pct);
+
+  return result;
+}
+
 app.get('/api/predictors/leaderboard', async (req, res) => {
   try {
+    if (req.query.mode === 'roi') {
+      const window = ['30d', '90d', 'all'].includes(req.query.window) ? req.query.window : 'all';
+      const minN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.min_n, 10) || ROI_MIN_N_FLOOR);
+      const limit = Math.min(200, parseInt(req.query.limit, 10) || 100);
+      const ck = `${window}:${minN}`;
+      const cached = _roiLbCache.get(ck);
+      if (cached && Date.now() - cached.ts < 120 * 1000) {
+        return res.json(cached.data.slice(0, limit));
+      }
+      if (!pool) return res.json([]);
+      const data = await _computeRoiLeaderboard(window, minN);
+      if (data == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+      _roiLbCache.set(ck, { data, ts: Date.now() });
+      return res.json(data.slice(0, limit));
+    }
+
     const mode  = req.query.mode === 'flex' ? 'flex' : 'whale';
     const limit = Math.min(200, parseInt(req.query.limit, 10) || 100);
 
@@ -14472,6 +14613,65 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
     res.json({ win_rate, total_pnl, sharp_score, platforms, calibration: buckets, timeline: days });
   } catch (err) {
     console.error('[analytics]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Full resolved position history for a wallet — wins AND losses, never just
+// the wins. /analytics above only returns aggregates (win_rate, calibration
+// buckets, 30d timeline); this is the per-row list a profile needs to back
+// up those aggregates with real, inspectable trades. Also reports how many
+// positions are still open (not yet in realized_trades) so the resolved
+// count on screen is never mistaken for the wallet's entire history.
+app.get('/api/predictors/:userId/resolved-trades', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!pool) return res.json({ trades: [], total: 0, open_count: 0 });
+    const limit  = Math.min(200, parseInt(req.query.limit, 10) || 50);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const rows = await dbQuery(`
+      SELECT market_question, side, entry_price, exit_price, entry_cost_usd,
+             realized_pnl, realized_roi, closed_at, close_reason
+      FROM realized_trades
+      WHERE user_id = $1::uuid
+      ORDER BY closed_at DESC NULLS LAST
+      LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]).catch(e => {
+      console.warn('[resolved-trades] query error:', e.message);
+      return [];
+    });
+
+    const totalRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid`, [userId]
+    ).catch(() => [{ n: 0 }]);
+
+    // Still-open positions — cached_positions is the hourly-synced snapshot
+    // of CURRENT (unresolved) Polymarket holdings for this user.
+    const openRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket'`, [userId]
+    ).catch(() => [{ n: 0 }]);
+
+    const trades = rows.map(r => ({
+      question: r.market_question,
+      side: (r.side || '').toUpperCase(),
+      entry_price: r.entry_price != null ? Number(r.entry_price) : null,
+      exit_price: r.exit_price != null ? Number(r.exit_price) : null,
+      entry_cost_usd: r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null,
+      realized_pnl: r.realized_pnl != null ? Number(r.realized_pnl) : null,
+      realized_roi_pct: r.realized_roi != null ? Math.round(Number(r.realized_roi) * 1000) / 10 : null,
+      result: r.realized_pnl != null ? (Number(r.realized_pnl) > 0 ? 'win' : (Number(r.realized_pnl) < 0 ? 'loss' : 'push')) : null,
+      closed_at: r.closed_at,
+      close_reason: r.close_reason,
+    }));
+
+    res.json({
+      trades,
+      total: (totalRow[0] && totalRow[0].n) || 0,
+      open_count: (openRow[0] && openRow[0].n) || 0,
+    });
+  } catch (err) {
+    console.error('[resolved-trades]', err.message);
     res.status(500).json({ error: 'server_error' });
   }
 });
