@@ -1437,6 +1437,15 @@ async function load() {
               <canvas id="pnlChart" width="300" height="160" style="width:100%;max-width:100%"></canvas>
             </div>
           </div>
+          <div class="chart-card" style="margin-top:14px">
+            <div class="card-head">
+              <div class="card-title">RESOLVED POSITIONS</div>
+              <div class="card-tabs"><div class="tab active" id="resolvedTradesMeta"></div></div>
+            </div>
+            <div id="resolvedTradesList" style="font-family:var(--mono);font-size:12px">
+              <div class="loading" style="padding:20px;text-align:center;color:var(--muted)">Loading resolved positions…</div>
+            </div>
+          </div>
         </div>
 
         ${communities.length ? `
@@ -2001,6 +2010,52 @@ async function loadAnalytics(userId) {
       pnlCtx.stroke();
     }
   } catch(e) { console.warn('analytics', e); }
+  loadResolvedTrades(userId);
+}
+
+// ── RESOLVED POSITIONS — full history, wins AND losses ─────────────────────
+// Per voice charter: losing cards share the same layout dignity as winning
+// cards. Never filter to wins-only, and never hide the still-open count —
+// a resolved list with no path to "how much of the wallet's history is
+// this" is a lie by omission.
+async function loadResolvedTrades(userId) {
+  const metaEl = document.getElementById('resolvedTradesMeta');
+  const listEl = document.getElementById('resolvedTradesList');
+  if (!listEl) return;
+  try {
+    const res = await fetch(`/api/predictors/${userId}/resolved-trades?limit=25`);
+    const data = await res.json();
+    const trades = data.trades || [];
+    if (metaEl) {
+      const openTxt = data.open_count > 0 ? ` · ${data.open_count} still open` : '';
+      metaEl.textContent = `${data.total || 0} RESOLVED${openTxt}`.toUpperCase();
+    }
+    if (!trades.length) {
+      listEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted)">No resolved positions yet${data.open_count ? ` — ${data.open_count} still open` : ''}.</div>`;
+      return;
+    }
+    listEl.innerHTML = trades.map(t => {
+      const isWin = t.result === 'win';
+      const isLoss = t.result === 'loss';
+      const color = isWin ? '#10b981' : isLoss ? '#ef4444' : '#888';
+      const roiStr = t.realized_roi_pct != null ? `${t.realized_roi_pct >= 0 ? '+' : ''}${t.realized_roi_pct.toFixed(1)}%` : '—';
+      const pnlStr = t.realized_pnl != null ? `${t.realized_pnl >= 0 ? '+' : ''}$${Math.abs(t.realized_pnl).toFixed(2)}` : '—';
+      const when = t.closed_at ? new Date(t.closed_at).toLocaleDateString() : '';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+        <div style="min-width:0;flex:1">
+          <div style="color:var(--ink);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(t.question||'').replace(/"/g,'&quot;')}">${(t.question||'Unknown market')}</div>
+          <div style="color:var(--muted);font-size:10.5px;margin-top:2px">${t.side || ''} · ${when}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="color:${color};font-weight:700">${pnlStr}</div>
+          <div style="color:var(--muted);font-size:10.5px">${roiStr}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.warn('resolved-trades', e);
+    listEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted)">Could not load resolved positions.</div>`;
+  }
 }
 
 // ── WHALE POSITIONS ────────────────────────────────────────────────────────────
