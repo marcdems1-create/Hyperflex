@@ -46287,6 +46287,55 @@ async function _searchHeadlineMarkets(headline) {
   return out;
 }
 
+// Same /public-search relevance-ranked endpoint as _gammaSearchOpen, but for
+// the OPPOSITE case: finding a market that has ALREADY resolved, to grade a
+// pending signal that has no condition_id and no parseable slug (so the
+// stable-key direct lookup has nothing to query). gamma's closed=true/keyset
+// listing is a shallow top-200-by-recency/volume window — a month-old,
+// low-volume prop market (a player shot-count, an F1 fastest-lap side bet)
+// scrolls off it fast. /public-search is relevance-ranked, not volume-ranked,
+// so it surfaces the right market regardless — same fix that unblocked the
+// news-feed matcher for the Hormuz market. Returns raw outcomePrices/outcomes
+// (unfiltered by closed state) so _parseOutcomeSettlement decides settlement.
+// Returns { ok, markets }. ok=false means the search itself failed (timeout,
+// network error, non-2xx, unparseable body) — NOT that the market is
+// confirmed gone. Callers must never treat ok=false as "confirmed gone":
+// a transient /public-search failure must not permanently void a signal that
+// might still be perfectly gradable. Mirrors _fetchGammaKeysetChecked.
+const _resolvedSearchCache = new Map(); // term(lower) -> { ok, markets, ts }
+async function _gammaSearchResolved(term) {
+  const k = term.toLowerCase();
+  const c = _resolvedSearchCache.get(k);
+  if (c && Date.now() - c.ts < NEWS_SEARCH_TTL) return { ok: c.ok, markets: c.markets };
+  let out = [];
+  let ok = false;
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch('https://gamma-api.polymarket.com/public-search?q=' + encodeURIComponent(term) + '&limit_per_type=20',
+      { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/2.0' } }).finally(() => clearTimeout(tid));
+    if (r && r.ok) {
+      const raw = await r.json().catch(() => null);
+      if (raw != null) {
+        ok = true;
+        const events = (raw && raw.events) || (Array.isArray(raw) ? raw : []);
+        if (Array.isArray(events)) {
+          for (const evt of events) {
+            const nested = Array.isArray(evt.markets) && evt.markets.length ? evt.markets : [evt];
+            for (const m of nested) {
+              const question = m.question || m.groupItemTitle || m.title || evt.title || '';
+              if (!question || m.outcomePrices == null) continue;
+              out.push({ question, outcomePrices: m.outcomePrices, outcomes: m.outcomes });
+            }
+          }
+        }
+      }
+    }
+  } catch { /* ok stays false, out stays [] */ }
+  _resolvedSearchCache.set(k, { ok, markets: out, ts: Date.now() });
+  return { ok, markets: out };
+}
+
 // Combine static-pool keyword candidates with per-headline targeted gamma search.
 // The static pool is top-by-volume (sports/crypto micro-markets) → world-news
 // headlines need the search path to reach geopolitics/macro/politics markets that
@@ -59025,14 +59074,27 @@ async function logEdgePicks(markets) {
 // Shared by resolveSignalOutcomes (live cron) AND POST /api/admin/regrade-named-outcomes
 // (one-time correction below) — single source of truth so the two paths can't drift.
 async function _fetchGammaKeyset(url) {
+  const r = await _fetchGammaKeysetChecked(url);
+  return r.markets; // [] on both "genuinely empty" and "fetch failed" — existing callers don't distinguish
+}
+
+// Distinguishes a REAL fetch/parse failure (timeout, network error, non-200,
+// bad JSON — ok:false) from a request that genuinely succeeded and returned
+// zero markets (ok:true, markets:[]). Only the latter is safe to treat as
+// "gamma confirms this doesn't exist" — a permanent void decision must never
+// be made off a transient failure that looks identical to a real empty result
+// under the old contract.
+async function _fetchGammaKeysetChecked(url) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), 8000);
   try {
     const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
-    if (!r || !r.ok) return [];
-    const a = _gammaUnwrap(await r.json().catch(() => null));
-    return Array.isArray(a) ? a : [];
-  } catch { return []; }
+    if (!r || !r.ok) return { ok: false, markets: [] };
+    const parsed = await r.json().catch(() => null);
+    if (parsed == null) return { ok: false, markets: [] };
+    const a = _gammaUnwrap(parsed);
+    return { ok: true, markets: Array.isArray(a) ? a : [] };
+  } catch { return { ok: false, markets: [] }; }
 }
 
 // Parses a gamma market's outcomePrices (+ outcomes, when present) into
@@ -59069,7 +59131,7 @@ async function resolveSignalOutcomes(opts = {}) {
   // diagnostic passes opts.instrument; the cron calls resolveSignalOutcomes()
   // with no opts → stats is null → every collector below is a no-op → grading is
   // byte-identical to the cron. Same code path, just observable.
-  const stats = opts.instrument ? { probed: 0, matched: 0, graded: 0, skipped: {}, sample_skips: [] } : null;
+  const stats = opts.instrument ? { probed: 0, matched: 0, graded: 0, voided: 0, skipped: {}, sample_skips: [] } : null;
   if (!pool) return stats;
   const _skip = (sig, reason) => {
     if (!stats) return;
@@ -59079,8 +59141,11 @@ async function resolveSignalOutcomes(opts = {}) {
     }
   };
   try {
+    // ORDER BY predicted_at ASC — oldest first, so the probe budget below drains
+    // the backlog in a stable, fair order across cycles instead of an arbitrary
+    // heap-scan order that could re-examine the same subset forever.
     const pending = await dbQuery(
-      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome IS NULL AND predicted_at > NOW() - INTERVAL '60 days' ORDER BY predicted_at ASC LIMIT 200"
     );
 
     // Rescue pass: signals the OLD resolver aged out as 'expired' before the
@@ -59088,7 +59153,7 @@ async function resolveSignalOutcomes(opts = {}) {
     // them for real. Bounded to the same 60-day window so ancient rows (whose
     // markets will never appear in the recent-closed fetch) don't churn forever.
     const rescuable = await dbQuery(
-      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome = 'expired' AND predicted_at > NOW() - INTERVAL '60 days' LIMIT 200"
+      "SELECT id, market_question, predicted_side, predicted_at, market_price_at_signal, condition_id, market_url FROM signal_outcomes WHERE outcome = 'expired' AND predicted_at > NOW() - INTERVAL '60 days' ORDER BY predicted_at ASC LIMIT 200"
     ).catch(() => []);
     for (const r of rescuable) r._wasExpired = true;
     pending.push(...rescuable);
@@ -59158,43 +59223,109 @@ async function resolveSignalOutcomes(opts = {}) {
     // still-active market can never produce a wrong grade. Result keyed by the
     // stable key; the grade loop applies it before any text match.
     const settlementByKey = new Map(); // conditionId|slug → { price, winnerName }
+    // Keys gamma DIRECTLY confirms don't exist (0 markets returned) — distinct
+    // from "not yet probed" (budget cap) and from "found but still open"
+    // (matched_unsettled). Only a confirmed-gone key is safe to void immediately
+    // instead of waiting out the old 60-day timer.
+    const confirmedGoneKeys = new Set();
     const _slugFromUrl = (u) => {
       if (!u) return null;
       const m = String(u).match(/\/(?:event|markets?)\/([a-z0-9][a-z0-9\-]{5,})/i);
       return m ? m[1].toLowerCase() : null;
     };
     try {
-      const RESOLVE_PROBE_MAX = 40;
-      const seen = new Set();
-      let probed = 0;
+      // Raised from 40: force-resolve showed probed=400/matched=0 because the old
+      // cap meant well under 10% of a cycle's backlog ever got an accurate lookup
+      // attempt at all. 200 with concurrency (not the old serial+200ms-sleep loop)
+      // covers the vast majority of a 200-signal batch in one pass, still bounded
+      // so a single force-resolve HTTP call doesn't risk a proxy timeout (same
+      // lesson as the regrade endpoint's original unbounded-serial version).
+      const RESOLVE_PROBE_MAX = 200;
       const _settled = (m) => {
         const st = _parseOutcomeSettlement(m);
         return (st && (st.price > 0.95 || st.price < 0.05)) ? st : null; // settled 0/1 only
       };
+      // Build the probe list: dedup by key, condition_id-bearing signals FIRST
+      // (a stored condition_id is a guaranteed-accurate key; it should never fall
+      // through to the shallow text-match window just because a slug-only or
+      // no-key signal used up the budget first).
+      const withCid = [], withSlugOnly = [];
+      const seenKeys = new Set();
       for (const sig of pending) {
-        if (probed >= RESOLVE_PROBE_MAX) break;
         const cid = sig.condition_id || null;
         const slug = cid ? null : _slugFromUrl(sig.market_url);
         const key = cid || slug;
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
+        if (!key || seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        (cid ? withCid : withSlugOnly).push({ key, cid, slug });
+      }
+      const probeList = [...withCid, ...withSlugOnly].slice(0, RESOLVE_PROBE_MAX);
+      let probed = 0;
+      await _mapLimit(probeList, 6, async ({ key, cid, slug }) => {
         probed++;
         const url = cid
           ? 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cid) + '&limit=1'
           : 'https://gamma-api.polymarket.com/markets/keyset?slug=' + encodeURIComponent(slug);
-        const mkts = await _fetchGammaKeyset(url);
+        const { ok, markets: mkts } = await _fetchGammaKeysetChecked(url);
+        if (ok && !mkts.length) { confirmedGoneKeys.add(key); return; } // genuinely 0 results — confirmed gone
+        if (!ok) return; // fetch/parse failed — unknown, NOT confirmed gone; retry next cycle
         for (const m of mkts) {
           const st = _settled(m);
-          if (st) { settlementByKey.set(key, st); break; }
+          if (st) { settlementByKey.set(key, st); return; }
         }
-        await new Promise(res => setTimeout(res, 200)); // gamma politeness
-      }
-      if (probed) console.log('[intelligence] stable-key settlement: probed ' + probed + ' keys, settled ' + settlementByKey.size);
+      });
+      if (probed) console.log('[intelligence] stable-key settlement: probed ' + probed + ' keys (of ' + seenKeys.size + ' unique), settled ' + settlementByKey.size + ', confirmed-gone ' + confirmedGoneKeys.size);
     } catch (e) { console.warn('[intelligence] stable-key settlement error:', e.message); }
+
+    // Source 5 — targeted /public-search for signals with NO stable key at all
+    // (no condition_id, no parseable slug). These can never appear in source 4's
+    // direct lookup; without this they depend entirely on the shallow top-200
+    // recency/volume window, which structurally excludes old/low-volume props
+    // (a player shot-count, an F1 fastest-lap side bet). Same fix pattern as the
+    // news-feed matcher: relevance-ranked /public-search instead of a volume/
+    // recency cutoff. Matched by exact question text or 50-char-prefix — same
+    // strictness as the existing text-fallback, not a looser heuristic.
+    const noKeySettlementById = new Map(); // signal.id → { price, winnerName }
+    const noKeyConfirmedGoneIds = new Set();
+    try {
+      const SEARCH_PROBE_MAX = 100;
+      const noKeySignals = pending.filter(sig => {
+        const cid = sig.condition_id || null;
+        const slug = cid ? null : _slugFromUrl(sig.market_url);
+        return !cid && !slug && (sig.market_question || '').trim();
+      }).slice(0, SEARCH_PROBE_MAX);
+      await _mapLimit(noKeySignals, 5, async (sig) => {
+        const q = sig.market_question.toLowerCase().trim();
+        const terms = _headlineSearchTerms(sig.market_question);
+        if (!terms.length) return;
+        const results = await Promise.all(terms.map(t => _gammaSearchResolved(t)));
+        // Only trust an empty result as "confirmed gone" if every search that
+        // ran actually succeeded. If any leg failed (timeout/network/parse),
+        // we genuinely don't know — leave the signal untouched rather than
+        // permanently voiding it on a transient failure.
+        const allOk = results.every(r => r.ok);
+        const seenQ = new Set(); const candidates = [];
+        for (const r of results) for (const m of r.markets) {
+          const mq = (m.question || '').toLowerCase().trim();
+          if (mq && !seenQ.has(mq)) { seenQ.add(mq); candidates.push(m); }
+        }
+        if (!candidates.length) { if (allOk) noKeyConfirmedGoneIds.add(sig.id); return; }
+        const prefix = q.substring(0, 50);
+        const hit = candidates.find(m => (m.question || '').toLowerCase().trim() === q)
+          || candidates.find(m => (m.question || '').toLowerCase().trim().startsWith(prefix));
+        if (!hit) { noKeyConfirmedGoneIds.add(sig.id); return; }
+        const st = _parseOutcomeSettlement(hit);
+        if (st && (st.price > 0.95 || st.price < 0.05)) noKeySettlementById.set(sig.id, st);
+        // else: found the market but it's not decisively settled yet — genuinely
+        // still open, NOT gone. Leave it alone; do not add to confirmedGoneIds.
+      });
+      if (noKeySignals.length) console.log('[intelligence] no-key search: probed ' + noKeySignals.length + ', settled ' + noKeySettlementById.size);
+    } catch (e) { console.warn('[intelligence] no-key search error:', e.message); }
 
     let resolved = 0;
     let expired = 0;
     let rescued = 0;
+    let voided = 0;
 
     for (const sig of pending) {
       // STABLE-KEY settlement first (conditionId / slug) — exact, drift-proof.
@@ -59202,6 +59333,11 @@ async function resolveSignalOutcomes(opts = {}) {
       let match = (_sk && settlementByKey.has(_sk)) ? { ...settlementByKey.get(_sk), closed: true } : null;
 
       const q = (sig.market_question || '').toLowerCase().trim();
+      // No-key signals: targeted /public-search result (source 5), before the
+      // shallow recency/volume text-match window.
+      if (!match && !_sk && noKeySettlementById.has(sig.id)) {
+        match = { ...noKeySettlementById.get(sig.id), closed: true };
+      }
       if (!match) {
         if (!q) { _skip(sig, 'no_market_match'); continue; }
         // Legacy text fallback — exact, then first-50-char prefix.
@@ -59215,6 +59351,20 @@ async function resolveSignalOutcomes(opts = {}) {
       }
 
       if (!match) {
+        // A key that gamma DIRECTLY confirmed doesn't exist (source 4), or a
+        // no-key signal that a targeted search genuinely couldn't find (source
+        // 5) — confirmed unrecoverable right now, not just "not yet checked".
+        // Same treatment as the 35 named-outcome-bug rows: void, visible, with
+        // a reason, excluded from grading — never silently dropped, never left
+        // masquerading as a live pending signal forever.
+        const confirmedGone = (_sk && confirmedGoneKeys.has(_sk)) || (!_sk && noKeyConfirmedGoneIds.has(sig.id));
+        if (confirmedGone) {
+          await dbQuery("UPDATE signal_outcomes SET outcome='void_ungradeable', resolved_at=NOW() WHERE id=$1", [sig.id]);
+          voided++;
+          if (stats) stats.voided++;
+          _skip(sig, 'voided_unrecoverable');
+          continue;
+        }
         // Only expire signals older than 60 days (matches the query window) — don't
         // discard signals that are simply waiting on a closed-market data gap.
         // (Already-expired rescue rows just stay expired — no write needed.)
@@ -59271,8 +59421,8 @@ async function resolveSignalOutcomes(opts = {}) {
       else { _skip(sig, 'matched_unsettled'); }
     }
 
-    if (resolved > 0 || expired > 0) {
-      console.log(`[intelligence] Resolved ${resolved} signals (${rescued} rescued from expired), expired ${expired}`);
+    if (resolved > 0 || expired > 0 || voided > 0) {
+      console.log(`[intelligence] Resolved ${resolved} signals (${rescued} rescued from expired), expired ${expired}, voided ${voided}`);
       await updateSourceAccuracy();
       await updateConfidenceCalibration();
       await updatePlatformMetrics();
@@ -59459,6 +59609,7 @@ app.post('/api/admin/force-resolve', requireAdminSecret, async (req, res) => {
       probed: stats ? stats.probed : 0,
       matched: stats ? stats.matched : 0,
       graded: stats ? stats.graded : 0,
+      voided: stats ? stats.voided : 0,
       skipped: stats ? stats.skipped : {},
       sample_skips: stats ? stats.sample_skips : []
     });
@@ -60187,16 +60338,17 @@ app.get('/api/edge/receipts', async (req, res) => {
         wrong: parseInt(t.wrong) || 0,
         hit_rate_pct: pct(parseInt(t.correct) || 0, graded),
         avg_pnl_per_dollar: t.avg_pnl != null ? Math.round(parseFloat(t.avg_pnl) * 100) / 100 : null,
-        // Never quietly shrink the denominator. These events WERE logged and
-        // decided, but the resolver graded them via a literal side==='YES'/
-        // 'NO' compare that can never match a named outcome (e.g. a player
-        // name) — every one graded 'wrong' regardless of the real result.
-        // Fixed going forward; these specific historical rows' source markets
-        // have since aged out of gamma's direct-lookup retention and can no
-        // longer be re-verified, so they're voided rather than left as false
-        // losses or silently dropped from the count.
+        // Never quietly shrink the denominator. Two distinct origins land here,
+        // both excluded from correct/wrong and hit-rate math, both counted and
+        // explained rather than dropped: (1) historical rows the old resolver
+        // graded 'wrong' unconditionally because it compared a named outcome
+        // (e.g. a player name) against literal YES/NO — fixed going forward;
+        // (2) pending signals whose source market gamma directly confirmed no
+        // longer exists (aged out of direct-lookup retention, or a targeted
+        // search genuinely found nothing) — never guessed at, never left
+        // masquerading as still-pending forever.
         void_ungradeable: parseInt(t.void_ungradeable) || 0,
-        void_reason: "resolver compared named-outcome sides (e.g. a player/team name on a multi-outcome market) against literal 'YES'/'NO' — those signals graded 'wrong' unconditionally regardless of the real result. Fixed going forward (server.js resolveSignalOutcomes); these specific historical rows' source markets have aged out of gamma's direct-lookup retention and can no longer be re-verified, so they're voided rather than left as false losses or silently dropped.",
+        void_reason: "Two causes, both voided rather than guessed or dropped: (1) the resolver used to compare named-outcome sides (e.g. a player/team name on a multi-outcome market) against literal 'YES'/'NO', grading every one 'wrong' regardless of the real result — fixed going forward; (2) the signal's source market was confirmed gone from gamma's direct-lookup retention (or unfindable via targeted search) before it could ever be graded. Neither case is guessed at or silently dropped from the count.",
       },
       pending: parseInt(t.pending) || 0,
       // Dedup transparency: distinct events vs raw re-logged rows, all-time.
