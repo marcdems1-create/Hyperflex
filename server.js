@@ -12854,6 +12854,149 @@ app.get('/api/admin/roi-audit', requireAdminSecret, async (req, res) => {
   }
 });
 
+// ── ROI audit: row-level outlier inspection (read-only) ─────────────────────
+// Follow-up to /api/admin/roi-audit — that endpoint showed gloriafoster's
+// realized-only P&L at +$40.9M on $678K of capital (60x), with 73% of its
+// decay-weight sitting at the ROI cap. This pulls the actual outlier rows so
+// the question "genuine long-shot win or ingestion bug" is answerable from
+// real data instead of guessed at. Checks per row:
+//   1. shares vs. (entry_cost_usd / entry_price) — a mismatched ratio near a
+//      round power of 10 is the fingerprint of a cents-vs-dollars or
+//      raw-token-units-vs-USD decimal shift in entry_cost_usd.
+//   2. realized_pnl vs. shares*(exit_price-entry_price) — reconstructs pnl
+//      independently of the stored value; a mismatch isolates the bug to the
+//      pnl side (most likely: the redeemed-position cashPnl field pulled
+//      directly from Polymarket's API with no unit conversion) rather than
+//      the cost side.
+//   3. Cross-path double-count — same (user, condition_id, side) appearing
+//      under BOTH the sold-FIFO path (external_sync_id 'pm-act:...') and the
+//      redeemed path ('pm-redeem:...'), which would mean the same shares got
+//      counted twice toward one wallet's totals.
+//   4. Global duplicate external_sync_id — should be structurally impossible
+//      given the UNIQUE constraint, confirmed empirically rather than assumed.
+const ROI_ROW_AUDIT_DEFAULT_ADDRESSES = [
+  '0x5d189e816b4149be00977c1a3c8840374aec4972', // gloriafoster
+  '0xc21ea96be762bb55041529af6e386e7c53b80215', // Just2SeeULaugh
+  '0xb4f2f0c858566fef705edf8efc1a5e9fba307862', // Desy-1725192185234
+];
+app.get('/api/admin/roi-audit/rows', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const minRoi = req.query.min_roi != null ? parseFloat(req.query.min_roi) : 5; // 500%+ default
+    const perWalletLimit = Math.min(50, Math.max(1, parseInt(req.query.limit_per_wallet, 10) || 15));
+    const addresses = req.query.address ? [String(req.query.address).toLowerCase()] : ROI_ROW_AUDIT_DEFAULT_ADDRESSES;
+
+    const dupSyncIds = await dbQuery(`
+      SELECT external_sync_id, COUNT(*)::int AS n
+      FROM realized_trades
+      WHERE external_sync_id IS NOT NULL
+      GROUP BY external_sync_id
+      HAVING COUNT(*) > 1
+      LIMIT 20
+    `).catch(() => []);
+
+    const wallets = [];
+    for (const addr of addresses) {
+      const u = await dbQuery('SELECT id, display_name FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]).catch(() => []);
+      if (!u[0]) { wallets.push({ address: addr, error: 'user_not_found' }); continue; }
+      const userId = u[0].id;
+
+      const crossPath = await dbQuery(`
+        SELECT condition_id, side,
+          COUNT(*) FILTER (WHERE external_sync_id LIKE 'pm-act:%')::int AS sold_path_rows,
+          COUNT(*) FILTER (WHERE external_sync_id LIKE 'pm-redeem:%')::int AS redeemed_path_rows,
+          SUM(entry_cost_usd)::numeric AS combined_entry_cost_usd,
+          SUM(realized_pnl)::numeric AS combined_realized_pnl_usd
+        FROM realized_trades
+        WHERE user_id = $1::uuid
+        GROUP BY condition_id, side
+        HAVING COUNT(*) FILTER (WHERE external_sync_id LIKE 'pm-act:%') > 0
+           AND COUNT(*) FILTER (WHERE external_sync_id LIKE 'pm-redeem:%') > 0
+      `, [userId]).catch(() => []);
+
+      const outlierRows = await dbQuery(`
+        SELECT market_question, condition_id, token_id, side, shares,
+               entry_price, exit_price, entry_cost_usd, exit_value_usd,
+               realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
+        FROM realized_trades
+        WHERE user_id = $1::uuid AND realized_roi >= $2
+        ORDER BY realized_roi DESC
+        LIMIT $3
+      `, [userId, minRoi, perWalletLimit]).catch(() => []);
+
+      const rows = outlierRows.map(r => {
+        const entryPrice = r.entry_price != null ? Number(r.entry_price) : null;
+        const exitPrice = r.exit_price != null ? Number(r.exit_price) : null;
+        const shares = r.shares != null ? Number(r.shares) : null;
+        const entryCost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
+        const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+        const storedRoi = r.realized_roi != null ? Number(r.realized_roi) : null;
+
+        const impliedSharesFromCost = (entryPrice > 0 && entryCost != null) ? entryCost / entryPrice : null;
+        const sharesRatio = (impliedSharesFromCost && shares != null) ? shares / impliedSharesFromCost : null;
+        const impliedPnlFromPrices = (shares != null && exitPrice != null && entryPrice != null) ? shares * (exitPrice - entryPrice) : null;
+        const pnlRatio = (impliedPnlFromPrices && pnl != null && Math.abs(impliedPnlFromPrices) > 0.0001) ? pnl / impliedPnlFromPrices : null;
+        const recomputedRoi = (entryCost > 0 && pnl != null) ? pnl / entryCost : null;
+
+        const flags = [];
+        if (sharesRatio != null && (sharesRatio > 5 || sharesRatio < 0.2)) flags.push('shares_vs_cost_mismatch_ratio_' + sharesRatio.toFixed(2));
+        if (pnlRatio != null && Math.abs(pnlRatio - 1) > 0.05) flags.push('pnl_vs_price_diff_mismatch_ratio_' + pnlRatio.toFixed(2));
+        if (recomputedRoi != null && storedRoi != null && Math.abs(recomputedRoi - storedRoi) > 0.01) flags.push('stored_roi_disagrees_with_pnl_over_cost');
+        for (const ratio of [sharesRatio, pnlRatio]) {
+          if (ratio == null) continue;
+          for (const p of [100, 1000, 10000, 0.01, 0.001, 0.0001]) {
+            if (Math.abs(ratio / p - 1) < 0.05) flags.push('possible_decimal_shift_x' + p);
+          }
+        }
+
+        return {
+          market_question: r.market_question,
+          side: r.side,
+          entry_cost_usd: entryCost,
+          realized_pnl_usd: pnl,
+          realized_roi_pct: storedRoi != null ? Math.round(storedRoi * 1000) / 10 : null,
+          close_reason: r.close_reason,
+          external_sync_id: r.external_sync_id,
+          closed_at: r.closed_at,
+          opened_at: r.opened_at,
+          entry_price: entryPrice,
+          exit_price: exitPrice,
+          shares,
+          condition_id: r.condition_id,
+          token_id: r.token_id,
+          checks: {
+            implied_shares_from_entry_cost_and_price: impliedSharesFromCost != null ? Math.round(impliedSharesFromCost * 10000) / 10000 : null,
+            stored_shares_vs_implied_ratio: sharesRatio != null ? Math.round(sharesRatio * 1000) / 1000 : null,
+            implied_pnl_from_shares_and_price_diff: impliedPnlFromPrices != null ? Math.round(impliedPnlFromPrices * 100) / 100 : null,
+            stored_pnl_vs_implied_ratio: pnlRatio != null ? Math.round(pnlRatio * 1000) / 1000 : null,
+            recomputed_roi_from_pnl_over_cost_pct: recomputedRoi != null ? Math.round(recomputedRoi * 1000) / 10 : null,
+            flags,
+          },
+        };
+      });
+
+      wallets.push({
+        address: addr,
+        user_id: userId,
+        display_name: u[0].display_name,
+        outlier_row_count: rows.length,
+        cross_path_same_market_both_sold_and_redeemed: crossPath,
+        rows,
+      });
+    }
+
+    res.json({
+      note: 'Read-only row-level inspection. No writes to realized_trades or anywhere else.',
+      min_roi_threshold_pct: Math.round(minRoi * 1000) / 10,
+      global_duplicate_external_sync_id_rows: dupSyncIds,
+      wallets,
+    });
+  } catch (e) {
+    console.error('[roi-audit-rows]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
   try {
