@@ -44511,7 +44511,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // path, pure-buyer users with resolved markets show "no realized" forever.
   // Each redeemed position is a single aggregated event: size shares
   // realized at $1 (winning) or $0 (losing) regardless of entry.
-  let redeemedImported = 0, redeemedCount = 0;
+  let redeemedImported = 0, redeemedCount = 0, redeemedUnverifiedSkipped = 0;
   try {
     // Single paginated fetch — no winning=X URL filter trickery. Diagnostic
     // confirmed Polymarket's `?winning=` query parameter doesn't filter
@@ -44553,6 +44553,22 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
         console.log(`[backfill-redeem-shape] user=${userId.slice(0,8)} count=${allRedeemed.length} sample=${sample}`);
       } catch {}
     }
+    // Batch-verify every unique condition_id's ACTUAL settlement via gamma
+    // BEFORE the per-position loop (bounded concurrency, one round of
+    // parallel fetches instead of N sequential awaits inside the loop — same
+    // reasoning as the signal resolver elsewhere in this file). cashPnl is
+    // no longer trusted as a win/loss signal at all — see
+    // _verifyRedeemedSettlement for why.
+    const uniqueCondIds = [...new Set(
+      allRedeemed.map(p => String(p.conditionId || p.condition_id || '').toLowerCase()).filter(Boolean)
+    )];
+    const REDEEM_VERIFY_MAX = 300;
+    const settlementByCondId = new Map();
+    await _mapLimit(uniqueCondIds.slice(0, REDEEM_VERIFY_MAX), 6, async (condId) => {
+      const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+      if (s) settlementByCondId.set(condId, s);
+    });
+
     for (const pos of allRedeemed) {
       const condId = String(pos.conditionId || pos.condition_id || '').toLowerCase();
       let outcome = String(pos.outcome || '').toUpperCase();
@@ -44565,35 +44581,51 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const shares = parseFloat(pos.size || pos.shares || 0);
       const avgPrice = parseFloat(pos.avgPrice || pos.average_price || pos.entry_price || 0);
       if (shares <= 0) continue;
-      // cashPnl is the truth signal. Pulled from the API directly — no
-      // re-derivation from shares/exitPrice. The previous formula
-      // (`exitValue - entryCost` with exitValue = shares-or-zero) was
-      // structurally producing -entryCost on every row because the
-      // winning flag was always false. Carrying cashPnl through directly
-      // means the row stores what Polymarket reports.
-      const cashPnl = parseFloat(pos.cashPnl);
-      if (!isFinite(cashPnl)) continue;  // skip if API didn't return cashPnl
-      const winning = cashPnl > 0;
+
+      // Independently verified settlement — the actual winning outcome,
+      // NOT Polymarket's cashPnl field. cashPnl was found to report false
+      // wins on already-decided losing longshots (4 different NFL MVP
+      // candidates and 4 different World Cup teams all showing cashPnl>0
+      // for the same wallet on the same exclusive-outcome market; positions
+      // "redeemed" for elections years in the future that can't have
+      // resolved yet). If we can't independently verify the market actually
+      // resolved, skip the row rather than guess — a future backfill run
+      // retries it once gamma confirms settlement.
+      const settlement = settlementByCondId.get(condId);
+      if (!settlement) { redeemedUnverifiedSkipped++; continue; }
+
+      let outcomeWon;
+      if (settlement.winnerName) {
+        outcomeWon = settlement.winnerName.toUpperCase().trim() === outcome.trim();
+      } else if (outcome === 'YES' || outcome === 'NO') {
+        outcomeWon = outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
+      } else {
+        // Named-outcome position but gamma returned no outcomes array to
+        // name the winner against — can't verify, skip rather than guess.
+        redeemedUnverifiedSkipped++;
+        continue;
+      }
+
       const entryCost = +(shares * avgPrice).toFixed(4);
-      // exit_value_usd = entryCost + cashPnl. This is the actual dollar
-      // amount the position settled at. For winners: shares * 1.0 minus
-      // any rounding. For losers: small (residual) or zero.
-      const exitValue = +(entryCost + cashPnl).toFixed(4);
-      const exitPrice = entryCost > 0 ? +(exitValue / shares).toFixed(4) : (winning ? 1.0 : 0.0);
-      const realizedPnl = +cashPnl.toFixed(4);
+      // Deterministic from verified settlement + this position's own
+      // (already unit-checked) shares/price — not from cashPnl. A winning
+      // token redeems at $1/share; a losing token redeems at $0.
+      const realizedPnl = outcomeWon ? +(shares * (1 - avgPrice)).toFixed(4) : +(-entryCost).toFixed(4);
+      const exitPrice = outcomeWon ? 1.0 : 0.0;
+      const exitValue = outcomeWon ? +shares.toFixed(4) : 0;
       const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
       const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
       const tokenId = pos.asset || pos.token_id || null;
       const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
-      const closeReason = winning ? 'redeemed-win' : 'redeemed-loss';
+      const closeReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
       const externalSyncId = `pm-redeem:${condId}:${outcome}`;
       try {
         const result = await dbQuery(
           `INSERT INTO realized_trades (
             user_id, polymarket_address, condition_id, token_id, market_question, side,
             shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
-            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, regraded_at
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
           ON CONFLICT (external_sync_id) DO NOTHING
           RETURNING id`,
           [userId, eoaLower || null, condId, tokenId, question, outcome,
@@ -44655,8 +44687,8 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
   // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
   // trades>0, closed>0, imported>0 → working
-  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} total_imported=${imported}`);
-  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount };
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} redeemed_unverified_skipped=${redeemedUnverifiedSkipped} total_imported=${imported}`);
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount, redeemed_unverified_skipped: redeemedUnverifiedSkipped };
 }
 
 // ── WHALE BACKFILL CRON ─────────────────────────────────────────────────────
@@ -59208,6 +59240,12 @@ if (pool) {
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_user ON realized_trades(user_id)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_condition ON realized_trades(condition_id)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_closed_at ON realized_trades(closed_at DESC)`).catch(() => {});
+      // Tracks progress of the one-time /api/admin/regrade-redeemed-positions
+      // correction pass (redeemed-position rows inserted before the cashPnl-
+      // trust fix). Fixed-path inserts stamp this immediately since they're
+      // already independently verified — only pre-fix rows are ever NULL here.
+      await dbQuery(`ALTER TABLE realized_trades ADD COLUMN IF NOT EXISTS regraded_at TIMESTAMPTZ`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_unregraded_redeem ON realized_trades(id) WHERE regraded_at IS NULL AND external_sync_id LIKE 'pm-redeem:%'`).catch(() => {});
       // users columns needed by backfill aggregate refresh
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
@@ -59655,6 +59693,31 @@ function _parseOutcomeSettlement(m) {
     }
     return { price: price0, winnerName };
   } catch { return null; }
+}
+
+// Independently verifies a market's actual winning outcome via gamma before
+// trusting anything Polymarket's positions API reports about a "redeemed"
+// position. Row-level audit (2026-07) found backfillRealizedTrades's
+// redeemed-position path trusting `cashPnl > 0` as "this position won"
+// without ever checking against the real outcome — confirmed via 4 different
+// NFL MVP candidates and 4 different World Cup teams all showing as winners
+// of the same exclusive-outcome market for one wallet, plus positions
+// "redeemed" for elections scheduled years in the future (impossible —
+// those markets can't have resolved yet). Reuses _parseOutcomeSettlement,
+// the same helper resolveSignalOutcomes uses, rather than forking new
+// resolution logic. Decisive settlements are cached indefinitely — a
+// resolved market's outcome never changes, and many whales overlap on the
+// same popular markets, so this cache pays for itself across wallets.
+const _redeemDecisiveSettlementCache = new Map(); // condition_id -> { price, winnerName }
+async function _verifyRedeemedSettlement(condId) {
+  if (_redeemDecisiveSettlementCache.has(condId)) return _redeemDecisiveSettlementCache.get(condId);
+  const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(condId) + '&limit=1';
+  const { ok, markets } = await _fetchGammaKeysetChecked(url);
+  if (!ok || !markets.length) return null; // fetch failed or market not found — unverifiable, don't cache, retry later
+  const settlement = _parseOutcomeSettlement(markets[0]);
+  if (!settlement || (settlement.price <= 0.95 && settlement.price >= 0.05)) return null; // not decisively resolved — don't cache, retry later
+  _redeemDecisiveSettlementCache.set(condId, settlement);
+  return settlement;
 }
 
 async function resolveSignalOutcomes(opts = {}) {
@@ -60112,6 +60175,133 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
       still_unresolved: stillUnresolved,
     });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── One-time correction: POST /api/admin/regrade-redeemed-positions ─────────
+// backfillRealizedTrades's redeemed-position path used to trust Polymarket's
+// cashPnl field as the sole win/loss signal, with no check against the
+// market's actual outcome. Row-level audit (2026-07) found this fabricating
+// wins on already-decided losing longshots: 4 different NFL MVP candidates
+// and 4 different World Cup teams all showing as winners of the same
+// exclusive-outcome market for one wallet, plus positions "redeemed" for
+// elections scheduled years in the future. The ingestion path is fixed
+// (independently verifies settlement via gamma before trusting anything) —
+// this corrects the rows it already wrote before the fix.
+//
+// Bounded + resumable, same discipline as regrade-named-outcomes: `remaining`
+// tells you if another call is needed. Tracks progress via
+// realized_trades.regraded_at (NULL only on pre-fix redeemed-position rows —
+// fixed-path inserts stamp it immediately). For each unregraded row:
+//   - Independently verify the market's real settlement via the same
+//     _verifyRedeemedSettlement gamma check the fixed ingestion path uses.
+//   - If verified: recompute realized_pnl/realized_roi/exit_price/close_reason
+//     from shares/entry_price (NOT cashPnl) and UPDATE if they differ.
+//   - If NOT verifiable (market isn't actually decisively resolved per a
+//     fresh check) — this row was never a valid "resolved redemption" in the
+//     first place and shouldn't be in realized_trades at all. DELETE it; the
+//     position still shows correctly as open in cached_positions.
+//   curl -X POST "https://hyperflex.network/api/admin/regrade-redeemed-positions?secret=$ADMIN_SECRET"
+const REGRADE_REDEEM_BATCH_MAX = 200;
+app.post('/api/admin/regrade-redeemed-positions', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no db' });
+    const rows = await dbQuery(`
+      SELECT id, condition_id, side, shares, entry_price, entry_cost_usd,
+             realized_pnl, realized_roi, exit_price, close_reason, market_question
+      FROM realized_trades
+      WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL
+      ORDER BY id
+      LIMIT ${REGRADE_REDEEM_BATCH_MAX}
+    `);
+
+    const uniqueCondIds = [...new Set(rows.map(r => (r.condition_id || '').toLowerCase()).filter(Boolean))];
+    const settlementByCondId = new Map();
+    await _mapLimit(uniqueCondIds, 6, async (condId) => {
+      const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+      if (s) settlementByCondId.set(condId, s);
+    });
+
+    let corrected = 0, confirmedAlreadyCorrect = 0, deletedNotActuallyResolved = 0, stillUnverifiable = 0;
+    const sampleCorrections = [];
+    const sampleDeletions = [];
+
+    for (const r of rows) {
+      const condId = (r.condition_id || '').toLowerCase();
+      const outcome = (r.side || '').toUpperCase().trim();
+      const settlement = condId ? settlementByCondId.get(condId) : null;
+
+      if (!settlement) {
+        // Fresh check still can't confirm this market decisively resolved —
+        // it was wrongly inserted as a redeemed position. Remove it; a
+        // future auto-sync will correctly carry it as an open position.
+        await dbQuery(`DELETE FROM realized_trades WHERE id = $1`, [r.id]).catch(() => {});
+        deletedNotActuallyResolved++;
+        if (sampleDeletions.length < 5) {
+          sampleDeletions.push({ id: r.id, market_question: r.market_question, side: r.side, old_realized_pnl: r.realized_pnl });
+        }
+        continue;
+      }
+
+      let outcomeWon;
+      if (settlement.winnerName) {
+        outcomeWon = settlement.winnerName.toUpperCase().trim() === outcome;
+      } else if (outcome === 'YES' || outcome === 'NO') {
+        outcomeWon = outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
+      } else {
+        stillUnverifiable++;
+        continue; // leave regraded_at NULL — retry on a later pass once gamma has an outcomes array
+      }
+
+      const shares = Number(r.shares) || 0;
+      const entryPrice = Number(r.entry_price) || 0;
+      const entryCost = Number(r.entry_cost_usd) || 0;
+      const correctPnl = outcomeWon ? +(shares * (1 - entryPrice)).toFixed(4) : +(-entryCost).toFixed(4);
+      const correctExitPrice = outcomeWon ? 1.0 : 0.0;
+      const correctExitValue = outcomeWon ? +shares.toFixed(4) : 0;
+      const correctRoi = entryCost > 0 ? +(correctPnl / entryCost).toFixed(6) : null;
+      const correctCloseReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
+
+      const oldPnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+      const needsUpdate = oldPnl == null || Math.abs(oldPnl - correctPnl) > 0.01 || r.close_reason !== correctCloseReason;
+
+      if (needsUpdate) {
+        await dbQuery(
+          `UPDATE realized_trades SET realized_pnl=$1, realized_roi=$2, exit_price=$3, exit_value_usd=$4, close_reason=$5, regraded_at=NOW() WHERE id=$6`,
+          [correctPnl, correctRoi, correctExitPrice, correctExitValue, correctCloseReason, r.id]
+        ).catch(() => {});
+        corrected++;
+        if (sampleCorrections.length < 5) {
+          sampleCorrections.push({
+            id: r.id, market_question: r.market_question, side: r.side,
+            old_realized_pnl: oldPnl, old_close_reason: r.close_reason,
+            new_realized_pnl: correctPnl, new_close_reason: correctCloseReason,
+          });
+        }
+      } else {
+        await dbQuery(`UPDATE realized_trades SET regraded_at=NOW() WHERE id=$1`, [r.id]).catch(() => {});
+        confirmedAlreadyCorrect++;
+      }
+    }
+
+    const remainingRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM realized_trades WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL`
+    ).catch(() => [{ n: null }]);
+
+    res.json({
+      note: 'One-time correction. Verifies each redeemed-position row against the market\'s actual gamma settlement instead of trusting cashPnl. Bounded per call — re-run this same curl if `remaining` > 0.',
+      checked: rows.length,
+      corrected,
+      confirmed_already_correct: confirmedAlreadyCorrect,
+      deleted_not_actually_resolved: deletedNotActuallyResolved,
+      still_unverifiable_named_outcome: stillUnverifiable,
+      remaining: remainingRow[0] ? remainingRow[0].n : null,
+      sample_corrections: sampleCorrections,
+      sample_deletions: sampleDeletions,
+    });
+  } catch (e) {
+    console.error('[regrade-redeemed-positions]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
