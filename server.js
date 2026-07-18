@@ -12483,7 +12483,7 @@ async function _computeRoiLeaderboard(window, minN) {
     ${baseWhere}
     GROUP BY GROUPING SETS ((rt.user_id), ())
   `).catch(e => { console.warn('[roi-leaderboard] query error:', e.message); return null; });
-  if (rows == null) return null;
+  if (rows == null) return null; // query failed — distinct from a genuinely empty result below
 
   const popRow = rows.find(r => r.user_id == null);
   const popWeightedRoi = (popRow && Number(popRow.wroi_den) > 0)
@@ -12523,7 +12523,7 @@ async function _computeRoiLeaderboard(window, minN) {
 
   const perUser = rows.filter(r => r.user_id != null && Number(r.n) >= minN);
   const userIds = perUser.map(r => r.user_id);
-  if (!userIds.length) return [];
+  if (!userIds.length) return { rows: [], popWeightedRoi };
 
   const userRows = await dbQuery(
     `SELECT id, display_name, username, polymarket_address, whale_rank FROM users WHERE id = ANY($1)`,
@@ -12550,7 +12550,7 @@ async function _computeRoiLeaderboard(window, minN) {
     };
   }).sort((a, b) => b.score_pct - a.score_pct);
 
-  return result;
+  return { rows: result, popWeightedRoi };
 }
 
 app.get('/api/predictors/leaderboard', async (req, res) => {
@@ -12565,10 +12565,10 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
         return res.json(cached.data.slice(0, limit));
       }
       if (!pool) return res.json([]);
-      const data = await _computeRoiLeaderboard(window, minN);
-      if (data == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
-      _roiLbCache.set(ck, { data, ts: Date.now() });
-      return res.json(data.slice(0, limit));
+      const computed = await _computeRoiLeaderboard(window, minN);
+      if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+      _roiLbCache.set(ck, { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() });
+      return res.json(computed.rows.slice(0, limit));
     }
 
     const mode  = req.query.mode === 'flex' ? 'flex' : 'whale';
@@ -12709,28 +12709,31 @@ app.get('/api/admin/roi-audit', requireAdminSecret, async (req, res) => {
         if (u[0]) targets.push({ user_id: u[0].id, polymarket_address: u[0].polymarket_address, from: 'default_reported' });
       }
     }
-    if (topN > 0) {
-      const lb = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => []);
-      for (const row of (lb || []).slice(0, topN)) {
+    // Reuse the public leaderboard's own 120s cache instead of recomputing —
+    // this endpoint previously ran the full whale-population weighted
+    // aggregate TWICE per request (once here for the top-N list, again
+    // separately for the shrinkage population mean), which was slow enough
+    // to trip the front-proxy timeout and return a truncated non-JSON
+    // response ("Invalid numeric literal" from jq). One computation now,
+    // reused for both the target list and the population-mean anchor —
+    // same lesson as the earlier regrade-endpoint timeout fix this session.
+    const _allCk = `all:${ROI_MIN_N_FLOOR}`;
+    let _allCached = _roiLbCache.get(_allCk);
+    if (!_allCached || Date.now() - _allCached.ts >= 120 * 1000) {
+      const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+      if (computed) {
+        _allCached = { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+        _roiLbCache.set(_allCk, _allCached);
+      }
+    }
+    const popWeightedRoi = _allCached ? _allCached.popWeightedRoi : 0;
+    if (topN > 0 && _allCached) {
+      for (const row of _allCached.data.slice(0, topN)) {
         if (targets.some(t => t.user_id === row.user_id)) continue;
         targets.push({ user_id: row.user_id, polymarket_address: row.polymarket_address, from: 'current_leaderboard_top_' + topN, leaderboard: row });
       }
     }
     if (!targets.length) return res.json({ error: 'no_targets_resolved' });
-
-    // Population mean at the SAME window ('all') the default leaderboard
-    // view uses — the shrinkage anchor every wallet below gets pulled toward.
-    const weightExprAudit = (costCol, closedCol) => `${costCol} * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - ${closedCol})) / 86400.0 / ${ROI_HALF_LIFE_DAYS})`;
-    const popAgg = await dbQuery(`
-      SELECT
-        SUM(LEAST(GREATEST(rt.realized_roi,-1.0),${ROI_CAP}) * (${weightExprAudit('rt.entry_cost_usd','rt.closed_at')}))::numeric AS num,
-        SUM(${weightExprAudit('rt.entry_cost_usd','rt.closed_at')})::numeric AS den
-      FROM realized_trades rt
-      JOIN users u ON u.id = rt.user_id::text
-      WHERE u.is_whale = true AND rt.realized_roi IS NOT NULL
-        AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0 AND rt.closed_at IS NOT NULL
-    `).catch(() => []);
-    const popWeightedRoi = (popAgg[0] && Number(popAgg[0].den) > 0) ? Number(popAgg[0].num) / Number(popAgg[0].den) : 0;
 
     const out = [];
     for (const t of targets) {
