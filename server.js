@@ -12682,6 +12682,175 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
   }
 });
 
+// ── ROI leaderboard audit (read-only) ───────────────────────────────────────
+// Investigates a live report that leaderboard #1 (gloriafoster) is actually
+// down -$117,832 on Polymarket's own profile while our ROI score ranks them
+// top. Breaks the score into every stage (raw -> capital-weighted -> decayed
+// -> capped -> shrunk) so a divergence from Polymarket's reported total P&L
+// is attributable to a specific step, not guessed at. Read-only — does not
+// touch signal_outcomes, realized_trades, or the leaderboard cache.
+const ROI_AUDIT_DEFAULT_ADDRESSES = ['0x5d189e816b4149be00977c1a3c8840374aec4972']; // gloriafoster
+app.get('/api/admin/roi-audit', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const topN = Math.min(10, Math.max(0, parseInt(req.query.top, 10) || 4));
+
+    // Resolve target user_ids: explicit ?address=, plus the top N of the
+    // CURRENT all-time ROI leaderboard (same code path the public endpoint
+    // uses — this audit must see exactly what users see, not a rebuild).
+    let targets = []; // { user_id, polymarket_address, from }
+    if (req.query.address) {
+      const addr = String(req.query.address).toLowerCase();
+      const u = await dbQuery('SELECT id, polymarket_address FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]).catch(() => []);
+      if (u[0]) targets.push({ user_id: u[0].id, polymarket_address: u[0].polymarket_address, from: 'address_param' });
+    } else {
+      for (const addr of ROI_AUDIT_DEFAULT_ADDRESSES) {
+        const u = await dbQuery('SELECT id, polymarket_address FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]).catch(() => []);
+        if (u[0]) targets.push({ user_id: u[0].id, polymarket_address: u[0].polymarket_address, from: 'default_reported' });
+      }
+    }
+    if (topN > 0) {
+      const lb = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => []);
+      for (const row of (lb || []).slice(0, topN)) {
+        if (targets.some(t => t.user_id === row.user_id)) continue;
+        targets.push({ user_id: row.user_id, polymarket_address: row.polymarket_address, from: 'current_leaderboard_top_' + topN, leaderboard: row });
+      }
+    }
+    if (!targets.length) return res.json({ error: 'no_targets_resolved' });
+
+    // Population mean at the SAME window ('all') the default leaderboard
+    // view uses — the shrinkage anchor every wallet below gets pulled toward.
+    const weightExprAudit = (costCol, closedCol) => `${costCol} * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - ${closedCol})) / 86400.0 / ${ROI_HALF_LIFE_DAYS})`;
+    const popAgg = await dbQuery(`
+      SELECT
+        SUM(LEAST(GREATEST(rt.realized_roi,-1.0),${ROI_CAP}) * (${weightExprAudit('rt.entry_cost_usd','rt.closed_at')}))::numeric AS num,
+        SUM(${weightExprAudit('rt.entry_cost_usd','rt.closed_at')})::numeric AS den
+      FROM realized_trades rt
+      JOIN users u ON u.id = rt.user_id::text
+      WHERE u.is_whale = true AND rt.realized_roi IS NOT NULL
+        AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0 AND rt.closed_at IS NOT NULL
+    `).catch(() => []);
+    const popWeightedRoi = (popAgg[0] && Number(popAgg[0].den) > 0) ? Number(popAgg[0].num) / Number(popAgg[0].den) : 0;
+
+    const out = [];
+    for (const t of targets) {
+      const rows = await dbQuery(`
+        SELECT realized_roi, entry_cost_usd, realized_pnl, closed_at
+        FROM realized_trades WHERE user_id = $1::uuid
+      `, [t.user_id]).catch(() => []);
+
+      const eligible = rows.filter(r => r.realized_roi != null && Number(r.entry_cost_usd) > 0 && r.closed_at != null);
+      const n = eligible.length;
+
+      let sumCost = 0, sumPnl = 0, sumRoiUnweighted = 0;
+      let numNoDecay = 0, denNoDecay = 0, numDecayUncapped = 0, denDecay = 0, numDecayCapped = 0;
+      let atCap = 0, atCapWeight = 0;
+      const roiList = [];
+      const now = Date.now();
+      for (const r of eligible) {
+        const roi = Number(r.realized_roi);
+        const cost = Number(r.entry_cost_usd);
+        const pnl = Number(r.realized_pnl) || 0;
+        const days = Math.max(0, (now - new Date(r.closed_at).getTime()) / 86400000);
+        const decay = Math.pow(0.5, days / ROI_HALF_LIFE_DAYS);
+        const wNoDecay = cost;
+        const wDecay = cost * decay;
+        const roiCapped = Math.min(Math.max(roi, -1.0), ROI_CAP);
+        sumCost += cost; sumPnl += pnl; sumRoiUnweighted += roi;
+        numNoDecay += roi * wNoDecay; denNoDecay += wNoDecay;
+        numDecayUncapped += roi * wDecay; denDecay += wDecay;
+        numDecayCapped += roiCapped * wDecay;
+        if (roi >= ROI_CAP) { atCap++; atCapWeight += wDecay; }
+        roiList.push(roi);
+      }
+      roiList.sort((a, b) => a - b);
+      const median = roiList.length ? roiList[Math.floor(roiList.length / 2)] : null;
+
+      const rawAvgRoi = n > 0 ? sumRoiUnweighted / n : null;
+      const capWeightedNoDecay = denNoDecay > 0 ? numNoDecay / denNoDecay : null;
+      const capWeightedDecayUncapped = denDecay > 0 ? numDecayUncapped / denDecay : null;
+      const capWeightedDecayCapped = denDecay > 0 ? numDecayCapped / denDecay : null; // == leaderboard's raw_weighted_roi_pct/100
+      const portfolioRealizedRoi = sumCost > 0 ? sumPnl / sumCost : null; // ratio-of-sums, alt metric
+      const shrinkFactor = n / (n + ROI_SHRINK_K);
+      const shrunkScore = (capWeightedDecayCapped != null)
+        ? shrinkFactor * capWeightedDecayCapped + (1 - shrinkFactor) * popWeightedRoi
+        : null;
+
+      // Unrealized / still-open, from our hourly-synced cache.
+      const cached = await dbQuery(
+        `SELECT COUNT(*)::int AS n, COALESCE(SUM(pnl),0)::numeric AS pnl_sum, MAX(created_at) AS last_sync
+         FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket'`,
+        [t.user_id]
+      ).catch(() => [{ n: 0, pnl_sum: 0, last_sync: null }]);
+
+      // Polymarket's own authoritative total P&L for this wallet, as synced
+      // into our DB by the whale-leaderboard cron (data-api.polymarket.com/
+      // v1/leaderboard) — independent of both realized_trades and
+      // cached_positions. This is almost certainly the number the live
+      // Polymarket profile page shows.
+      const userRow = await dbQuery(
+        `SELECT display_name, whale_rank, whale_pnl, last_backfill_at FROM users WHERE id = $1 LIMIT 1`, [t.user_id]
+      ).catch(() => []);
+
+      out.push({
+        user_id: t.user_id,
+        display_name: userRow[0] ? userRow[0].display_name : null,
+        polymarket_address: t.polymarket_address,
+        source: t.from,
+        leaderboard_row: t.leaderboard || null,
+        stage_realized: {
+          n,
+          sum_entry_cost_usd: Math.round(sumCost),
+          sum_realized_pnl_usd: Math.round(sumPnl * 100) / 100,
+          portfolio_realized_roi_pct: portfolioRealizedRoi != null ? Math.round(portfolioRealizedRoi * 1000) / 10 : null,
+          raw_avg_roi_pct_unweighted: rawAvgRoi != null ? Math.round(rawAvgRoi * 1000) / 10 : null,
+          capital_weighted_roi_pct_no_decay: capWeightedNoDecay != null ? Math.round(capWeightedNoDecay * 1000) / 10 : null,
+          capital_weighted_roi_pct_with_decay_UNCAPPED: capWeightedDecayUncapped != null ? Math.round(capWeightedDecayUncapped * 1000) / 10 : null,
+          capital_weighted_roi_pct_with_decay_capped: capWeightedDecayCapped != null ? Math.round(capWeightedDecayCapped * 1000) / 10 : null,
+          trades_at_or_above_cap: atCap,
+          pct_of_decay_weight_at_cap: denDecay > 0 ? Math.round((atCapWeight / denDecay) * 1000) / 10 : null,
+          median_trade_roi_pct: median != null ? Math.round(median * 1000) / 10 : null,
+          min_trade_roi_pct: roiList.length ? Math.round(roiList[0] * 1000) / 10 : null,
+          max_trade_roi_pct: roiList.length ? Math.round(roiList[roiList.length - 1] * 1000) / 10 : null,
+        },
+        stage_shrinkage: {
+          population_mean_roi_pct: Math.round(popWeightedRoi * 1000) / 10,
+          shrink_k: ROI_SHRINK_K,
+          shrink_factor_on_own_data: Math.round(shrinkFactor * 1000) / 1000,
+          post_shrinkage_score_pct: shrunkScore != null ? Math.round(shrunkScore * 1000) / 10 : null,
+          matches_leaderboard_score_pct: t.leaderboard ? t.leaderboard.score_pct : 'n/a (not in current top-' + topN + ')',
+        },
+        stage_unrealized_cached: {
+          open_position_count: cached[0] ? cached[0].n : 0,
+          unrealized_pnl_usd_sum: cached[0] ? Math.round(Number(cached[0].pnl_sum) * 100) / 100 : 0,
+          cache_last_synced_at: cached[0] ? cached[0].last_sync : null,
+        },
+        polymarket_authoritative: {
+          whale_rank: userRow[0] ? userRow[0].whale_rank : null,
+          whale_pnl_synced_from_polymarket_leaderboard: userRow[0] && userRow[0].whale_pnl != null ? Math.round(Number(userRow[0].whale_pnl) * 100) / 100 : null,
+          last_backfill_at: userRow[0] ? userRow[0].last_backfill_at : null,
+        },
+        reconciliation: {
+          our_realized_plus_cached_unrealized: Math.round((sumPnl + (cached[0] ? Number(cached[0].pnl_sum) : 0)) * 100) / 100,
+          vs_polymarket_whale_pnl: userRow[0] && userRow[0].whale_pnl != null ? Math.round(Number(userRow[0].whale_pnl) * 100) / 100 : null,
+          realized_capital_vs_note: 'sum_entry_cost_usd above is capital across REALIZED trades only — compare to the wallet\'s total lifetime volume on polymarket.com to see what fraction of their trading realized_trades actually captures',
+        },
+      });
+    }
+
+    res.json({
+      note: 'Read-only investigation. No leaderboard/score/table changes made. Population mean computed fresh against the same all-whale, all-time universe the public leaderboard uses.',
+      roi_cap: ROI_CAP,
+      half_life_days: ROI_HALF_LIFE_DAYS,
+      shrink_k: ROI_SHRINK_K,
+      audited: out,
+    });
+  } catch (e) {
+    console.error('[roi-audit]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
   try {
