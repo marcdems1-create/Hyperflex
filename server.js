@@ -12423,14 +12423,29 @@ const _predictorsLbCache = { ts: { flex: 0, whale: 0 }, data: { flex: null, whal
 // new resolution/matching logic, no Anthropic calls anywhere in this path).
 //
 // Formula per wallet, per window:
-//   weight_i    = entry_cost_usd_i * 0.5^(days_since_closed_i / HALF_LIFE_DAYS)
-//   weighted_roi = Σ(realized_roi_i * weight_i) / Σ(weight_i)
-//   shrunk_roi   = (n/(n+K)) * weighted_roi + (K/(n+K)) * population_mean_roi
+//   roi_i (capped) = clamp(realized_roi_i, -1.0, ROI_CAP)
+//   weight_i       = entry_cost_usd_i * 0.5^(days_since_closed_i / HALF_LIFE_DAYS)
+//   weighted_roi   = Σ(roi_i(capped) * weight_i) / Σ(weight_i)
+//   shrunk_roi     = (n/(n+K)) * weighted_roi + (K/(n+K)) * population_mean_roi
 // K pulls small-sample wallets toward the population mean so a 10-trade lucky
 // streak can't outrank a 300-trade solid record — same shrinkage logic as the
 // n>=30 edge-grade publish gate elsewhere in this file. Ranking eligibility
 // floors at ROI_MIN_N regardless of the min_n query param (a caller loosening
 // the filter can raise the bar, never lower it below the integrity floor).
+//
+// ROI_CAP exists because averaging a RATIO (not a dollar amount) by capital
+// weight does not bound the ratio's own magnitude — a single low-price
+// long-shot win (bought at 1-2c, resolved YES) produces a realized_roi in
+// the thousands of percent, and that one trade can dominate a capital-
+// weighted AVERAGE even at modest dollar size, because the weight bounds
+// each trade's CAPITAL contribution but not its RATIO contribution. Worse,
+// the same unbounded average feeds population_mean_roi (the shrinkage
+// anchor), so one outlier wallet was inflating the anchor every OTHER
+// wallet gets shrunk toward — confirmed live: every wallet, including ones
+// with clearly negative raw ROI, scored 1600%+ before this cap was added.
+// Winsorizing at 10x (1000%) still fully rewards a real long-shot call —
+// it just stops one trade's ratio from swamping an aggregate.
+const ROI_CAP = 10.0; // 1000% — winsorize ceiling on a single trade's realized_roi
 const ROI_HALF_LIFE_DAYS = 90;
 const ROI_SHRINK_K = 20;
 const ROI_MIN_N_FLOOR = 10;
@@ -12454,6 +12469,7 @@ async function _computeRoiLeaderboard(window, minN) {
       ${windowClause}
   `;
   const weightExpr = `rt.entry_cost_usd * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - rt.closed_at)) / 86400.0 / ${ROI_HALF_LIFE_DAYS})`;
+  const cappedRoiExpr = `LEAST(GREATEST(rt.realized_roi, -1.0), ${ROI_CAP})`;
 
   // Per-user aggregate + population aggregate (for the shrinkage prior) in
   // one pass via GROUPING SETS so the prior reflects the exact same
@@ -12462,7 +12478,7 @@ async function _computeRoiLeaderboard(window, minN) {
     SELECT rt.user_id::text AS user_id,
            COUNT(*)::int AS n,
            SUM(rt.entry_cost_usd)::numeric AS total_capital,
-           SUM(rt.realized_roi * (${weightExpr}))::numeric AS wroi_num,
+           SUM((${cappedRoiExpr}) * (${weightExpr}))::numeric AS wroi_num,
            SUM(${weightExpr})::numeric AS wroi_den
     ${baseWhere}
     GROUP BY GROUPING SETS ((rt.user_id), ())
@@ -12479,10 +12495,10 @@ async function _computeRoiLeaderboard(window, minN) {
   const trendRows = await dbQuery(`
     SELECT rt.user_id::text AS user_id,
       COUNT(*) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::int AS n_recent,
-      SUM(rt.realized_roi * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::numeric AS num_recent,
+      SUM((${cappedRoiExpr}) * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::numeric AS num_recent,
       SUM(${weightExpr}) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '90 days')::numeric AS den_recent,
       COUNT(*) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::int AS n_prior,
-      SUM(rt.realized_roi * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS num_prior,
+      SUM((${cappedRoiExpr}) * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS num_prior,
       SUM(${weightExpr}) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS den_prior
     FROM realized_trades rt
     JOIN users u ON u.id = rt.user_id::text
