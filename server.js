@@ -60339,26 +60339,51 @@ app.post('/api/admin/regrade-redeemed-positions', requireAdminSecret, async (req
 
 // Background cron: grinds through the redeemed-position correction backlog
 // automatically. Not subject to the public-facing HTTP proxy timeout the way
-// the manual endpoint above is, so it can push a much bigger batch per tick.
-// At ~5000/tick every 2 minutes, a ~262k-row backlog clears in roughly
-// 262000/5000 ≈ 53 ticks ≈ ~1h45m — unattended, no further manual curls.
-const REGRADE_REDEEM_CRON_BATCH = 5000;
+// the manual endpoint above is, so it can push a bigger batch per tick than
+// that endpoint safely can.
+//
+// Batch size tuned down from an initial 5000 to 1500: with gamma fetch
+// concurrency 8 and each fetch individually bounded to 8s
+// (_fetchGammaKeysetChecked's AbortController), a batch dominated by
+// never-before-cached condition_ids could in the worst case take
+// unique_ids/8 * 8s to fully resolve — at 5000 rows that's potentially
+// tens of minutes for a single tick, which (a) delays every subsequent
+// scheduled tick behind the running-guard and (b) leaves last_cron_run
+// stale/null for that whole window with no visibility into whether it's
+// still working or stuck. 1500 keeps worst-case tick duration bounded to
+// single-digit minutes while still clearing the ~262k backlog in a
+// reasonable ~175 ticks (~6h) unattended.
+//
+// _regradeRedeemCronLastRun is now set on BOTH success and failure — the
+// original version only set it in .then(), so a cron that fired and
+// immediately errored every tick would look byte-identical in
+// /status to a cron that had simply never fired yet (both show
+// last_cron_run: null). That ambiguity is exactly what showed up on the
+// first live check after this cron shipped (cron_running: false,
+// last_cron_run: null, remaining unchanged) — this fix makes the next
+// check unambiguous: a real error will show up in the response, not the
+// same-looking null either way. Also logs via safeCron so failures land in
+// the app's existing _recentErrors log (same as every other cron here).
+const REGRADE_REDEEM_CRON_BATCH = 1500;
 let _regradeRedeemCronRunning = false;
 let _regradeRedeemCronLastRun = null;
-cron.schedule('*/2 * * * *', () => {
+cron.schedule('*/2 * * * *', safeCron('redeem-regrade', () => {
   if (!pool || _regradeRedeemCronRunning) return;
   _regradeRedeemCronRunning = true;
   const startedAt = new Date().toISOString();
-  _regradeRedeemedPositionsBatch(REGRADE_REDEEM_CRON_BATCH)
+  return _regradeRedeemedPositionsBatch(REGRADE_REDEEM_CRON_BATCH)
     .then(result => {
-      _regradeRedeemCronLastRun = { startedAt, finishedAt: new Date().toISOString(), ...result };
+      _regradeRedeemCronLastRun = { startedAt, finishedAt: new Date().toISOString(), ok: true, ...result };
       if (result.checked > 0) {
         console.log(`[redeem-regrade-cron] checked=${result.checked} corrected=${result.corrected} deleted=${result.deleted_not_actually_resolved} remaining=${result.remaining}`);
       }
     })
-    .catch(e => console.error('[redeem-regrade-cron] error:', e.message))
+    .catch(e => {
+      _regradeRedeemCronLastRun = { startedAt, finishedAt: new Date().toISOString(), ok: false, error: e.message };
+      throw e; // rethrow so safeCron's own error logging still fires
+    })
     .finally(() => { _regradeRedeemCronRunning = false; });
-});
+}));
 
 // Inspect cron progress without waiting on a full batch — same pattern as
 // /api/admin/whale-backfill/status.
@@ -60371,6 +60396,9 @@ app.get('/api/admin/regrade-redeemed-positions/status', requireAdminSecret, asyn
       cron_running: _regradeRedeemCronRunning,
       last_cron_run: _regradeRedeemCronLastRun,
       remaining: remainingRow[0] ? remainingRow[0].n : null,
+      note: _regradeRedeemCronLastRun == null
+        ? 'last_cron_run is null: either the cron has not hit its first */2 boundary since this deploy yet, or (check again shortly to rule out) it is silently stuck on a batch that has not resolved. It runs every 2 minutes.'
+        : undefined,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
