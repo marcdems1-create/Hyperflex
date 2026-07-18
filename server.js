@@ -60179,7 +60179,8 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
   }
 });
 
-// ── One-time correction: POST /api/admin/regrade-redeemed-positions ─────────
+// ── One-time correction: redeemed-position rows written before the cashPnl-
+// trust fix ───────────────────────────────────────────────────────────────
 // backfillRealizedTrades's redeemed-position path used to trust Polymarket's
 // cashPnl field as the sole win/loss signal, with no check against the
 // market's actual outcome. Row-level audit (2026-07) found this fabricating
@@ -60190,10 +60191,18 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
 // (independently verifies settlement via gamma before trusting anything) —
 // this corrects the rows it already wrote before the fix.
 //
-// Bounded + resumable, same discipline as regrade-named-outcomes: `remaining`
-// tells you if another call is needed. Tracks progress via
-// realized_trades.regraded_at (NULL only on pre-fix redeemed-position rows —
-// fixed-path inserts stamp it immediately). For each unregraded row:
+// SCALE: first live run showed `remaining: 261773` after a 200-row batch —
+// the whale set (~700 wallets) each carry hundreds of small dust-redemption
+// positions. At 200/call that's 1,300+ manual curls, which is not a thing
+// to ask a human to do. So this runs two ways against the SAME shared batch
+// function: an on-demand POST endpoint (bounded, HTTP-timeout-safe) for
+// spot-checks, and a 2-minute cron (not subject to the front-proxy HTTP
+// timeout, so it can push a much bigger batch per tick) that grinds through
+// the backlog automatically with zero further manual calls needed.
+//
+// Tracks progress via realized_trades.regraded_at (NULL only on pre-fix
+// redeemed-position rows — fixed-path inserts stamp it immediately). For
+// each unregraded row:
 //   - Independently verify the market's real settlement via the same
 //     _verifyRedeemedSettlement gamma check the fixed ingestion path uses.
 //   - If verified: recompute realized_pnl/realized_roi/exit_price/close_reason
@@ -60202,106 +60211,168 @@ app.post('/api/admin/regrade-named-outcomes', requireAdminSecret, async (req, re
 //     fresh check) — this row was never a valid "resolved redemption" in the
 //     first place and shouldn't be in realized_trades at all. DELETE it; the
 //     position still shows correctly as open in cached_positions.
+// Per-row DB writes run via _mapLimit (concurrency 15 — simple indexed
+// UPDATE/DELETE by primary key, cheap individually) instead of a serial
+// loop, so a much larger batch fits in the same wall-clock budget.
+async function _regradeRedeemedPositionsBatch(limit) {
+  const rows = await dbQuery(`
+    SELECT id, condition_id, side, shares, entry_price, entry_cost_usd,
+           realized_pnl, realized_roi, exit_price, close_reason, market_question
+    FROM realized_trades
+    WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL
+    ORDER BY id
+    LIMIT ${limit}
+  `);
+  if (!rows.length) {
+    const remainingRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM realized_trades WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL`
+    ).catch(() => [{ n: 0 }]);
+    return {
+      checked: 0, corrected: 0, confirmed_already_correct: 0,
+      deleted_not_actually_resolved: 0, still_unverifiable_named_outcome: 0,
+      remaining: remainingRow[0] ? remainingRow[0].n : 0,
+      sample_corrections: [], sample_deletions: [],
+    };
+  }
+
+  const uniqueCondIds = [...new Set(rows.map(r => (r.condition_id || '').toLowerCase()).filter(Boolean))];
+  const settlementByCondId = new Map();
+  await _mapLimit(uniqueCondIds, 8, async (condId) => {
+    const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+    if (s) settlementByCondId.set(condId, s);
+  });
+
+  let corrected = 0, confirmedAlreadyCorrect = 0, deletedNotActuallyResolved = 0, stillUnverifiable = 0;
+  const sampleCorrections = [];
+  const sampleDeletions = [];
+
+  await _mapLimit(rows, 15, async (r) => {
+    const condId = (r.condition_id || '').toLowerCase();
+    const outcome = (r.side || '').toUpperCase().trim();
+    const settlement = condId ? settlementByCondId.get(condId) : null;
+
+    if (!settlement) {
+      // Fresh check still can't confirm this market decisively resolved —
+      // it was wrongly inserted as a redeemed position. Remove it; a
+      // future auto-sync will correctly carry it as an open position.
+      await dbQuery(`DELETE FROM realized_trades WHERE id = $1`, [r.id]).catch(() => {});
+      deletedNotActuallyResolved++;
+      if (sampleDeletions.length < 5) {
+        sampleDeletions.push({ id: r.id, market_question: r.market_question, side: r.side, old_realized_pnl: r.realized_pnl });
+      }
+      return;
+    }
+
+    let outcomeWon;
+    if (settlement.winnerName) {
+      outcomeWon = settlement.winnerName.toUpperCase().trim() === outcome;
+    } else if (outcome === 'YES' || outcome === 'NO') {
+      outcomeWon = outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
+    } else {
+      stillUnverifiable++;
+      return; // leave regraded_at NULL — retry on a later pass once gamma has an outcomes array
+    }
+
+    const shares = Number(r.shares) || 0;
+    const entryPrice = Number(r.entry_price) || 0;
+    const entryCost = Number(r.entry_cost_usd) || 0;
+    const correctPnl = outcomeWon ? +(shares * (1 - entryPrice)).toFixed(4) : +(-entryCost).toFixed(4);
+    const correctExitPrice = outcomeWon ? 1.0 : 0.0;
+    const correctExitValue = outcomeWon ? +shares.toFixed(4) : 0;
+    const correctRoi = entryCost > 0 ? +(correctPnl / entryCost).toFixed(6) : null;
+    const correctCloseReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
+
+    const oldPnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+    const needsUpdate = oldPnl == null || Math.abs(oldPnl - correctPnl) > 0.01 || r.close_reason !== correctCloseReason;
+
+    if (needsUpdate) {
+      await dbQuery(
+        `UPDATE realized_trades SET realized_pnl=$1, realized_roi=$2, exit_price=$3, exit_value_usd=$4, close_reason=$5, regraded_at=NOW() WHERE id=$6`,
+        [correctPnl, correctRoi, correctExitPrice, correctExitValue, correctCloseReason, r.id]
+      ).catch(() => {});
+      corrected++;
+      if (sampleCorrections.length < 5) {
+        sampleCorrections.push({
+          id: r.id, market_question: r.market_question, side: r.side,
+          old_realized_pnl: oldPnl, old_close_reason: r.close_reason,
+          new_realized_pnl: correctPnl, new_close_reason: correctCloseReason,
+        });
+      }
+    } else {
+      await dbQuery(`UPDATE realized_trades SET regraded_at=NOW() WHERE id=$1`, [r.id]).catch(() => {});
+      confirmedAlreadyCorrect++;
+    }
+  });
+
+  const remainingRow = await dbQuery(
+    `SELECT COUNT(*)::int AS n FROM realized_trades WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL`
+  ).catch(() => [{ n: null }]);
+
+  return {
+    checked: rows.length,
+    corrected,
+    confirmed_already_correct: confirmedAlreadyCorrect,
+    deleted_not_actually_resolved: deletedNotActuallyResolved,
+    still_unverifiable_named_outcome: stillUnverifiable,
+    remaining: remainingRow[0] ? remainingRow[0].n : null,
+    sample_corrections: sampleCorrections,
+    sample_deletions: sampleDeletions,
+  };
+}
+
+// On-demand, HTTP-timeout-safe spot-check — the cron below carries the bulk
+// of the backlog automatically; this is for verifying progress on demand.
 //   curl -X POST "https://hyperflex.network/api/admin/regrade-redeemed-positions?secret=$ADMIN_SECRET"
-const REGRADE_REDEEM_BATCH_MAX = 200;
 app.post('/api/admin/regrade-redeemed-positions', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no db' });
-    const rows = await dbQuery(`
-      SELECT id, condition_id, side, shares, entry_price, entry_cost_usd,
-             realized_pnl, realized_roi, exit_price, close_reason, market_question
-      FROM realized_trades
-      WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL
-      ORDER BY id
-      LIMIT ${REGRADE_REDEEM_BATCH_MAX}
-    `);
-
-    const uniqueCondIds = [...new Set(rows.map(r => (r.condition_id || '').toLowerCase()).filter(Boolean))];
-    const settlementByCondId = new Map();
-    await _mapLimit(uniqueCondIds, 6, async (condId) => {
-      const s = await _verifyRedeemedSettlement(condId).catch(() => null);
-      if (s) settlementByCondId.set(condId, s);
-    });
-
-    let corrected = 0, confirmedAlreadyCorrect = 0, deletedNotActuallyResolved = 0, stillUnverifiable = 0;
-    const sampleCorrections = [];
-    const sampleDeletions = [];
-
-    for (const r of rows) {
-      const condId = (r.condition_id || '').toLowerCase();
-      const outcome = (r.side || '').toUpperCase().trim();
-      const settlement = condId ? settlementByCondId.get(condId) : null;
-
-      if (!settlement) {
-        // Fresh check still can't confirm this market decisively resolved —
-        // it was wrongly inserted as a redeemed position. Remove it; a
-        // future auto-sync will correctly carry it as an open position.
-        await dbQuery(`DELETE FROM realized_trades WHERE id = $1`, [r.id]).catch(() => {});
-        deletedNotActuallyResolved++;
-        if (sampleDeletions.length < 5) {
-          sampleDeletions.push({ id: r.id, market_question: r.market_question, side: r.side, old_realized_pnl: r.realized_pnl });
-        }
-        continue;
-      }
-
-      let outcomeWon;
-      if (settlement.winnerName) {
-        outcomeWon = settlement.winnerName.toUpperCase().trim() === outcome;
-      } else if (outcome === 'YES' || outcome === 'NO') {
-        outcomeWon = outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
-      } else {
-        stillUnverifiable++;
-        continue; // leave regraded_at NULL — retry on a later pass once gamma has an outcomes array
-      }
-
-      const shares = Number(r.shares) || 0;
-      const entryPrice = Number(r.entry_price) || 0;
-      const entryCost = Number(r.entry_cost_usd) || 0;
-      const correctPnl = outcomeWon ? +(shares * (1 - entryPrice)).toFixed(4) : +(-entryCost).toFixed(4);
-      const correctExitPrice = outcomeWon ? 1.0 : 0.0;
-      const correctExitValue = outcomeWon ? +shares.toFixed(4) : 0;
-      const correctRoi = entryCost > 0 ? +(correctPnl / entryCost).toFixed(6) : null;
-      const correctCloseReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
-
-      const oldPnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
-      const needsUpdate = oldPnl == null || Math.abs(oldPnl - correctPnl) > 0.01 || r.close_reason !== correctCloseReason;
-
-      if (needsUpdate) {
-        await dbQuery(
-          `UPDATE realized_trades SET realized_pnl=$1, realized_roi=$2, exit_price=$3, exit_value_usd=$4, close_reason=$5, regraded_at=NOW() WHERE id=$6`,
-          [correctPnl, correctRoi, correctExitPrice, correctExitValue, correctCloseReason, r.id]
-        ).catch(() => {});
-        corrected++;
-        if (sampleCorrections.length < 5) {
-          sampleCorrections.push({
-            id: r.id, market_question: r.market_question, side: r.side,
-            old_realized_pnl: oldPnl, old_close_reason: r.close_reason,
-            new_realized_pnl: correctPnl, new_close_reason: correctCloseReason,
-          });
-        }
-      } else {
-        await dbQuery(`UPDATE realized_trades SET regraded_at=NOW() WHERE id=$1`, [r.id]).catch(() => {});
-        confirmedAlreadyCorrect++;
-      }
-    }
-
-    const remainingRow = await dbQuery(
-      `SELECT COUNT(*)::int AS n FROM realized_trades WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL`
-    ).catch(() => [{ n: null }]);
-
+    const result = await _regradeRedeemedPositionsBatch(500);
     res.json({
-      note: 'One-time correction. Verifies each redeemed-position row against the market\'s actual gamma settlement instead of trusting cashPnl. Bounded per call — re-run this same curl if `remaining` > 0.',
-      checked: rows.length,
-      corrected,
-      confirmed_already_correct: confirmedAlreadyCorrect,
-      deleted_not_actually_resolved: deletedNotActuallyResolved,
-      still_unverifiable_named_outcome: stillUnverifiable,
-      remaining: remainingRow[0] ? remainingRow[0].n : null,
-      sample_corrections: sampleCorrections,
-      sample_deletions: sampleDeletions,
+      note: 'One-time correction. Verifies each redeemed-position row against the market\'s actual gamma settlement instead of trusting cashPnl. A background cron (every 2 min) is also grinding through the full backlog automatically — this call is for on-demand spot-checks, not required to make progress. `remaining` reflects total backlog left, not just this batch.',
+      ...result,
     });
   } catch (e) {
     console.error('[regrade-redeemed-positions]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Background cron: grinds through the redeemed-position correction backlog
+// automatically. Not subject to the public-facing HTTP proxy timeout the way
+// the manual endpoint above is, so it can push a much bigger batch per tick.
+// At ~5000/tick every 2 minutes, a ~262k-row backlog clears in roughly
+// 262000/5000 ≈ 53 ticks ≈ ~1h45m — unattended, no further manual curls.
+const REGRADE_REDEEM_CRON_BATCH = 5000;
+let _regradeRedeemCronRunning = false;
+let _regradeRedeemCronLastRun = null;
+cron.schedule('*/2 * * * *', () => {
+  if (!pool || _regradeRedeemCronRunning) return;
+  _regradeRedeemCronRunning = true;
+  const startedAt = new Date().toISOString();
+  _regradeRedeemedPositionsBatch(REGRADE_REDEEM_CRON_BATCH)
+    .then(result => {
+      _regradeRedeemCronLastRun = { startedAt, finishedAt: new Date().toISOString(), ...result };
+      if (result.checked > 0) {
+        console.log(`[redeem-regrade-cron] checked=${result.checked} corrected=${result.corrected} deleted=${result.deleted_not_actually_resolved} remaining=${result.remaining}`);
+      }
+    })
+    .catch(e => console.error('[redeem-regrade-cron] error:', e.message))
+    .finally(() => { _regradeRedeemCronRunning = false; });
+});
+
+// Inspect cron progress without waiting on a full batch — same pattern as
+// /api/admin/whale-backfill/status.
+app.get('/api/admin/regrade-redeemed-positions/status', requireAdminSecret, async (req, res) => {
+  try {
+    const remainingRow = await dbQuery(
+      `SELECT COUNT(*)::int AS n FROM realized_trades WHERE external_sync_id LIKE 'pm-redeem:%' AND regraded_at IS NULL`
+    ).catch(() => [{ n: null }]);
+    res.json({
+      cron_running: _regradeRedeemCronRunning,
+      last_cron_run: _regradeRedeemCronLastRun,
+      remaining: remainingRow[0] ? remainingRow[0].n : null,
+    });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
