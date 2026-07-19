@@ -12682,6 +12682,263 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
   }
 });
 
+// ── TRADER CARDS ─────────────────────────────────────────────────────────
+// Per the product definition: we track and score traders, we do not promote
+// markets. This is the data layer for the trader-card component (identity,
+// verdict line, score+n, evidence call, form indicator) that replaces the
+// homepage market grid. Everything here is arithmetic over realized_trades —
+// ZERO Anthropic calls, by design (Anthropic credits are off; a verdict that
+// requires an LLM call wouldn't render at all).
+//
+// GATE: this endpoint computes on the CURRENT realized_trades data, which as
+// of this build still includes rows the redeemed-win correction cron hasn't
+// reached yet (~262K-row backlog draining in the background — see
+// SESSION_STATE.md 2026-07-18/19). Every response is stamped
+// `provisional: true` until that cron drains and the top 10 is hand-verified
+// against real polymarket.com profiles. Do not remove the stamp, and do not
+// link this endpoint's consumer page from site nav, until that verification
+// happens — see public/home-traders-preview.html for the enforcement.
+
+// Deterministic keyword classifier — NOT category data we store, because
+// realized_trades only carries market_question text. First matching category
+// wins; order reflects roughly-descending distinctiveness of the vocabulary
+// so a question mentioning both a politician and a coin (rare) lands somewhere
+// defensible rather than double-counting. Approximate by nature; auditable
+// because it's a fixed regex list, not a model call.
+const _CARD_CATEGORY_RULES = [
+  ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell)\b/i],
+  ['politics', /\b(president|election|senate|congress|governor|primary|republican|democrat|impeach|nominee|electoral|midterm|ballot|white house|prime minister)\b/i],
+  ['world', /\b(war|ceasefire|invasion|sanctions|\bnato\b|treaty|nuclear|military strike|troops|coup d'|border conflict)\b/i],
+  ['crypto', /\b(bitcoin|\bbtc\b|ethereum|\beth\b|crypto|altcoin|solana|\bsol\b|defi|\bnft\b|dogecoin|\bxrp\b|stablecoin|memecoin)\b/i],
+  ['sports', /\b(nba|nfl|nhl|mlb|ncaa|ufc|\bmma\b|boxing|soccer|football|basketball|baseball|hockey|tennis|\bgolf\b|\bf1\b|formula 1|olympic|world cup|super bowl|playoff|championship|premier league|champions league|grand slam|wimbledon|masters|\bpga\b|nascar|grand prix)\b/i],
+  ['entertainment', /\b(oscar|grammy|emmy|box office|album|movie|film|celebrity|billboard|premiere)\b/i],
+  ['tech', /\b(openai|chatgpt|\bai model\b|artificial intelligence|spacex|nvidia|\bmeta\b platforms)\b/i],
+];
+function classifyCardCategory(question) {
+  const q = String(question || '');
+  for (const [cat, re] of _CARD_CATEGORY_RULES) if (re.test(q)) return cat;
+  return 'other';
+}
+
+// Rules-based verdict line — thresholds only, no LLM. Ordered cascade: most
+// specific/interesting signal wins. Every branch must be able to fire on a
+// losing trader without the copy reading as false praise — that's the spec's
+// own test ("generate a card for a losing trader; if the honest card looks
+// broken, the design is wrong").
+function computeVerdictLine(s) {
+  const fmtWR = (r) => Math.round(r * 100) + '%';
+  const fmtRoi = (p) => Math.abs(p).toFixed(0) + '%';
+
+  if (s.n < 10) {
+    return 'Just getting started — ' + s.n + ' resolved calls, too early to call a style.';
+  }
+
+  // Small sample, wide swings — the "Up 340% on 12 trades" pattern. Checked
+  // before specialty/trend because high variance is the more honest read on
+  // a thin sample than a specialty claim would be.
+  if (s.n < 40 && s.volatilityStdev != null && s.volatilityStdev >= 1.2) {
+    return (s.roiPct >= 0 ? 'Up ' : 'Down ') + fmtRoi(s.roiPct) + ' on ' + s.n + ' trades — small sample, big swings.';
+  }
+
+  // Specialty divergence — needs 2+ categories with a real sample (n>=5 each)
+  // and a meaningful gap, or it's noise dressed up as a verdict.
+  if (s.specialty && s.specialty.best && s.specialty.worst
+      && s.specialty.best.category !== s.specialty.worst.category
+      && (s.specialty.best.winRate - s.specialty.worst.winRate) >= 0.15) {
+    return 'Sharp on ' + s.specialty.best.category + ', reckless on ' + s.specialty.worst.category + '.';
+  }
+
+  // Recent form diverging from lifetime record.
+  if (s.recentWinRate != null && s.trend) {
+    const gap = s.recentWinRate - s.allTimeWinRate;
+    if (s.trend === 'up' && gap >= 0.12) {
+      return 'Heating up — ' + fmtWR(s.recentWinRate) + ' over the last 90 days, ' + fmtWR(s.allTimeWinRate) + ' lifetime.';
+    }
+    if (s.trend === 'down' && gap <= -0.12) {
+      return 'Cooling off — ' + fmtWR(s.recentWinRate) + ' over the last 90 days, down from ' + fmtWR(s.allTimeWinRate) + ' lifetime.';
+    }
+  }
+
+  // One huge win a while ago, nothing comparable since — a real pattern, not
+  // a flattering one; it's a warning as much as a highlight.
+  if (s.maxTrade && s.maxTrade.roi >= 2.0 && s.maxTrade.daysAgo != null && s.maxTrade.daysAgo >= 45 && s.n <= 30) {
+    return 'One huge win, nothing since.';
+  }
+
+  // Honest negative — this branch exists specifically so a losing trader
+  // gets a true sentence instead of falling through to a neutral-sounding
+  // default that reads like praise by omission.
+  if (s.scorePct < 0) {
+    return 'Down ' + fmtRoi(s.roiPct) + ' across ' + s.n + ' calls — no edge showing yet.';
+  }
+
+  if (s.n >= 30) {
+    return 'Quietly right ' + fmtWR(s.allTimeWinRate) + ' of the time across ' + s.n + ' calls.';
+  }
+
+  return fmtWR(s.allTimeWinRate) + ' across ' + s.n + ' calls.';
+}
+
+// Builds full card data (verdict, evidence, form, specialty) for a set of
+// user_ids, given their already-computed ROI-leaderboard rows (score_pct, n,
+// trend, etc. — reused, not recomputed). One batched realized_trades query
+// for the whole set, grouped in JS, so this stays O(1) round trips regardless
+// of how many cards are requested.
+async function _buildTraderCards(roiRows) {
+  const userIds = roiRows.map(r => r.user_id);
+  if (!userIds.length) return [];
+
+  const tradeRows = await dbQuery(`
+    SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
+           entry_cost_usd, realized_pnl, realized_roi, closed_at
+    FROM realized_trades
+    WHERE user_id = ANY($1::uuid[]) AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+    ORDER BY user_id, closed_at ASC
+  `, [userIds]).catch(e => { console.warn('[trader-cards] trade fetch error:', e.message); return null; });
+  if (tradeRows == null) return null;
+
+  const tradesByUser = new Map();
+  for (const t of tradeRows) {
+    if (!tradesByUser.has(t.user_id)) tradesByUser.set(t.user_id, []);
+    tradesByUser.get(t.user_id).push(t);
+  }
+
+  const now = Date.now();
+  const cards = roiRows.map(row => {
+    const trades = tradesByUser.get(row.user_id) || [];
+    const n = trades.length;
+
+    let wins = 0, losses = 0;
+    let recentWins = 0, recentN = 0;
+    const catStats = new Map(); // category -> { n, wins }
+    const roiSamples = [];
+    let maxTrade = null;
+
+    for (const t of trades) {
+      const pnl = Number(t.realized_pnl);
+      const isWin = pnl > 0;
+      if (isWin) wins++; else if (pnl < 0) losses++;
+
+      const closedMs = new Date(t.closed_at).getTime();
+      const daysAgo = (now - closedMs) / 86400000;
+      if (daysAgo <= 90) { recentN++; if (isWin) recentWins++; }
+
+      const cat = classifyCardCategory(t.market_question);
+      if (!catStats.has(cat)) catStats.set(cat, { n: 0, wins: 0 });
+      const cs = catStats.get(cat);
+      cs.n++; if (isWin) cs.wins++;
+
+      const roi = t.realized_roi != null ? Number(t.realized_roi) : null;
+      if (roi != null) roiSamples.push(Math.min(Math.max(roi, -1.0), ROI_CAP));
+
+      if (!maxTrade || Math.abs(pnl) > Math.abs(maxTrade.pnl)) {
+        maxTrade = { question: t.market_question, side: (t.side || '').toUpperCase(),
+          entry_price: t.entry_price != null ? Number(t.entry_price) : null,
+          exit_price: t.exit_price != null ? Number(t.exit_price) : null,
+          pnl, roi, daysAgo, isWin };
+      }
+    }
+
+    let volatilityStdev = null;
+    if (roiSamples.length >= 3) {
+      const mean = roiSamples.reduce((a, b) => a + b, 0) / roiSamples.length;
+      const variance = roiSamples.reduce((a, b) => a + (b - mean) * (b - mean), 0) / roiSamples.length;
+      volatilityStdev = Math.sqrt(variance);
+    }
+
+    const specialtyCats = [...catStats.entries()]
+      .filter(([, v]) => v.n >= 5)
+      .map(([category, v]) => ({ category, n: v.n, winRate: v.wins / v.n }));
+    let specialty = null;
+    if (specialtyCats.length >= 2) {
+      const sorted = specialtyCats.slice().sort((a, b) => b.winRate - a.winRate);
+      specialty = { best: sorted[0], worst: sorted[sorted.length - 1], all: specialtyCats };
+    }
+
+    const allTimeWinRate = n > 0 ? wins / n : 0;
+    const recentWinRate = recentN >= 3 ? recentWins / recentN : null;
+
+    const stats = {
+      n, scorePct: row.score_pct, roiPct: row.raw_weighted_roi_pct, trend: row.trend,
+      allTimeWinRate, recentWinRate, volatilityStdev, specialty, maxTrade,
+    };
+    const verdict = computeVerdictLine(stats);
+
+    // Form indicator — last 8 closed trades, oldest→newest, for a sparkline;
+    // plus the current streak read off the tail (most recent trade).
+    const recentTrades = trades.slice(-8);
+    const form = recentTrades.map(t => {
+      const pnl = Number(t.realized_pnl);
+      return pnl > 0 ? 1 : pnl < 0 ? 0 : 0.5;
+    });
+    let streak = { type: null, count: 0 };
+    if (form.length) {
+      const last = form[form.length - 1];
+      let count = 0;
+      for (let i = form.length - 1; i >= 0 && form[i] === last; i--) count++;
+      streak = { type: last === 1 ? 'win' : last === 0 ? 'loss' : 'push', count };
+    }
+
+    const evidence = maxTrade ? {
+      question: maxTrade.question,
+      side: maxTrade.side,
+      entry_price: maxTrade.entry_price,
+      exit_price: maxTrade.exit_price,
+      result: maxTrade.isWin ? 'win' : 'loss',
+      roi_pct: maxTrade.roi != null ? Math.round(maxTrade.roi * 1000) / 10 : null,
+      multiplier: maxTrade.roi != null && maxTrade.roi >= 1 ? Math.round((1 + maxTrade.roi) * 10) / 10 : null,
+      pnl_usd: Math.round(maxTrade.pnl * 100) / 100,
+      days_ago: maxTrade.daysAgo != null ? Math.round(maxTrade.daysAgo) : null,
+    } : null;
+
+    return {
+      user_id: row.user_id,
+      display_name: row.display_name,
+      username: row.username,
+      polymarket_address: row.polymarket_address,
+      whale_rank: row.whale_rank,
+      n, score_pct: row.score_pct, raw_weighted_roi_pct: row.raw_weighted_roi_pct,
+      total_capital_usd: row.total_capital_usd, trend: row.trend,
+      verdict, evidence, form, streak,
+      specialty: specialty ? {
+        best: { category: specialty.best.category, win_rate_pct: Math.round(specialty.best.winRate * 1000) / 10, n: specialty.best.n },
+        worst: { category: specialty.worst.category, win_rate_pct: Math.round(specialty.worst.winRate * 1000) / 10, n: specialty.worst.n },
+      } : null,
+      win_rate_pct: Math.round(allTimeWinRate * 1000) / 10,
+      provisional: true,
+    };
+  });
+
+  return cards;
+}
+
+app.get('/api/trader-cards', async (req, res) => {
+  try {
+    if (!pool) return res.json({ cards: [], provisional: true });
+    const window = ['30d', '90d', 'all'].includes(req.query.window) ? req.query.window : 'all';
+    const minN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.min_n, 10) || ROI_MIN_N_FLOOR);
+    const limit = Math.min(24, parseInt(req.query.limit, 10) || 12);
+
+    const computed = await _computeRoiLeaderboard(window, minN);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+
+    let rows = computed.rows;
+    if (req.query.user_id) {
+      rows = rows.filter(r => r.user_id === req.query.user_id);
+    } else {
+      rows = rows.slice(0, limit);
+    }
+    if (!rows.length) return res.json({ cards: [], provisional: true });
+
+    const cards = await _buildTraderCards(rows);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+    res.json({ cards, provisional: true, provisional_note: 'Redeemed-win correction cron has not fully drained and this data has not been hand-verified against polymarket.com. Do not treat any ranking here as final.' });
+  } catch (e) {
+    console.error('[trader-cards]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── ROI leaderboard audit (read-only) ───────────────────────────────────────
 // Investigates a live report that leaderboard #1 (gloriafoster) is actually
 // down -$117,832 on Polymarket's own profile while our ROI score ranks them

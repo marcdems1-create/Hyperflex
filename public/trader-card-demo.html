@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trader Card — design review (demo data)</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/trader-card.css">
+<style>
+  body{margin:0;background:#0e0e15;color:#f0f0f5;font-family:'Inter',-apple-system,sans-serif;padding:32px;}
+  h1{font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,240,245,.5);margin:0 0 4px;}
+  .note{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.35);margin-bottom:28px;}
+  .row-label{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,240,245,.4);margin:36px 0 14px;}
+  .row-label.loser{color:#ff4d6a;}
+  .grid{display:flex;gap:18px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<h1>Trader Card — design review</h1>
+<div class="note">DEMO DATA — hardcoded mocks, no API/DB calls. Rendered with the exact production trader-card.js/.css.</div>
+
+<div class="row-label">Hero variant</div>
+<div class="grid" id="heroRow"></div>
+
+<div class="row-label">Feed variant</div>
+<div class="grid" id="feedRow"></div>
+
+<div class="row-label">Compact variant</div>
+<div class="grid" id="compactRow"></div>
+
+<div class="row-label loser">The honesty test — losing trader, all three variants</div>
+<div class="grid" id="loserRow"></div>
+
+<script src="/trader-card.js"></script>
+<script>
+var DEMO_CARDS = [
+  // 1. Specialist — "Sharp on X, reckless on Y"
+  {
+    user_id: 'demo-1', display_name: 'macrowolf', username: 'macrowolf',
+    polymarket_address: '0x71c9a4b8f2d1e6a3c0b5f9e7d2a1c8b4f6e3d9a0', whale_rank: 4,
+    n: 61, score_pct: 38.2, raw_weighted_roi_pct: 41.6, total_capital_usd: 184000, trend: 'flat',
+    verdict: 'Sharp on macro, reckless on sports.',
+    evidence: { question: 'Will the Fed cut rates at the June FOMC meeting?', side: 'BUY', entry_price: 0.22, exit_price: 1.0, result: 'win', roi_pct: 354.5, multiplier: 4.5, pnl_usd: 3120, days_ago: 12 },
+    form: [1,1,0,1,1,1,0,1], streak: { type: 'win', count: 2 },
+    specialty: { best: { category: 'macro', win_rate_pct: 71.4, n: 21 }, worst: { category: 'sports', win_rate_pct: 31.3, n: 16 } },
+    win_rate_pct: 57.4, provisional: true,
+  },
+  // 2. Small sample, big swings
+  {
+    user_id: 'demo-2', display_name: 'longshot99', username: 'longshot99',
+    polymarket_address: '0x92a4c7d1b3e8f0a2c9d6b4e1f7a3c0d8b5e2f9a1', whale_rank: 17,
+    n: 12, score_pct: 61.0, raw_weighted_roi_pct: 340.2, total_capital_usd: 9400, trend: 'up',
+    verdict: 'Up 340% on 12 trades — small sample, big swings.',
+    evidence: { question: 'Will Iran and Israel agree to a ceasefire before August?', side: 'BUY', entry_price: 0.14, exit_price: 1.0, result: 'win', roi_pct: 614.3, multiplier: 7.1, pnl_usd: 890, days_ago: 4 },
+    form: [0,1,0,1,1,1,1,1], streak: { type: 'win', count: 5 },
+    specialty: null, win_rate_pct: 66.7, provisional: true,
+  },
+  // 3. Consistent generalist, large n
+  {
+    user_id: 'demo-3', display_name: 'steadyhand', username: 'steadyhand',
+    polymarket_address: '0xa3f8c1d9b6e2f4a0c7d3b9e6f1a8c4d0b7e3f9a2', whale_rank: 2,
+    n: 214, score_pct: 22.7, raw_weighted_roi_pct: 24.1, total_capital_usd: 612000, trend: 'flat',
+    verdict: 'Quietly right 68% of the time across 214 calls.',
+    evidence: { question: 'Will Bitcoin close above $100,000 on any day this month?', side: 'BUY', entry_price: 0.61, exit_price: 1.0, result: 'win', roi_pct: 63.9, multiplier: null, pnl_usd: 4400, days_ago: 21 },
+    form: [1,1,0,1,1,0,1,1], streak: { type: 'win', count: 2 },
+    specialty: null, win_rate_pct: 68.2, provisional: true,
+  },
+  // 4. One huge win, nothing since
+  {
+    user_id: 'demo-4', display_name: 'onehitwonder', username: null,
+    polymarket_address: '0xc4d9f2a7b1e6c0a3d8b5f2e9c6a1d7b4f0e3c8a5', whale_rank: 39,
+    n: 18, score_pct: 4.1, raw_weighted_roi_pct: 9.8, total_capital_usd: 26000, trend: 'down',
+    verdict: 'One huge win, nothing since.',
+    evidence: { question: 'Will the incumbent win reelection in the November general?', side: 'BUY', entry_price: 0.09, exit_price: 1.0, result: 'win', roi_pct: 1011.1, multiplier: 11.1, pnl_usd: 8900, days_ago: 118 },
+    form: [1,0,0,1,0,0,0,0], streak: { type: 'loss', count: 4 },
+    specialty: null, win_rate_pct: 33.3, provisional: true,
+  },
+  // 5. THE HONESTY TEST — losing trader
+  {
+    user_id: 'demo-5', display_name: 'downbad', username: 'downbad',
+    polymarket_address: '0xf0e3d8a5c1b7f4e0a9d6c2b8f5e1a7d3c0b6f9e2', whale_rank: 88,
+    n: 47, score_pct: -18.6, raw_weighted_roi_pct: -21.3, total_capital_usd: 71000, trend: 'down',
+    verdict: 'Down 21% across 47 calls — no edge showing yet.',
+    evidence: { question: 'Will the Lakers make the playoffs this season?', side: 'BUY', entry_price: 0.58, exit_price: 0.0, result: 'loss', roi_pct: -100.0, multiplier: null, pnl_usd: -2610, days_ago: 9 },
+    form: [0,0,1,0,0,1,0,0], streak: { type: 'loss', count: 2 },
+    specialty: { best: { category: 'macro', win_rate_pct: 55.0, n: 9 }, worst: { category: 'sports', win_rate_pct: 26.3, n: 19 } },
+    win_rate_pct: 34.0, provisional: true,
+  },
+];
+
+document.getElementById('heroRow').innerHTML = DEMO_CARDS.slice(0,3).map(function(c){ return HFXTraderCard.render(c, 'hero'); }).join('');
+document.getElementById('feedRow').innerHTML = DEMO_CARDS.map(function(c){ return HFXTraderCard.render(c, 'feed'); }).join('');
+document.getElementById('compactRow').innerHTML = DEMO_CARDS.map(function(c){ return HFXTraderCard.render(c, 'compact'); }).join('');
+
+var loser = DEMO_CARDS[4];
+document.getElementById('loserRow').innerHTML =
+  HFXTraderCard.render(loser, 'hero') + HFXTraderCard.render(loser, 'feed') + HFXTraderCard.render(loser, 'compact');
+</script>
+</body>
+</html>

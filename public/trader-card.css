@@ -1,0 +1,113 @@
+/* ── TRADER CARD — shared component ───────────────────────────────────────
+   One design, three densities (hero / feed / compact). Used on the homepage,
+   in feeds, in search results, and as the share artifact. Do not fork this
+   file per-surface — add a variant class instead.
+
+   Design brief (see tradercardsspec.md):
+   - The verdict line is the hero. Big type, top of card, screenshot-first.
+   - Score + n render as ONE visual unit — never split, never shown alone.
+   - Color carries meaning, not decoration: muted green/red, not neon.
+   - Not a financial table. No dense stat grids. */
+
+.tcard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #111118;
+  border: 1px solid #1e1e2a;
+  border-radius: 14px;
+  padding: 20px;
+  text-decoration: none;
+  color: #f0f0f5;
+  transition: border-color .15s, transform .15s;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+.tcard:hover { border-color: #33333f; transform: translateY(-2px); }
+
+/* ── identity row ── */
+.tcard-identity { display: flex; align-items: center; gap: 10px; }
+.tcard-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800;
+  color: #0e0e15;
+}
+.tcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard-rank {
+  margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+  color: rgba(240,240,245,.35); letter-spacing: .06em; flex-shrink: 0;
+}
+
+/* ── the verdict line — the hero ── */
+.tcard-verdict {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 20px; font-weight: 800; line-height: 1.28; letter-spacing: -.01em;
+  color: #fff;
+}
+.tcard-compact .tcard-verdict { font-size: 15px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.tcard-feed .tcard-verdict { font-size: 17px; }
+
+/* ── score + n — one inseparable unit ── */
+.tcard-scoreline {
+  display: inline-flex; align-items: baseline; gap: 8px; width: fit-content;
+  padding: 7px 12px; border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.tcard-scoreline.is-positive { background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.22); }
+.tcard-scoreline.is-negative { background: rgba(255,77,106,.07); border: 1px solid rgba(255,77,106,.2); }
+.tcard-score { font-size: 18px; font-weight: 800; }
+.tcard-scoreline.is-positive .tcard-score { color: #00e68a; }
+.tcard-scoreline.is-negative .tcard-score { color: #ff4d6a; }
+.tcard-n { font-size: 11px; color: rgba(240,240,245,.4); }
+
+/* ── evidence — one call, shown vividly ── */
+.tcard-evidence {
+  border-left: 2px solid rgba(240,240,245,.12);
+  padding: 2px 0 2px 12px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.tcard-evidence-line {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+  color: rgba(240,240,245,.85);
+}
+.tcard-evidence-line .mult-win { color: #00e68a; }
+.tcard-evidence-line .mult-loss { color: #ff4d6a; }
+.tcard-evidence-q {
+  font-size: 12px; color: rgba(240,240,245,.45); line-height: 1.4;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+
+/* ── form indicator — visual, not a number ── */
+.tcard-form { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.tcard-sparkline { flex-shrink: 0; display: block; }
+.tcard-streak {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+  letter-spacing: .04em; padding: 3px 8px; border-radius: 10px;
+}
+.tcard-streak.is-win { color: #00e68a; background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); }
+.tcard-streak.is-loss { color: #ff4d6a; background: rgba(255,77,106,.07); border: 1px solid rgba(255,77,106,.18); }
+.tcard-streak.is-push { color: rgba(240,240,245,.4); background: rgba(240,240,245,.05); border: 1px solid rgba(240,240,245,.1); }
+
+/* ── provisional stamp — must be impossible to accidentally omit ── */
+.tcard-provisional {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: #f59e0b;
+  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.22);
+  border-radius: 5px; padding: 3px 7px; width: fit-content;
+}
+
+/* ── variants ── */
+.tcard-hero { width: 100%; max-width: 480px; padding: 26px; gap: 18px; }
+.tcard-hero .tcard-avatar { width: 48px; height: 48px; font-size: 16px; }
+.tcard-hero .tcard-verdict { font-size: 26px; }
+
+.tcard-feed { flex-shrink: 0; width: 300px; }
+
+.tcard-compact { flex-shrink: 0; width: 220px; padding: 14px; gap: 10px; }
+.tcard-compact .tcard-evidence, .tcard-compact .tcard-provisional { display: none; }
+.tcard-compact .tcard-avatar { width: 28px; height: 28px; font-size: 11px; }
+
+@media (max-width: 640px) {
+  .tcard-hero { max-width: 100%; padding: 20px; }
+  .tcard-hero .tcard-verdict { font-size: 21px; }
+}
