@@ -461,6 +461,15 @@ footer{
   .mcard-yes-pct, .mcard-no-pct { font-size: 19px; }
   .mcard-yes-pct small, .mcard-no-pct small { font-size: 11px; }
 
+  /* secondary cards — AI Signals / Just Resolved / Following / Community Takes / Fade the Public.
+     These build their markup as inline-styled template literals (not .mcard classes), so the
+     card-width fix never reached their text: inline font-size wins over a plain class rule, but
+     NOT over an !important one, so these override in place without touching the JS templates. */
+  .acard-kicker { font-size: 11px !important; }
+  .acard-q      { font-size: 15px !important; line-height: 1.42; }
+  .acard-meta   { font-size: 14px !important; }
+  .acard-sub    { font-size: 11px !important; }
+
   /* wide (featured) cards */
   .wcard-q        { font-size: 22px !important; line-height: 1.22; }
   .wcard-category { font-size: 12px; }
@@ -484,6 +493,7 @@ footer{
   .mcard-q     { font-size: 20px !important; }
   .wcard-q     { font-size: 24px !important; }
   .ct-headline { font-size: 34px !important; }
+  .acard-q     { font-size: 16px !important; }
 }
 
 /* ── Desktop layout: fill the viewport, kill the dead space ──────────────────
@@ -1049,7 +1059,7 @@ footer{
   </div>
 
   <!-- WHALE MOVES -->
-  <div class="row-section">
+  <div class="row-section" id="whaleMovesSection">
     <div class="row-head">
       <span class="row-title">Whale Moves</span>
       <span class="row-tag row-tag-whale">BIG MONEY</span>
@@ -1432,10 +1442,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   var whaleMarkets = byVol.filter(function(m){return Number(m.volume||0)>=100000;}).slice(8,16);
   if (whaleMarkets.length < 3) whaleMarkets = byVol.filter(function(m){return Number(m.volume||0)>=50000;}).slice(0,8);
   var rowWhale = document.getElementById('rowWhale');
-  rowWhale.innerHTML = whaleMarkets.map(function(m){
-    return buildCard(m,null,'mcard-pill-whale','WHALE');
-  }).join('');
-  setTimeout(function(){patchImages(rowWhale);},0);
+  var whaleMovesSection = document.getElementById('whaleMovesSection');
+  if (!whaleMarkets.length) {
+    if (whaleMovesSection) whaleMovesSection.style.display = 'none';
+  } else {
+    rowWhale.innerHTML = whaleMarkets.map(function(m){
+      return buildCard(m,null,'mcard-pill-whale','WHALE');
+    }).join('');
+    setTimeout(function(){patchImages(rowWhale);},0);
+  }
 
   /* featured wide — 6 */
   var cats = ['US POLITICS','SPORTS','CRYPTO','ELECTIONS','MACRO','AI'];
@@ -1510,13 +1525,13 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         var ageStr = ageMin!=null ? (ageMin<60?ageMin+'m ago':Math.round(ageMin/60)+'h ago') : '';
         return '<a href="'+mktUrl+'" style="flex-shrink:0;width:220px;height:310px;background:#111118;border:1px solid rgba(168,85,247,.2);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.5)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.2)\';this.style.transform=\'\'">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;">'
-            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.18em;color:#a855f7;text-transform:uppercase;">AI SIGNAL</span>'
-            +(ageStr?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+ageStr+'</span>':'')
+            +'<span class="acard-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.18em;color:#a855f7;text-transform:uppercase;">AI SIGNAL</span>'
+            +(ageStr?'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+ageStr+'</span>':'')
           +'</div>'
-          +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+(sig.question||'').slice(0,120)+'</div>'
-          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:'+sideColor+';">'+side+' · Edge '+sig.edge_rating+'/10</div>'
-          +'<div style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+(sig.rationale||'').slice(0,90)+'</div>'
-          +'<div style="margin-top:auto;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#a855f7;">Trade this →</div>'
+          +'<div class="acard-q" style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+(sig.question||'').slice(0,120)+'</div>'
+          +'<div class="acard-meta" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:'+sideColor+';">'+side+' · Edge '+sig.edge_rating+'/10</div>'
+          +'<div class="acard-sub" style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+(sig.rationale||'').slice(0,90)+'</div>'
+          +'<div class="acard-meta" style="margin-top:auto;font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#a855f7;">Trade this →</div>'
         +'</a>';
       }).join('');
       document.getElementById('aiSignalsSection').style.display='';
@@ -1549,15 +1564,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
           var correctBadge=correct===true?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;background:rgba(0,230,138,.1);border:1px solid rgba(0,230,138,.25);color:#00e68a;margin-left:4px;">✓ CORRECT</span>':correct===false?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);color:#ff4d6a;margin-left:4px;">× WRONG</span>':'';
           return '<a href="'+href+'" style="flex-shrink:0;width:220px;height:280px;background:#111118;border:1px solid rgba(77,159,255,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(77,159,255,.4)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(77,159,255,.15)\';this.style.transform=\'\'">'
             +'<div style="display:flex;align-items:center;gap:6px;">'
-              +'<a href="/m/'+userId+'" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(77,159,255,.8);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">'+user+'</a>'
-              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.created_at)+'</span>'
+              +'<a href="/m/'+userId+'" class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(77,159,255,.8);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">'+user+'</a>'
+              +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.created_at)+'</span>'
             +'</div>'
-            +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+correctBadge+'</div>'
-            +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
-            +(t.thesis?'<div style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+t.thesis.slice(0,80)+'</div>':'')
+            +'<div class="acard-meta" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+correctBadge+'</div>'
+            +'<div class="acard-q" style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
+            +(t.thesis?'<div class="acard-sub" style="font-size:10px;color:rgba(240,240,245,.4);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+t.thesis.slice(0,80)+'</div>':'')
             +'<div style="display:flex;gap:10px;margin-top:auto;">'
-              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
-              +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
+              +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
+              +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
             +'</div>'
           +'</a>';
         });
@@ -1594,15 +1609,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         var href = t.market_slug ? '/market/'+t.market_slug : '/feed';
         return '<a href="'+href+'" style="flex-shrink:0;width:220px;height:280px;background:'+outcomeBg+';border:1px solid '+outcomeBorder+';border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\''+outcomeColor+'55\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\''+outcomeBorder+'\';this.style.transform=\'\'">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;">'
-            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:'+outcomeColor+';letter-spacing:.1em;">'+outcomeIcon+' '+outcomeLabel+'</span>'
-            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.resolved_at)+'</span>'
+            +'<span class="acard-meta" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:'+outcomeColor+';letter-spacing:.1em;">'+outcomeIcon+' '+outcomeLabel+'</span>'
+            +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">'+timeAgo(t.resolved_at)+'</span>'
           +'</div>'
-          +'<div style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
-          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</div>'
-          +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+user+'</div>'
+          +'<div class="acard-q" style="font-size:12px;color:rgba(240,240,245,.75);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">'+q+'</div>'
+          +'<div class="acard-meta" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</div>'
+          +'<div class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+user+'</div>'
           +'<div style="display:flex;gap:8px;margin-top:auto;">'
-            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
-            +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
+            +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↑ '+(t.agree_count||0)+'</span>'
+            +'<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">↓ '+(t.disagree_count||0)+'</span>'
           +'</div>'
         +'</a>';
       }).join('');
@@ -1674,15 +1689,15 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
           var href = p.market_slug ? '/market/' + p.market_slug : (p.content_url || '#');
           var side = (p.predicted_side || '').toUpperCase();
           var sideColor = side === 'YES' ? '#00e68a' : side === 'NO' ? '#ff4d6a' : 'rgba(240,240,245,.4)';
-          var matchBadge = side ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:' + sideColor + ';">' + side + '</span>' : '';
+          var matchBadge = side ? '<span class="acard-meta" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:800;color:' + sideColor + ';">' + side + '</span>' : '';
           return '<a href="' + href + '" target="_blank" rel="noopener" style="flex-shrink:0;width:240px;height:180px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;overflow:hidden;" onmouseover="this.style.borderColor=\'rgba(168,85,247,.35)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(168,85,247,.15)\';this.style.transform=\'\'">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
-              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:' + pColor + ';letter-spacing:.12em;">' + pLabel + '</span>'
+              + '<span class="acard-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:' + pColor + ';letter-spacing:.12em;">' + pLabel + '</span>'
               + matchBadge
             + '</div>'
-            + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.5);flex-shrink:0;">@' + esc(handle) + '</div>'
-            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">"' + esc(snippet) + '"</div>'
-            + (mktQ ? '<div style="font-size:10px;color:rgba(240,240,245,.35);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0;margin-top:auto;">' + esc(mktQ) + '</div>' : '')
+            + '<div class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:rgba(240,240,245,.5);flex-shrink:0;">@' + esc(handle) + '</div>'
+            + '<div class="acard-q" style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">"' + esc(snippet) + '"</div>'
+            + (mktQ ? '<div class="acard-sub" style="font-size:10px;color:rgba(240,240,245,.35);line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0;margin-top:auto;">' + esc(mktQ) + '</div>' : '')
           + '</a>';
         }).join('');
         document.getElementById('influencerTakesSection').style.display = '';
@@ -1714,21 +1729,21 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
           var volStr = vol >= 1e6 ? '$' + (vol/1e6).toFixed(1) + 'M' : vol >= 1e3 ? '$' + Math.round(vol/1e3) + 'K' : '';
           return '<a href="' + href + '" style="flex-shrink:0;width:240px;height:280px;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.18);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:#f0f0f5;transition:border-color .15s,transform .15s;scroll-snap-align:start;" onmouseover="this.style.borderColor=\'rgba(201,146,13,.4)\';this.style.transform=\'scale(1.03)\'" onmouseout="this.style.borderColor=\'rgba(201,146,13,.18)\';this.style.transform=\'\'">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:#c9920d;letter-spacing:.12em;">CONTRARIAN EDGE</span>'
-              + '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">' + whaleCount + ' whales</span>'
+              + '<span class="acard-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;color:#c9920d;letter-spacing:.12em;">CONTRARIAN EDGE</span>'
+              + '<span class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">' + whaleCount + ' whales</span>'
             + '</div>'
-            + '<div style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">' + esc(q) + '</div>'
+            + '<div class="acard-q" style="font-size:12px;color:rgba(240,240,245,.85);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">' + esc(q) + '</div>'
             + '<div style="display:flex;flex-direction:column;gap:4px;">'
-              + '<div style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
+              + '<div class="acard-meta" style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
                 + '<span style="color:rgba(240,240,245,.45);">Whales</span>'
                 + '<span style="color:' + whaleSideColor + ';font-weight:700;">' + whaleSide + '</span>'
               + '</div>'
-              + (crowdPct != null ? '<div style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
+              + (crowdPct != null ? '<div class="acard-meta" style="display:flex;justify-content:space-between;font-family:\'JetBrains Mono\',monospace;font-size:10px;">'
                 + '<span style="color:rgba(240,240,245,.45);">Crowd</span>'
                 + '<span style="color:rgba(240,240,245,.5);">' + crowdPct + '%</span>'
               + '</div>' : '')
             + '</div>'
-            + (volStr ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">' + volStr + ' vol</div>' : '')
+            + (volStr ? '<div class="acard-sub" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.25);">' + volStr + ' vol</div>' : '')
           + '</a>';
         }).join('');
         document.getElementById('fadePublicSection').style.display = '';
