@@ -49,6 +49,27 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-19 (PRODUCT DEFINITION LOCKED — trader scoreboard, not market browser)
+
+**Marc locked the product definition. It is now the top section of CLAUDE.md and governs every feature decision. Read it before building anything.**
+
+**Hyperflex is an on-chain trader scoreboard. We track and score traders. We do NOT promote markets.**
+- Homepage promotes **people** — best traders, their scores, their records. Markets are evidence of a call, never the headline.
+- Venue order: **Polymarket first, Hyperliquid second**, same scoring layer across both.
+- **A win never appears naked** — score + n travel with every showcased trade, everywhere.
+
+**Consequence for existing UI:** the current homepage is largely the WRONG page under this definition — "Hot Right Now", "Closing Soon", "Events in Focus", market carousels are all market-browsing surfaces. They come off the homepage and get replaced by trader rankings + trader cards. **Do not spend more time polishing market-grid layout** — six rounds of desktop font/sizing patches were spent on a page that's being replaced. (Desktop type is still inconsistent across widgets; each is separately hardcoded. If it's worth fixing at all it needs ONE pass applying a single type scale to every hardcoded font-size in home.html, or a designer with the browser open — Code's sandbox is hard-blocked from hyperflex.network by proxy 403 and cannot visually verify.)
+
+**Open question for next session:** does the homepage lead with a ranked leaderboard table (Bloomberg-style) or trader cards with verdict lines (social-style)? Marc hasn't answered yet. Both are trader-first.
+
+**Gates that still block the build (all three in CLAUDE.md):**
+1. **Do not promote any trader** until the redeemed-win correction cron drains (~262K rows) AND the new top 10 is hand-verified against real polymarket.com profiles, all-time window.
+2. **No Hyperliquid work** until the Polymarket grader is defensible. Perps = second grading engine (entry→exit, leverage, funding), not a new data source.
+3. **Publish nothing from the grader.** Latest: **n=83, 53.0% — BELOW the n≥30/58% gate.** Trend is falling as n grows (62.5%@32 → 58.5%@41 → 53%@83) — small-sample regression toward true value. The "smart money is predictably right" premise is weaker than assumed and needs re-examining once the correction finishes.
+
+**Buildable NOW while the cron drains:** the trader-first structure — homepage layout, leaderboard surface, trader card component, profile page. Build the container; don't trust the contents until gate 1 clears.
+
+
 ## 2026-07-18 (Wallet ROI leaderboard — redeemed-position ingestion bug found & fixed; trader-showcase spec locked, gated on backlog clearing)
 
 **Shipped (with hashes):**

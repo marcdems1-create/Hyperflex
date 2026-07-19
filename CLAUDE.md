@@ -4,11 +4,37 @@
 >
 > **🔁 Cross-session handoff: also read SESSION_STATE.md at session start, and append a fresh entry at session end.** Both Claude instances (strategy-Claude and Code) coordinate through that file — active blockers, queued work order, open questions, and process lessons live across sessions there. Marc is the kicker-off and the picker-of-next-item, not the per-message relay; SESSION_STATE.md is the relay.
 
-## 🎯 The mantra (read before every feature decision)
+## 🎯 WHAT HYPERFLEX IS (read before every feature decision — this governs everything)
 
-**HYPERFLEX is the industry standard for building on top of Polymarket.** Every feature answers one question: *does this help someone build a following through demonstrated ROI?* If the answer isn't yes, don't ship it.
+**HYPERFLEX is an on-chain trader scoreboard. We track and score traders. We do not promote markets.**
 
-Polymarket is the only live data source. Kalshi/Manifold integrations were dropped April 30 in the Polymarket-native pivot — any old reference to "all 3 platforms" or Kalshi gating is stale.
+On-chain trading has no honest scoreboard. Everyone screenshots wins and deletes losses; every "alpha" caller is unfalsifiable because nobody keeps receipts. Hyperflex is where a trader's real record exists — wins *and* losses, graded against what actually happened, permanent and public.
+
+### The three rules that decide every feature
+
+1. **Traders are the product. Markets are evidence, never the headline.**
+   The homepage promotes *people* — the best traders, their scores, their records. A market appears only as proof of a call ("they bought this at 14¢"). If a surface leads with markets instead of traders, it is the wrong surface.
+
+2. **Venue order: Polymarket first, Hyperliquid second.** Same scoring layer across both. Polymarket is venue #1, NOT the identity. See the sequencing gate below.
+
+3. **A win never appears naked.** Every showcased trade carries the trader's score and n. "0x5d18 hit 12x on Iran ceasefire — though they're down 18% lifetime across 89 trades" is a *better* card than the win alone. No competitor will ship that second clause. It is the entire moat.
+
+### What this rules OUT (do not build, do not polish)
+- Market-browsing surfaces as primary UI: "Hot Right Now", "Closing Soon", "Events in Focus", market carousels, trending-market grids. Polymarket already does this and anyone can copy it.
+- Any leaderboard, ranking, or showcase where the score is not independently verified.
+- Follower counts as a prominent metric (popularity ≠ skill), or any "trust score" blending performance with social signals.
+- Hiding, collapsing, or de-emphasizing losses anywhere.
+
+### ⛔ Sequencing gates — non-negotiable
+
+**Gate 1 — no promoting traders on unverified scores.** The `redeemed-win` ingestion bug (found 2026-07-18) was recording *losing* bets as wins: four different players "winning" the same NFL MVP, four countries "winning" the same World Cup, positions "redeemed" for 2028 elections. A correction cron is grinding ~262K rows. **Until it drains AND the new top 10 is hand-verified against real polymarket.com profiles (all-time window), do not promote any trader anywhere.** Promoting fabricated winners on the product that exists to expose fabricated records is the one failure this cannot survive.
+
+**Gate 2 — no second venue until the first grader is defensible.** Hyperliquid is venue #2 and it is DOCUMENTED, NOT ACTIVE. Perps have no resolution event — a trade is entry→exit with leverage, funding, and partial fills. That is a **second grading engine**, not a new data source. Do not scope, schedule, or let it leak into endpoint design or copy until the Polymarket grader produces a number we can defend.
+
+**Gate 3 — publish nothing derived from the grader until it clears the bar.** Current standing gate: n≥30 AND hit_rate≥58%. Latest reading: **n=83, 53.0% — BELOW the gate.** The trajectory is falling as n grows (62.5%@32 → 58.5%@41 → 53%@83), which is a small-sample number regressing toward its true value. Do not publish the edge number, do not touch the landing page, no founder posting.
+
+### The discipline that makes this real
+**Every number in this system that has been hand-checked against the outside world has been wrong** — the 23.6% edge rate (resolver bug), the frozen matcher, the fabricated leaderboard wins. Every one passed internal consistency checks first (`flags: []`, `ratio: 1`). **Internal consistency is not truth.** Verify against reality before trusting or shipping any number. A track-record company that fudges its own track record has no product — the integrity is not a feature, it IS the moat.
 
 ## 🤝 Multi-Claude workflow contract
 
@@ -16,6 +42,8 @@ Multiple Claude instances may work this repo in parallel. Two non-negotiable rul
 
 1. **No "shipped" claims without a verifiable commit hash.** Every "I shipped X" reply must include the commit hash and confirm `git push` succeeded. If you haven't pushed, you haven't shipped — say "drafted, not pushed" instead. We learned this the hard way mid-Phase 2d.
 2. **Verify before describing.** Before saying what shipped, run `git log origin/<branch> --oneline -1` and quote the hash you see on origin. If your local HEAD ≠ origin, push first.
+3. **Log SESSION_STATE.md proactively, during the session — not at the end, not on request.** Any material finding, shipped fix, changed number, or reversed decision gets written down when it happens. Sessions get cut off; unlogged findings are lost. The resolver-bug discovery (the most important finding in this project) sat in a chat window for hours before anyone wrote it down.
+4. **Re-read the product definition at the top of this file before proposing or building anything.** If a request would build a market-browsing surface, promote an unverified trader, or start venue #2, say so and cite the gate.
 
 ## ⛔ server.js middleware order rule (boot-crash prevention)
 
