@@ -470,6 +470,11 @@ footer{
   .acard-meta   { font-size: 14px !important; }
   .acard-sub    { font-size: 11px !important; }
 
+  /* Take of the Day / Today's Challenge — same inline-font-size problem, different widgets. */
+  .tod-kicker { font-size: 12px !important; }
+  .tod-title  { font-size: 20px !important; line-height: 1.32; }
+  .tod-label  { font-size: 15px !important; }
+
   /* wide (featured) cards */
   .wcard-q        { font-size: 22px !important; line-height: 1.22; }
   .wcard-category { font-size: 12px; }
@@ -526,6 +531,12 @@ footer{
   /* quiz banner: align to the content column (it lives outside .rows-wrap), trim padding.
      The .challenge-teaser already aligns via its 48px inset inside the capped .rows-wrap. */
   #quizBannerWrap { max-width: min(2040px, 95vw) !important; padding: 16px 48px 0 !important; }
+
+  /* Take-of-the-Day / Daily Challenge: the comment above claimed these were already
+     tightened, but only #quizBannerWrap's padding actually was — margin-bottom here
+     was untouched, stacking with the tape and quiz-banner padding into a large void. */
+  #totdSection     { margin-bottom: 16px !important; }
+  #daily-challenge { margin-bottom: 16px !important; }
 
   /* bigger cards — ~4 large tiles per row, taller poster bodies */
   .row-scroll { gap: 18px; }
@@ -680,14 +691,14 @@ footer{
 <!-- ── TAKE OF THE DAY ── -->
 <div id="totdSection" style="display:none;margin-bottom:24px;">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-    <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a855f7;">⚡ TAKE OF THE DAY</span>
-    <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">Most agreed take · 24h</span>
-    <a href="/feed" style="font-family:var(--mono);font-size:9px;color:rgba(168,85,247,.7);text-decoration:none;margin-left:auto;">See feed →</a>
+    <span class="tod-kicker" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a855f7;">⚡ TAKE OF THE DAY</span>
+    <span class="tod-kicker" style="font-family:var(--mono);font-size:9px;color:var(--muted);">Most agreed take · 24h</span>
+    <a href="/feed" class="tod-kicker" style="font-family:var(--mono);font-size:9px;color:rgba(168,85,247,.7);text-decoration:none;margin-left:auto;">See feed →</a>
   </div>
   <div id="totdCard" style="background:#111118;border:1px solid rgba(168,85,247,.2);border-left:3px solid #a855f7;border-radius:10px;padding:18px 20px;cursor:pointer;transition:border-color .15s;" onclick="window._totdHref&&(window.location.href=window._totdHref)" onmouseover="this.style.borderColor='rgba(168,85,247,.5)'" onmouseout="this.style.borderColor='rgba(168,85,247,.2)'">
     <div id="totdMeta" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"></div>
-    <div id="totdQ" style="font-size:16px;font-weight:700;color:#f0f0f5;line-height:1.35;margin-bottom:10px;"></div>
-    <div id="totdThesis" style="font-size:13px;color:rgba(240,240,245,.5);line-height:1.5;margin-bottom:12px;display:none;"></div>
+    <div id="totdQ" class="tod-title" style="font-size:16px;font-weight:700;color:#f0f0f5;line-height:1.35;margin-bottom:10px;"></div>
+    <div id="totdThesis" class="tod-label" style="font-size:13px;color:rgba(240,240,245,.5);line-height:1.5;margin-bottom:12px;display:none;"></div>
     <div id="totdStats" style="display:flex;align-items:center;gap:14px;"></div>
   </div>
 </div>
@@ -708,10 +719,10 @@ footer{
 
     var meta = document.getElementById('totdMeta');
     meta.innerHTML =
-      '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</span>'
-      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">·</span>'
-      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.4);">'+user+'</span>'
-      +(t.entry_price!=null?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">@ '+Math.round(t.entry_price*100)+'¢</span>':'');
+      '<span class="tod-label" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:'+sideColor+';">'+side+'</span>'
+      +'<span class="tod-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">·</span>'
+      +'<span class="tod-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.4);">'+user+'</span>'
+      +(t.entry_price!=null?'<span class="tod-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">@ '+Math.round(t.entry_price*100)+'¢</span>':'');
 
     document.getElementById('totdQ').textContent = (t.question||'').slice(0,120);
 
@@ -720,9 +731,9 @@ footer{
 
     var stats = document.getElementById('totdStats');
     stats.innerHTML =
-      '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#00e68a;">↑ '+t.agree_count+' agree</span>'
-      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#ff4d6a;">↓ '+t.disagree_count+' disagree</span>'
-      +'<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+total+' total</span>'
+      '<span class="tod-label" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:700;color:#00e68a;">↑ '+t.agree_count+' agree</span>'
+      +'<span class="tod-label" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#ff4d6a;">↓ '+t.disagree_count+' disagree</span>'
+      +'<span class="tod-kicker" style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(240,240,245,.3);">'+total+' total</span>'
       +(total>0?'<div style="flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;max-width:120px;"><div style="width:'+agreePct+'%;height:100%;background:#00e68a;border-radius:2px;"></div></div>':'');
 
     document.getElementById('totdSection').style.display='';
@@ -733,24 +744,24 @@ footer{
 <!-- ── DAILY CHALLENGE ── -->
 <div id="daily-challenge" style="margin-bottom:32px;display:none;">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-    <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);">◆ TODAY'S CHALLENGE</span>
-    <span id="dc-streak" style="display:none;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);color:#f59e0b;letter-spacing:.08em;"></span>
-    <span style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:auto;">Resets midnight UTC</span>
+    <span class="tod-kicker" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);">◆ TODAY'S CHALLENGE</span>
+    <span id="dc-streak" class="tod-kicker" style="display:none;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);color:#f59e0b;letter-spacing:.08em;"></span>
+    <span class="tod-kicker" style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:auto;">Resets midnight UTC</span>
   </div>
   <div style="background:#111118;border:1px solid rgba(201,146,13,.2);border-left:3px solid var(--gold);border-radius:10px;padding:22px 24px;">
-    <div id="dc-q" style="font-family:var(--display);font-size:18px;font-weight:800;color:#fff;line-height:1.3;letter-spacing:-.02em;margin-bottom:16px;"></div>
-    <div id="dc-prices" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;letter-spacing:.04em;"></div>
+    <div id="dc-q" class="tod-title" style="font-family:var(--display);font-size:18px;font-weight:800;color:#fff;line-height:1.3;letter-spacing:-.02em;margin-bottom:16px;"></div>
+    <div id="dc-prices" class="tod-label" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;letter-spacing:.04em;"></div>
     <div id="dc-btns" style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="dc-yes" onclick="dcVote('YES')" style="flex:1;min-width:120px;height:44px;background:rgba(0,230,138,.12);border:1px solid rgba(0,230,138,.28);border-radius:6px;color:var(--green);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">YES</button>
-      <button id="dc-no" onclick="dcVote('NO')" style="flex:1;min-width:120px;height:44px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.22);border-radius:6px;color:var(--red);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">NO</button>
+      <button id="dc-yes" onclick="dcVote('YES')" class="tod-label" style="flex:1;min-width:120px;height:44px;background:rgba(0,230,138,.12);border:1px solid rgba(0,230,138,.28);border-radius:6px;color:var(--green);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">YES</button>
+      <button id="dc-no" onclick="dcVote('NO')" class="tod-label" style="flex:1;min-width:120px;height:44px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.22);border-radius:6px;color:var(--red);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:background .12s;">NO</button>
     </div>
     <div id="dc-result" style="display:none;margin-top:14px;"></div>
     <div id="dc-community" style="margin-top:14px;display:none;">
-      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:6px;text-transform:uppercase;">Community split</div>
+      <div class="tod-kicker" style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:6px;text-transform:uppercase;">Community split</div>
       <div id="dc-bar-wrap" style="height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-bottom:6px;">
         <div id="dc-bar-fill" style="height:100%;border-radius:3px;background:var(--green);width:50%;transition:width .6s;"></div>
       </div>
-      <div id="dc-bar-labels" style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);"></div>
+      <div id="dc-bar-labels" class="tod-kicker" style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--muted);"></div>
     </div>
   </div>
 </div>
@@ -1443,7 +1454,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   if (whaleMarkets.length < 3) whaleMarkets = byVol.filter(function(m){return Number(m.volume||0)>=50000;}).slice(0,8);
   var rowWhale = document.getElementById('rowWhale');
   var whaleMovesSection = document.getElementById('whaleMovesSection');
-  if (!whaleMarkets.length) {
+  if (whaleMarkets.length < 3) {
     if (whaleMovesSection) whaleMovesSection.style.display = 'none';
   } else {
     rowWhale.innerHTML = whaleMarkets.map(function(m){
@@ -1488,7 +1499,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       var ms = new Date(ed).getTime()-Date.now();
       return ms>0 && ms < 24*3600000;
     }).slice(0,8);
-    if(!soon.length) return;
+    if(soon.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
     var section = document.createElement('div');
     section.className = 'row-section';
     section.innerHTML = '<div class="row-head">'
@@ -1511,7 +1522,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   setTimeout(function(){
     fetch('/api/agent-signals').then(function(r){return r.ok?r.json():null;}).then(function(d){
       var sigs = (d&&d.signals)||[];
-      if(!sigs.length) return;
+      if(sigs.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
       var rowEl = document.getElementById('rowSignals');
       if(!rowEl) return;
       var top = sigs.slice(0,6);
@@ -1549,7 +1560,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
       .then(function(r){return r.ok?r.json():null;})
       .then(function(d){
         var takes=(d&&d.takes)||[];
-        if(takes.length < 1) return; // don't show if no follows
+        if(takes.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
         var rowEl=document.getElementById('rowFollowing');
         if(!rowEl) return;
         function timeAgo(ts){var diff=Date.now()-new Date(ts).getTime();var m=Math.round(diff/60000);return m<60?m+'m ago':Math.round(m/60)+'h ago';}
@@ -1587,7 +1598,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   setTimeout(function(){
     fetch('/api/takes/recently-resolved?limit=12&hours=24').then(function(r){return r.ok?r.json():null;}).then(function(d){
       var takes = (d&&d.takes)||[];
-      if(!takes.length) return;
+      if(takes.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
       var rowEl = document.getElementById('rowJustResolved');
       if(!rowEl) return;
       function timeAgo(ts){
@@ -1673,7 +1684,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
           if (p.platform === 'reddit' && genericSports.indexOf(handle) !== -1) return false;
           return true;
         });
-        if (posts.length < 2) return;
+        if (posts.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
         var rowEl = document.getElementById('rowInfluencer');
         if (!rowEl) return;
         var platformColors = { twitter:'#4d9fff', x:'#4d9fff', reddit:'#ff6314', youtube:'#ff4d6a' };
@@ -1714,7 +1725,7 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
         var contrarian = markets.filter(function(m){
           return (m.edge_components && (m.edge_components.divergence || 0) >= 5) && (m.whale_count || 0) >= 2;
         });
-        if (contrarian.length < 2) return;
+        if (contrarian.length < 3) return; // a 1-2 card row leaves a full-width void — skip instead
         var rowEl = document.getElementById('rowFadePublic');
         if (!rowEl) return;
         rowEl.innerHTML = contrarian.slice(0, 8).map(function(m) {
@@ -1901,11 +1912,11 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
     document.getElementById('dc-btns').style.display = 'none';
     var res = document.getElementById('dc-result');
     res.style.display = 'block';
-    res.innerHTML = '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' +
+    res.innerHTML = '<span class="tod-label" style="font-family:var(--mono);font-size:11px;font-weight:700;color:' +
       (side==='YES' ? 'var(--green)' : 'var(--red)') + ';">Voted ' + esc(side) + '.</span>' +
-      '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:10px;">Come back tomorrow.</span>';
+      '<span class="tod-kicker" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:10px;">Come back tomorrow.</span>';
     if(p && p.market_slug) {
-      res.innerHTML += ' <a href="/market/'+esc(p.market_slug)+'" style="font-family:var(--mono);font-size:10px;color:var(--cyan);">Trade it →</a>';
+      res.innerHTML += ' <a href="/market/'+esc(p.market_slug)+'" class="tod-kicker" style="font-family:var(--mono);font-size:10px;color:var(--cyan);">Trade it →</a>';
     }
   }
 
