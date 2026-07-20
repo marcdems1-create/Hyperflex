@@ -32,7 +32,7 @@
   font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800;
   color: #0e0e15;
 }
-.tcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tcard-rank {
   margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
   color: rgba(240,240,245,.35); letter-spacing: .06em; flex-shrink: 0;
@@ -44,8 +44,8 @@
   font-size: 20px; font-weight: 800; line-height: 1.28; letter-spacing: -.01em;
   color: #fff;
 }
-.tcard-compact .tcard-verdict { font-size: 15px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
-.tcard-feed .tcard-verdict { font-size: 17px; }
+.tcard-compact .tcard-verdict { font-size: 16px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.tcard-feed .tcard-verdict { font-size: 22px; }
 
 /* ── score + n — one inseparable unit ── */
 .tcard-scoreline {
@@ -55,10 +55,10 @@
 }
 .tcard-scoreline.is-positive { background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.22); }
 .tcard-scoreline.is-negative { background: rgba(255,77,106,.07); border: 1px solid rgba(255,77,106,.2); }
-.tcard-score { font-size: 18px; font-weight: 800; }
+.tcard-score { font-size: 20px; font-weight: 800; }
 .tcard-scoreline.is-positive .tcard-score { color: #00e68a; }
 .tcard-scoreline.is-negative .tcard-score { color: #ff4d6a; }
-.tcard-n { font-size: 11px; color: rgba(240,240,245,.4); }
+.tcard-n { font-size: 13px; color: rgba(240,240,245,.4); }
 
 /* ── evidence — one call, shown vividly ── */
 .tcard-evidence {
@@ -67,13 +67,13 @@
   display: flex; flex-direction: column; gap: 3px;
 }
 .tcard-evidence-line {
-  font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700;
   color: rgba(240,240,245,.85);
 }
 .tcard-evidence-line .mult-win { color: #00e68a; }
 .tcard-evidence-line .mult-loss { color: #ff4d6a; }
 .tcard-evidence-q {
-  font-size: 12px; color: rgba(240,240,245,.45); line-height: 1.4;
+  font-size: 13px; color: rgba(240,240,245,.45); line-height: 1.4;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 
@@ -106,6 +106,12 @@
 .tcard-compact { flex-shrink: 0; width: 220px; padding: 14px; gap: 10px; }
 .tcard-compact .tcard-evidence, .tcard-compact .tcard-provisional { display: none; }
 .tcard-compact .tcard-avatar { width: 28px; height: 28px; font-size: 11px; }
+/* Compact stays the tightest density by design ("minimum viable: identity +
+   score + n") — dial the shared base sizes back down so a 220px card doesn't
+   overflow now that .tcard-score/.tcard-handle were bumped for hero/feed. */
+.tcard-compact .tcard-handle { font-size: 13px; }
+.tcard-compact .tcard-score { font-size: 17px; }
+.tcard-compact .tcard-n { font-size: 11px; }
 
 @media (max-width: 640px) {
   .tcard-hero { max-width: 100%; padding: 20px; }

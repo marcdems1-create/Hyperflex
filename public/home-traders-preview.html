@@ -37,19 +37,42 @@
   .scroll-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;}
   .scroll-row > a{scroll-snap-align:start;}
 
-  .calls-list{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-  .call-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#111118;text-decoration:none;color:inherit;border-bottom:1px solid var(--border);transition:background .12s;}
-  .call-row:last-child{border-bottom:none;}
-  .call-row:hover{background:#16161f;}
-  .call-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;color:#0e0e15;}
-  .call-body{flex:1;min-width:0;}
-  .call-line{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;}
-  .call-q{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .call-score{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .calls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;}
 
   .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:14px;height:220px;width:300px;flex-shrink:0;}
   @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  /* ── desktop density (>=1024px) — mobile (<1024px) is untouched: nothing
+     below this query changes, everything above stays exactly as it was. ── */
+  @media (min-width: 1024px) {
+    header, main { max-width: min(1800px, 92vw); }
+    .section-head h2 { font-size: 30px; }
+
+    /* Featured: proper 3-across grid instead of flex-wrap (which orphaned
+       the 3rd card onto its own row once 3x480px card + gaps exceeded the
+       old 1400px container). auto-fit collapses to however many cards
+       actually exist, so 1-2 featured cards center instead of stretching
+       edge-to-edge or leaving a lopsided gap. */
+    .hero-row {
+      display: grid;
+      /* Default assumes 3 (the common case — JS always requests up to 3
+         featured cards). Overridden inline once the actual card count is
+         known (see script below) — auto-fit/auto-fill was tried here first
+         and rejected: with a DEFINITE max (420px) in the minmax(), the grid
+         spec computes the auto-fit repetition count off that max, not the
+         380px min, so at ~1440px it only fit 2 columns and orphaned the
+         3rd card onto its own row — the exact bug this pass exists to fix. */
+      grid-template-columns: repeat(3, minmax(380px, 420px));
+      gap: 24px;
+      justify-content: center;
+    }
+
+    /* Movers: force full snap-to instead of "proximity" so a trackpad/wheel
+       scroll always comes to rest on a card boundary — proximity is a weak
+       snap that let the row rest mid-card. */
+    .scroll-row { scroll-snap-type: x mandatory; }
+  }
 </style>
 </head>
 <body>
@@ -77,26 +100,12 @@
 
   <section>
     <div class="section-head"><h2>Recent notable calls</h2></div>
-    <div class="calls-list" id="callsList"><div class="empty">Loading…</div></div>
+    <div class="calls-grid" id="callsList"><div class="empty">Loading…</div></div>
   </section>
 </main>
 
 <script src="/trader-card.js"></script>
 <script>
-function esc(s){ return HFXTraderCard.esc(s); }
-function initialsOf(c){
-  var src = c.display_name || c.username || c.polymarket_address || '?';
-  var parts = String(src).replace(/^0x/,'').trim().split(/\s+/);
-  return (parts.length>=2 ? (parts[0][0]+parts[1][0]) : String(src).slice(0,2)).toUpperCase();
-}
-function colorOf(c){
-  var src = String(c.user_id || c.polymarket_address || 'x');
-  var hash = 0;
-  for (var i=0;i<src.length;i++) hash = (hash*31 + src.charCodeAt(i)) >>> 0;
-  return 'hsl(' + (hash % 360) + ', 62%, 62%)';
-}
-function fmtPct(p){ if (p==null) return '—'; return (p>=0?'+':'') + p.toFixed(1) + '%'; }
-
 fetch('/api/trader-cards?limit=12')
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(d){
@@ -108,26 +117,23 @@ fetch('/api/trader-cards?limit=12')
       return;
     }
 
-    document.getElementById('heroRow').innerHTML = cards.slice(0, 3).map(function(c){ return HFXTraderCard.render(c, 'hero'); }).join('');
+    var heroCards = cards.slice(0, 3);
+    var heroRow = document.getElementById('heroRow');
+    heroRow.innerHTML = heroCards.map(function(c){ return HFXTraderCard.render(c, 'hero'); }).join('');
+    // Set the real column count explicitly — see the CSS comment on
+    // .hero-row for why auto-fit/auto-fill can't be trusted here.
+    heroRow.style.gridTemplateColumns = 'repeat(' + heroCards.length + ', minmax(380px, 420px))';
     document.getElementById('moversRow').innerHTML = cards.map(function(c){ return HFXTraderCard.render(c, 'feed'); }).join('');
 
+    // "Recent notable calls" — the compact card variant, in a grid. Was a
+    // dense mono-row list (identity + one-line evidence + score, 13 near-
+    // identical rows) — exactly the financial-table pattern the product
+    // definition rules out. Same card component as everywhere else, just
+    // the tightest density.
     var withEvidence = cards.filter(function(c){ return c.evidence; });
-    document.getElementById('callsList').innerHTML = withEvidence.length ? withEvidence.map(function(c){
-      var ev = c.evidence;
-      var verb = ev.side === 'SELL' ? 'Sold' : 'Bought';
-      var entryC = ev.entry_price != null ? Math.round(ev.entry_price*100) + '¢' : '';
-      var outcome = ev.result === 'win' ? 'WON' : 'LOST';
-      var multClass = ev.result === 'win' ? 'mult-win' : 'mult-loss';
-      var multText = ev.multiplier != null ? ev.multiplier + 'x' : fmtPct(ev.roi_pct);
-      return '<a class="call-row" href="/m/' + esc(c.user_id) + '">'
-        + '<div class="call-avatar" style="background:' + colorOf(c) + '">' + esc(initialsOf(c)) + '</div>'
-        + '<div class="call-body">'
-          + '<div class="call-line">' + esc(c.display_name || c.username || 'Trader') + ' — ' + verb + (entryC ? ' at ' + entryC : '') + ' → ' + outcome + ' <span class="' + multClass + '" style="' + (ev.result==='win' ? 'color:#00e68a' : 'color:#ff4d6a') + '">' + multText + '</span></div>'
-          + '<div class="call-q">' + esc((ev.question||'').slice(0,90)) + '</div>'
-        + '</div>'
-        + '<div class="call-score">' + fmtPct(c.score_pct) + ' · n=' + c.n + '</div>'
-      + '</a>';
-    }).join('') : '<div class="empty">No evidence-bearing calls yet.</div>';
+    document.getElementById('callsList').innerHTML = withEvidence.length
+      ? withEvidence.map(function(c){ return HFXTraderCard.render(c, 'compact'); }).join('')
+      : '<div class="empty">No evidence-bearing calls yet.</div>';
   })
   .catch(function(){
     document.getElementById('heroRow').innerHTML = '<div class="empty">Could not load trader cards.</div>';
