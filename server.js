@@ -13000,6 +13000,210 @@ app.get('/api/trader-cards', async (req, res) => {
   }
 });
 
+// ── TRADER PROFILE ───────────────────────────────────────────────────────
+// Deep surface behind every trader card: full receipts (headline stats,
+// best/worst call side by side, per-category specialty breakdown, complete
+// resolved-trade history, open positions). See traderprofilespec.md.
+//
+// SINGLE SOURCE OF TRUTH: verdict/score/n/evidence/form/streak/specialty-pair
+// come from _buildTraderCards() — the exact same function GET /api/trader-cards
+// uses — called here with a one-row array. This is not a style choice: if this
+// endpoint recomputed those fields independently, a rounding or logic drift
+// between the two code paths would silently make the card and the profile
+// disagree, which is the one thing the spec calls out as the actual bug case
+// ("if a card says +181% and the profile says +178%, trust dies").
+//
+// GATE: provisional:true on every response, same as /api/trader-cards, for
+// the same reason — the redeemed-win correction cron hasn't drained and this
+// hasn't been hand-verified. Do not remove the stamp before that happens.
+
+// Resolves a UUID, username, or Polymarket address to a user row. Handle vs
+// address vs UUID formats don't overlap, so a single ordered lookup is safe
+// and avoids three separate route params for what's conceptually one thing.
+async function _resolveTraderHandle(handle) {
+  const h = String(handle || '').trim();
+  if (!h) return null;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(h);
+  const isAddress = /^0x[a-fA-F0-9]{10,}$/.test(h);
+  let rows;
+  if (isUuid) {
+    rows = await dbQuery('SELECT * FROM users WHERE id = $1 LIMIT 1', [h]).catch(() => []);
+  } else if (isAddress) {
+    rows = await dbQuery('SELECT * FROM users WHERE LOWER(polymarket_address) = LOWER($1) LIMIT 1', [h]).catch(() => []);
+  } else {
+    rows = await dbQuery('SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [h]).catch(() => []);
+  }
+  return (rows && rows[0]) || null;
+}
+
+async function _buildTraderProfile(user) {
+  const userId = user.id;
+
+  // Full resolved-trade history — one query, reused for headline stats,
+  // best/worst call, specialty breakdown, AND the full history table. The
+  // card-identical fields (verdict/score/n/evidence/form/streak/specialty
+  // pair) come from a SEPARATE call to _buildTraderCards below, which does
+  // its own (smaller) trade fetch — the redundancy is intentional: it's the
+  // only way to guarantee this endpoint can't drift from what the card
+  // computed, short of _buildTraderCards accepting pre-fetched trades.
+  const tradeRows = await dbQuery(`
+    SELECT market_question, side, entry_price, exit_price, entry_cost_usd,
+           realized_pnl, realized_roi, closed_at, close_reason
+    FROM realized_trades
+    WHERE user_id = $1::uuid AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+    ORDER BY closed_at DESC
+    LIMIT 500
+  `, [userId]).catch(e => { console.warn('[trader-profile] trade fetch error:', e.message); return null; });
+  if (tradeRows == null) return null;
+
+  const totalCountRow = await dbQuery(
+    `SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid`, [userId]
+  ).catch(() => [{ n: tradeRows.length }]);
+  const totalResolved = (totalCountRow[0] && totalCountRow[0].n) || tradeRows.length;
+
+  const openRows = await dbQuery(
+    `SELECT market_title, side, probability FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket' LIMIT 100`,
+    [userId]
+  ).catch(() => []);
+  const openCountRow = await dbQuery(
+    `SELECT COUNT(*)::int AS n FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket'`, [userId]
+  ).catch(() => [{ n: openRows.length }]);
+
+  // Card-identical fields — see file header comment. Only attempt this if
+  // the trader clears the same eligibility bar the public leaderboard uses
+  // (is_whale + n >= ROI_MIN_N_FLOOR); otherwise there's no card for this
+  // wallet anywhere on the site to stay consistent with.
+  let cardData = null;
+  let eligible = false;
+  if (user.is_whale) {
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const roiRow = computed && computed.rows.find(r => r.user_id === userId);
+    if (roiRow) {
+      const cards = await _buildTraderCards([roiRow]);
+      if (cards && cards[0]) { cardData = cards[0]; eligible = true; }
+    }
+  }
+
+  let eligibilityNote;
+  if (eligible) {
+    eligibilityNote = 'Ranked · ' + totalResolved + ' resolved trades';
+  } else if (!user.is_whale) {
+    eligibilityNote = 'Not a tracked wallet — scoring is currently limited to the whale set';
+  } else if (totalResolved < ROI_MIN_N_FLOOR) {
+    eligibilityNote = 'Not yet ranked — needs ' + ROI_MIN_N_FLOOR + ' resolved trades (has ' + totalResolved + ')';
+  } else {
+    eligibilityNote = 'Not yet ranked';
+  }
+
+  // Best call / worst call — the actual biggest win and biggest loss, shown
+  // unconditionally per the spec ("no highlights-only mode"). If a trader
+  // has never won, "best call" is still their least-bad trade, not hidden.
+  let bestCall = null, worstCall = null;
+  const categoryStats = new Map(); // category -> { n, wins, roiSum }
+  let roiSum = 0, roiCount = 0;
+
+  const history = tradeRows.map(t => {
+    const pnl = Number(t.realized_pnl);
+    const roi = t.realized_roi != null ? Number(t.realized_roi) : null;
+    const category = classifyCardCategory(t.market_question);
+    const result = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'push';
+
+    if (!bestCall || pnl > bestCall.pnl) bestCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
+    if (!worstCall || pnl < worstCall.pnl) worstCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
+
+    if (!categoryStats.has(category)) categoryStats.set(category, { n: 0, wins: 0, roiSum: 0, roiCount: 0 });
+    const cs = categoryStats.get(category);
+    cs.n++; if (pnl > 0) cs.wins++;
+    if (roi != null) { cs.roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); cs.roiCount++; }
+
+    if (roi != null) { roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); roiCount++; }
+
+    return {
+      question: t.market_question, side: (t.side || '').toUpperCase(),
+      entry_price: t.entry_price != null ? Number(t.entry_price) : null,
+      exit_price: t.exit_price != null ? Number(t.exit_price) : null,
+      entry_cost_usd: t.entry_cost_usd != null ? Number(t.entry_cost_usd) : null,
+      realized_pnl: pnl, realized_roi_pct: roi != null ? Math.round(roi * 1000) / 10 : null,
+      result, closed_at: t.closed_at, close_reason: t.close_reason, category,
+    };
+  });
+
+  const specialtyFull = [...categoryStats.entries()]
+    .map(([category, s]) => ({
+      category, n: s.n,
+      win_rate_pct: Math.round((s.wins / s.n) * 1000) / 10,
+      avg_roi_pct: s.roiCount ? Math.round((s.roiSum / s.roiCount) * 1000) / 10 : null,
+    }))
+    .sort((a, b) => b.n - a.n);
+
+  const wins = history.filter(h => h.result === 'win').length;
+  const totalCapital = tradeRows.reduce((s, t) => s + (t.entry_cost_usd != null ? Number(t.entry_cost_usd) : 0), 0);
+
+  const headline = {
+    realized_roi_pct: cardData ? cardData.score_pct : (roiCount ? Math.round((roiSum / roiCount) * 1000) / 10 : null),
+    win_rate_pct: totalResolved ? Math.round((wins / tradeRows.length) * 1000) / 10 : null,
+    n: totalResolved,
+    total_capital_usd: Math.round(totalCapital),
+    avg_return_pct: roiCount ? Math.round((roiSum / roiCount) * 1000) / 10 : null,
+  };
+
+  return {
+    user_id: userId,
+    display_name: resolveDisplayName(user),
+    username: user.username || null,
+    polymarket_address: user.polymarket_address || null,
+    whale_rank: user.whale_rank != null ? Number(user.whale_rank) : null,
+    eligible, eligibility_note: eligibilityNote,
+
+    // Card-identical fields (null if not eligible — no card exists for this
+    // wallet to be consistent with).
+    verdict: cardData ? cardData.verdict : null,
+    score_pct: cardData ? cardData.score_pct : null,
+    raw_weighted_roi_pct: cardData ? cardData.raw_weighted_roi_pct : null,
+    n: cardData ? cardData.n : totalResolved,
+    trend: cardData ? cardData.trend : null,
+    evidence: cardData ? cardData.evidence : null,
+    form: cardData ? cardData.form : null,
+    streak: cardData ? cardData.streak : null,
+    specialty: cardData ? cardData.specialty : null,
+
+    headline,
+    best_call: bestCall,
+    worst_call: worstCall,
+    specialty_full: specialtyFull,
+    trade_history: history,
+    trade_history_total: totalResolved,
+    open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null })),
+    open_positions_count: (openCountRow[0] && openCountRow[0].n) || openRows.length,
+    void_note: 'Positions that could not be independently verified against Polymarket settlement data are excluded from this record rather than guessed at (see the redeemed-win correction fix, 2026-07-18). A wallet’s total on-chain activity may exceed the resolved-trade count shown here.',
+    provisional: true,
+    provisional_note: 'Redeemed-win correction cron has not fully drained and this data has not been hand-verified against polymarket.com. Do not treat this record as final.',
+  };
+}
+
+app.get('/api/trader-record/:handle', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const user = await _resolveTraderHandle(req.params.handle);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    const profile = await _buildTraderProfile(user);
+    if (profile == null) return res.status(500).json({ error: 'profile build failed' });
+    res.json(profile);
+  } catch (e) {
+    console.error('[trader-record]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Serves the trader profile page for any handle/address/UUID. Static file,
+// client-side fetch to /api/trader-record/:handle does the rest — same
+// pattern as /m/:userId serving member.html. NOT linked from site nav (see
+// CLAUDE.md Gate 1) — reachable only via a trader card's link or a direct URL.
+app.get('/trader/:handle', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'trader-profile.html'));
+});
+
 // ── ROI leaderboard audit (read-only) ───────────────────────────────────────
 // Investigates a live report that leaderboard #1 (gloriafoster) is actually
 // down -$117,832 on Polymarket's own profile while our ROI score ranks them

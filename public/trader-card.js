@@ -79,7 +79,7 @@
     var streakText = card.streak && card.streak.count
       ? card.streak.count + (card.streak.type === 'win' ? 'W' : card.streak.type === 'loss' ? 'L' : 'P') + ' streak'
       : null;
-    var profileHref = card.user_id ? '/m/' + esc(card.user_id) : '#';
+    var profileHref = card.user_id ? '/trader/' + esc(card.user_id) : '#';
 
     var html = '<a class="' + cls + '" href="' + profileHref + '" data-user-id="' + esc(card.user_id) + '">';
 
