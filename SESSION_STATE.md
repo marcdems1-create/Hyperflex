@@ -49,6 +49,40 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-20b (MAJOR: whale-set selection was structurally wrong — leaderboard rebuilt on durable markets, not capital)
+
+**Resolves the "Redeemed-win correction cron status: UNKNOWN" blocker from the entry below: Marc confirmed `remaining: 0` directly.** But draining the backlog surfaced a second, deeper bug: `/api/trader-cards` still showed a 100% win rate at n=35 for luficdm (0x4de88338...) — same fabrication signature as the original redeemed-win bug, on a wallet the correction cron claimed to have cleared.
+
+**Root cause (NOT the redeemed-win bug recurring — a genuinely new one): `backfillRealizedTrades` only ever captures actively-SOLD positions and REDEEMED positions.** A position bought and simply held to a losing resolution generates neither event — nothing to sell, nothing to claim on a $0 payout — so it's structurally invisible to ingestion. Confirmed: luficdm has 571 real Polymarket predictions, we held 35 rows, all wins.
+
+**Investigation arc (all shipped, all read-only until the rebuild commit):**
+- `605812b`/`807410d`: `GET /api/admin/held-loss-diagnostic[/batch]` — FIFO-matches `/activity` BUY/SELL (paginated — the existing 500-event cap undercounted luficdm's real 1316), keeps unmatched BUY lots, verifies each via the same gamma check the redeemed path trusts. First verdict logic (n-growth-based) was wrong — gloriafoster's n only moved 6→13 (2.2x, would have failed a `>=3x` bar) but win rate cratered 100%→46.2%, which IS the mechanism working. Fixed to key on `win_rate_delta_pct`/`verify_rate_pct` instead.
+- **Batch survey result: 19/20 stratified whales came back ungradeable, median verify rate 0%.** gloriafoster (88%) is the exception. The capital-selected whale set structurally over-represents high-frequency bots on ephemeral markets (5-min crypto up/down binaries, parlays) that age out of gamma before they can ever be verified — a volume cohort, not a skill cohort. **Do not run a held-loss backfill on the capital-selected whale set — it would recover almost nothing.**
+- `785748f`/`51e4f46`: `GET /api/admin/durable-market-scope` — classifies ALL realized_trades by durability (title-pattern + duration heuristic, `classifyMarketDurability()`). Result: **76 wallets qualify with >=10 durable resolved trades** (top n: 290/192/172/120/103); durable/ephemeral split across existing data is 3,986 vs 17,893 (18.2% durable). Also fixed a real bug here: the durable-scoped verify-rate sample came back empty because `users.id` is TEXT in this schema, not native uuid — `= ANY($1::uuid[])` threw and a silent `.catch(() => [])` masked it as a clean empty result instead of an error. Fixed by folding the lookup into the main query (same cast direction as the working `_computeRoiLeaderboard` precedent) instead of patching the cast.
+
+**Shipped — the rebuild (`e4ce5f8`, includes two previously-unmerged branches folded in mid-task, see below):**
+- New persisted `realized_trades.market_durability` column ('durable'|'ephemeral'), stamped at insert time by `backfillRealizedTrades` (both paths) going forward; `POST /api/admin/backfill-market-durability` for the ~21,879 existing rows (pure in-DB classification, no external calls, safe to re-run).
+- `_computeRoiLeaderboard`: eligibility gate changed from `u.is_whale = true` to `rt.market_durability = 'durable'`. Capital/whale status no longer gates the leaderboard anywhere.
+- `_buildTraderCards` and `_buildTraderProfile` (best/worst call, specialty, headline) now source from durable trades only — full trade history on the profile stays UNFILTERED (nothing hidden), with an explicit `ephemeral_excluded_count`/note and a per-row Scope column.
+- New `scope_label` field ("Ranked on durable markets — resolving weeks or months out — n=X") travels with score+n on the leaderboard row, the card, and the profile header — same discipline as score-and-n-always-together.
+- CLAUDE.md Gate 1 rewritten: premise is now "verify the durable-market cohort," not "verify the capital-selected whale set."
+
+**Important process note — found mid-task: two previously-pushed branches had never actually reached `origin/main`** (`claude/trader-profile` @ `9f18f77`, and the `2026-07-20` SESSION_STATE.md entry below @ `b9e221d`). Earlier assumption in this session was that every pushed branch gets fast-forward-merged quickly by an external process — that's true for SOME branches but evidently not all. Merged both into this work rather than losing them. **Worth checking `git merge-base --is-ancestor <hash> origin/main` before assuming prior work landed, not just checking if the branch was pushed.**
+
+**Active blockers:**
+- **Still gated, still nothing public.** The durable-market top-10 has NOT been hand-verified against real polymarket.com profiles yet — that's the exact step that caught both the original redeemed-win bug and this selection-bias bug. Do not skip it a third time.
+- **Nothing in this arc has been run against live data.** Every number above (76 wallets, 19/20 ungradeable, 18.2% durable split) came from Marc running the diagnostics against production — Code's sandbox has no network path to hyperflex.network (confirmed repeatedly) and cannot verify any of this directly. The rebuild code is written and pushed but its actual output on real data is unseen by Code.
+
+**Queued (priority order):**
+1. Deploy this branch, run `POST /api/admin/backfill-market-durability` (should clear in one call — no external dependency, unlike the redeemed-win correction).
+2. Re-run `/api/admin/durable-market-scope` and `/api/predictors/leaderboard?mode=roi` to confirm the new numbers match what the diagnostics projected.
+3. Hand-verify the new (durable-market, ~76-wallet) top 10 against real polymarket.com profiles. Non-negotiable, same as always.
+4. Only then: flip `home-traders-preview.html` → `/` and link trader cards from nav (per the 2026-07-20 entry's queue below, still applies).
+
+**Notes for next session:**
+- `classifyMarketDurability()` (title-pattern primary, duration fallback) and `durableScopeLabel()` are the two new shared helpers — reuse them, don't recompute durability or re-derive the disclosure copy elsewhere.
+- Redeemed-origin `realized_trades` rows have `opened_at` hardcoded NULL (always have — not new), so their durability classification is title-pattern-only, never duration-based. Documented in the classifier's own comment, not a silent gap.
+
 ## 2026-07-20 (Trader cards + trader profile page built and wired — both gated, neither public)
 
 **Shipped (with hashes):**
