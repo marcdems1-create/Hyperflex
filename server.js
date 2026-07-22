@@ -60662,6 +60662,255 @@ app.get('/api/admin/regrade-redeemed-positions/status', requireAdminSecret, asyn
   }
 });
 
+// ── DIAGNOSTIC: GET /api/admin/held-loss-diagnostic ─────────────────────────
+// READ-ONLY. Investigates the coverage/selection-bias bug found 2026-07-20:
+// backfillRealizedTrades only captures (a) positions actively SOLD before
+// resolution (win or loss, via /activity FIFO matching) and (b) positions
+// with an on-chain REDEEM claim (structurally almost always wins — a losing
+// position is worth $0, nothing to claim). A position bought and simply held
+// to a losing resolution generates neither a SELL nor a redeem event, so it
+// is invisible to both existing paths. Confirmed live: luficdm
+// (0x4de88338...) shows 571 real Polymarket predictions but only 35 rows in
+// realized_trades, all wins.
+//
+// This does NOT write anything. It reuses the exact FIFO-matching logic from
+// backfillRealizedTrades's sold-path loop, but instead of discarding
+// unmatched BUY lots (shares bought, never sold) it verifies each one's
+// market via the same _verifyRedeemedSettlement gamma check the redeemed
+// path and the correction cron already trust, and reports what a real
+// backfill pass WOULD insert — row count, win/loss split, and the
+// before/after n and win_rate — without touching the database.
+//
+// Also fixes the /activity fetch's 500-event cap for THIS diagnostic only:
+// paginates the same way the redeemed-positions fetch already does, and
+// reports whether the full history changes the numbers vs. a capped
+// single-call fetch — the 500-cap undercounts exactly the highest-volume
+// wallets this fix is meant to matter most for.
+//
+//   curl "https://hyperflex.network/api/admin/held-loss-diagnostic?address=0x4de883380632ffff2dd68116ac89cee5c1e776ba&secret=$ADMIN_SECRET"
+app.get('/api/admin/held-loss-diagnostic', requireAdminSecret, async (req, res) => {
+  try {
+    const address = String(req.query.address || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(address)) {
+      return res.status(400).json({ error: 'address query param required, must be a 0x-prefixed 40-hex-char address' });
+    }
+
+    // ── Resolve to a users row, if one exists, so we can report a real
+    // before/after against the actual stored n/win_rate — not just the
+    // projection in isolation. ──
+    const userRows = await dbQuery(
+      `SELECT id, display_name, username, is_whale, whale_rank FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1`,
+      [address]
+    ).catch(() => []);
+    const user = userRows[0] || null;
+
+    let currentState = { n: 0, wins: 0, losses: 0, win_rate_pct: null };
+    let existingConditionSides = new Set(); // "condId:OUTCOME" already present in realized_trades, any origin
+    if (user) {
+      const existingRows = await dbQuery(
+        `SELECT condition_id, side, realized_pnl FROM realized_trades WHERE user_id = $1::uuid`,
+        [user.id]
+      ).catch(() => []);
+      for (const r of existingRows) {
+        if (r.condition_id) existingConditionSides.add(`${String(r.condition_id).toLowerCase()}:${String(r.side || '').toUpperCase()}`);
+      }
+      const n = existingRows.length;
+      const wins = existingRows.filter(r => Number(r.realized_pnl) > 0).length;
+      const losses = existingRows.filter(r => Number(r.realized_pnl) < 0).length;
+      currentState = { n, wins, losses, win_rate_pct: n ? Math.round((wins / n) * 1000) / 10 : null };
+    }
+
+    // ── Capped fetch (what the existing code does today: one call, limit=500) ──
+    let cappedActivity = [];
+    try {
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${address}&limit=500&type=TRADE`, { headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const j = await r.json();
+        cappedActivity = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      }
+    } catch {}
+
+    // ── Full paginated fetch (the fix: mirrors the redeemed-positions
+    // pagination pattern already in backfillRealizedTrades) ──
+    let fullActivity = [];
+    let offset = 0;
+    const PAGE_LIMIT = 500;
+    let pagesFetched = 0;
+    while (true) {
+      let page = [];
+      try {
+        const r = await fetch(
+          `https://data-api.polymarket.com/activity?user=${address}&limit=${PAGE_LIMIT}&offset=${offset}&type=TRADE`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (r.ok) {
+          const j = await r.json();
+          page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+        }
+      } catch { break; }
+      pagesFetched++;
+      if (!page.length) break;
+      fullActivity = fullActivity.concat(page);
+      if (page.length < PAGE_LIMIT) break;
+      offset += PAGE_LIMIT;
+      if (offset >= 20000) break; // generous safety cap for a diagnostic — no wallet legitimately has 20k+ trade events
+    }
+
+    // ── Group + FIFO match (same logic as backfillRealizedTrades's sold-path
+    // loop) on the FULL activity set — but keep the leftover unmatched BUY
+    // lots this time instead of discarding them. ──
+    function groupAndMatch(activity) {
+      const groups = new Map();
+      for (const t of activity) {
+        const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+        let outcome = String(t.outcome || '').toUpperCase();
+        if (!outcome) {
+          const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+          if (idx === 0) outcome = 'YES'; else if (idx === 1) outcome = 'NO';
+        }
+        if (!condId || !outcome) continue;
+        const key = `${condId}:${outcome}`;
+        if (!groups.has(key)) {
+          groups.set(key, { condId, outcome, events: [], question: String(t.title || t.question || t.market || '').slice(0, 500) });
+        }
+        groups.get(key).events.push(t);
+      }
+
+      const soldGroups = [];
+      const leftoverGroups = [];
+      for (const group of groups.values()) {
+        group.events.sort((a, b) => {
+          const ta = Date.parse(_toIsoTs(a.timestamp || a.created_at || a.time)) || 0;
+          const tb = Date.parse(_toIsoTs(b.timestamp || b.created_at || b.time)) || 0;
+          return ta - tb;
+        });
+        const lots = [];
+        let totalCost = 0, totalProceeds = 0, totalSharesClosed = 0;
+        for (const t of group.events) {
+          const side = String(t.side || '').toUpperCase();
+          const shares = parseFloat(t.size || t.shares || 0);
+          const price = parseFloat(t.price || 0);
+          if (shares <= 0) continue;
+          if (side === 'BUY') {
+            lots.push({ shares, price });
+          } else if (side === 'SELL') {
+            let remaining = shares;
+            while (remaining > 0 && lots.length > 0) {
+              const lot = lots[0];
+              const take = Math.min(lot.shares, remaining);
+              totalCost += take * lot.price;
+              totalProceeds += take * price;
+              totalSharesClosed += take;
+              remaining -= take;
+              lot.shares -= take;
+              if (lot.shares <= 0.0000001) lots.shift();
+            }
+          }
+        }
+        if (totalSharesClosed > 0) {
+          soldGroups.push({ condId: group.condId, outcome: group.outcome, pnl: totalProceeds - totalCost });
+        }
+        const leftoverShares = lots.reduce((s, l) => s + l.shares, 0);
+        const leftoverCost = lots.reduce((s, l) => s + l.shares * l.price, 0);
+        if (leftoverShares > 0.0000001) {
+          leftoverGroups.push({
+            condId: group.condId, outcome: group.outcome, question: group.question,
+            shares: leftoverShares, avgEntryPrice: leftoverCost / leftoverShares, entryCost: leftoverCost,
+          });
+        }
+      }
+      return { soldGroups, leftoverGroups };
+    }
+
+    const cappedResult = groupAndMatch(cappedActivity);
+    const fullResult = groupAndMatch(fullActivity);
+
+    // ── Cross-check leftover groups against rows already in realized_trades
+    // (any origin — sold OR redeemed). A leftover BUY with no matching SELL
+    // in /activity does NOT mean uncaptured: the user may have REDEEMED it
+    // (a separate event stream from /activity), which the existing redeemed
+    // path already handles. Only groups with NO existing row at all are a
+    // genuine gap. ──
+    const genuinelyMissing = fullResult.leftoverGroups.filter(
+      g => !existingConditionSides.has(`${g.condId}:${g.outcome}`)
+    );
+    const alreadyCapturedElsewhere = fullResult.leftoverGroups.length - genuinelyMissing.length;
+
+    // ── Verify each genuinely-missing group's market via the same gamma
+    // helper the redeemed path and correction cron already trust. Bounded
+    // concurrency, same pattern as backfillRealizedTrades. ──
+    const uniqueCondIds = [...new Set(genuinelyMissing.map(g => g.condId))];
+    const settlementByCondId = new Map();
+    await _mapLimit(uniqueCondIds, 6, async (condId) => {
+      const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+      if (s) settlementByCondId.set(condId, s);
+    });
+
+    let projectedWins = 0, projectedLosses = 0, stillUnverifiable = 0;
+    const sampleWins = [], sampleLosses = [], sampleUnverifiable = [];
+    for (const g of genuinelyMissing) {
+      const settlement = settlementByCondId.get(g.condId);
+      if (!settlement) {
+        stillUnverifiable++;
+        if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
+        continue;
+      }
+      let outcomeWon;
+      if (settlement.winnerName) {
+        outcomeWon = settlement.winnerName.toUpperCase().trim() === g.outcome.trim();
+      } else if (g.outcome === 'YES' || g.outcome === 'NO') {
+        outcomeWon = g.outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
+      } else {
+        stillUnverifiable++;
+        if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
+        continue;
+      }
+      const wouldBePnl = outcomeWon ? +(g.shares * (1 - g.avgEntryPrice)).toFixed(4) : +(-g.entryCost).toFixed(4);
+      const row = { question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_price: Math.round(g.avgEntryPrice * 1000) / 1000, would_be_pnl_usd: Math.round(wouldBePnl * 100) / 100, condition_id: g.condId };
+      if (outcomeWon) { projectedWins++; if (sampleWins.length < 5) sampleWins.push(row); }
+      else { projectedLosses++; if (sampleLosses.length < 5) sampleLosses.push(row); }
+    }
+
+    const projectedNewRows = projectedWins + projectedLosses;
+    const projectedN = currentState.n + projectedNewRows;
+    const projectedWinsTotal = currentState.wins + projectedWins;
+    const projectedWinRate = projectedN ? Math.round((projectedWinsTotal / projectedN) * 1000) / 10 : null;
+
+    res.json({
+      address, user_id: user ? user.id : null, display_name: user ? resolveDisplayName(user) : null, mapped: !!user,
+      current_state: currentState,
+      activity_fetch: {
+        capped_call_count: cappedActivity.length,
+        full_paginated_count: fullActivity.length,
+        pages_fetched: pagesFetched,
+        pagination_changed_results: fullActivity.length > cappedActivity.length,
+        capped_leftover_groups: cappedResult.leftoverGroups.length,
+        full_leftover_groups: fullResult.leftoverGroups.length,
+      },
+      leftover_groups_found: fullResult.leftoverGroups.length,
+      leftover_already_captured_elsewhere: alreadyCapturedElsewhere,
+      leftover_genuinely_missing: genuinelyMissing.length,
+      leftover_still_unverifiable: stillUnverifiable,
+      projected_new_rows: { total: projectedNewRows, wins: projectedWins, losses: projectedLosses },
+      projected_state_if_backfilled: {
+        n: projectedN, wins: projectedWinsTotal, losses: currentState.losses + projectedLosses,
+        win_rate_pct: projectedWinRate,
+      },
+      sample_new_loss_rows: sampleLosses,
+      sample_new_win_rows: sampleWins,
+      sample_still_unverifiable: sampleUnverifiable,
+      ground_truth_note: 'Polymarket profile for this wallet reportedly shows 571 total predictions (manually checked, not queried by this endpoint — this sandbox has no browser access to polymarket.com). Compare projected_state_if_backfilled.n against that by hand.',
+      verdict: projectedN >= currentState.n * 3 && projectedWinRate != null && projectedWinRate < 90
+        ? 'MECHANISM APPEARS TO WORK — n climbs substantially and win_rate drops out of the fabrication range.'
+        : 'MECHANISM DOES NOT MOVE THE NEEDLE ENOUGH — n and/or win_rate did not shift as expected. Do not proceed to a real backfill on this evidence.',
+      writes_performed: 0,
+    });
+  } catch (e) {
+    console.error('[held-loss-diagnostic]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── DIAGNOSTIC: POST /api/admin/force-resolve ────────────────────────────────
 // Runs the REAL resolver (resolveSignalOutcomes) on demand with instrumentation
 // ON — identical code path to the 30-min cron, just observable. Reports what it
