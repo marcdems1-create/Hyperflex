@@ -46,6 +46,7 @@
   .p-scoreline.is-negative .p-score{color:#ff4d6a;}
   .p-scoreline.is-neutral .p-score{color:rgba(240,240,245,.6);}
   .p-n{font-size:14px;color:rgba(240,240,245,.4);}
+  .p-scope{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
 
   /* ── receipts ── */
   .p-section{margin-top:40px;}
@@ -164,6 +165,7 @@ function render(p){
     + '</div>'
     + '<div class="p-verdict' + (eligible ? '' : ' is-ineligible') + '">' + esc(verdictText) + '</div>'
     + (eligible ? '<div class="p-scoreline '+scoreCls+'"><span class="p-score">'+esc(fmtPct(p.score_pct))+'</span><span class="p-n">n='+esc(p.n)+'</span></div>' : '')
+    + (eligible && p.scope_label ? '<div class="p-scope">'+esc(p.scope_label)+'</div>' : '')
   + '</div>';
 
   if (eligible) {
@@ -206,6 +208,7 @@ function render(p){
   }
 
   html += '<div class="p-section"><div class="p-section-title">Full trade history</div>'
+    + (p.ephemeral_excluded_note ? '<div class="void-note" style="margin-bottom:14px;">'+esc(p.ephemeral_excluded_note)+'</div>' : '')
     + '<div class="hist-filters">'
       + '<select id="histCategory"><option value="">All categories</option></select>'
       + '<button data-result="" class="active">All</button>'
@@ -214,7 +217,7 @@ function render(p){
     + '</div>'
     + '<div class="hist-count" id="histCount"></div>'
     + '<div style="overflow-x:auto;"><table class="hist-table" id="histTable">'
-      + '<thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Result</th><th>ROI</th><th>P&amp;L</th><th>Closed</th></tr></thead>'
+      + '<thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Result</th><th>ROI</th><th>P&amp;L</th><th>Closed</th><th>Scope</th></tr></thead>'
       + '<tbody id="histBody"></tbody>'
     + '</table></div>'
   + '</div>';
@@ -245,7 +248,8 @@ function render(p){
     });
     document.getElementById('histCount').textContent = rows.length + ' of ' + allTrades.length + ' resolved trades' + (p.trade_history_total > allTrades.length ? ' (showing most recent ' + allTrades.length + ' of ' + p.trade_history_total + ' total)' : '');
     document.getElementById('histBody').innerHTML = rows.map(function(t){
-      return '<tr>'
+      var isEphemeral = t.market_durability === 'ephemeral';
+      return '<tr' + (isEphemeral ? ' style="opacity:.55;"' : '') + '>'
         + '<td class="hist-q">'+esc(t.question)+'</td>'
         + '<td>'+esc(t.side)+'</td>'
         + '<td>'+(t.entry_price!=null?Math.round(t.entry_price*100)+'¢':'—')+'</td>'
@@ -253,8 +257,9 @@ function render(p){
         + '<td>'+esc(fmtPct(t.realized_roi_pct))+'</td>'
         + '<td>'+esc(fmtUsd(t.realized_pnl))+'</td>'
         + '<td>'+esc(fmtDate(t.closed_at))+'</td>'
+        + '<td style="color:var(--muted);">'+(isEphemeral ? 'Ephemeral — excluded' : 'Durable')+'</td>'
       + '</tr>';
-    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No trades match this filter.</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No trades match this filter.</td></tr>';
   }
   catSel.addEventListener('change', renderHistory);
   document.querySelectorAll('.hist-filters button').forEach(function(btn){

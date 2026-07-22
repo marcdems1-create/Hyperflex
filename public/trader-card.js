@@ -96,6 +96,10 @@
       + '<span class="tcard-n">n=' + esc(card.n) + '</span>'
       + '</div>';
 
+    if (card.scope_label) {
+      html += '<div class="tcard-scope">' + esc(card.scope_label) + '</div>';
+    }
+
     if (variant !== 'compact' && ev) {
       html += '<div class="tcard-evidence">'
         + '<div class="tcard-evidence-line">' + ev.line + '</div>'

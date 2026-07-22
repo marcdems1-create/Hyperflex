@@ -13046,9 +13046,13 @@ async function _buildTraderProfile(user) {
   // its own (smaller) trade fetch — the redundancy is intentional: it's the
   // only way to guarantee this endpoint can't drift from what the card
   // computed, short of _buildTraderCards accepting pre-fetched trades.
+  // market_durability included so the score-facing computation below
+  // (best/worst/specialty/headline) can be scoped to durable trades only —
+  // the full trade_history table stays unfiltered (nothing hidden), it just
+  // carries the durability tag per row for display/filtering.
   const tradeRows = await dbQuery(`
     SELECT market_question, side, entry_price, exit_price, entry_cost_usd,
-           realized_pnl, realized_roi, closed_at, close_reason
+           realized_pnl, realized_roi, closed_at, close_reason, market_durability
     FROM realized_trades
     WHERE user_id = $1::uuid AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
     ORDER BY closed_at DESC
@@ -13061,6 +13065,12 @@ async function _buildTraderProfile(user) {
   ).catch(() => [{ n: tradeRows.length }]);
   const totalResolved = (totalCountRow[0] && totalCountRow[0].n) || tradeRows.length;
 
+  const durableCountRow = await dbQuery(
+    `SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND market_durability = 'durable'`, [userId]
+  ).catch(() => [{ n: null }]);
+  const durableResolvedCount = durableCountRow[0] && durableCountRow[0].n != null
+    ? durableCountRow[0].n : tradeRows.filter(t => t.market_durability === 'durable').length;
+
   const openRows = await dbQuery(
     `SELECT market_title, side, probability FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket' LIMIT 100`,
     [userId]
@@ -13069,54 +13079,63 @@ async function _buildTraderProfile(user) {
     `SELECT COUNT(*)::int AS n FROM cached_positions WHERE user_id = $1 AND platform = 'polymarket'`, [userId]
   ).catch(() => [{ n: openRows.length }]);
 
-  // Card-identical fields — see file header comment. Only attempt this if
-  // the trader clears the same eligibility bar the public leaderboard uses
-  // (is_whale + n >= ROI_MIN_N_FLOOR); otherwise there's no card for this
-  // wallet anywhere on the site to stay consistent with.
+  // Card-identical fields — see file header comment. Eligibility gate
+  // changed 2026-07-20 from `user.is_whale` (capital-selected) to durable-
+  // market trade count — _computeRoiLeaderboard itself now selects on
+  // market_durability = 'durable', so any wallet with enough durable trades
+  // appears in its rows regardless of whale/capital status. No separate
+  // is_whale check needed here anymore.
   let cardData = null;
   let eligible = false;
-  if (user.is_whale) {
-    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
-    const roiRow = computed && computed.rows.find(r => r.user_id === userId);
-    if (roiRow) {
-      const cards = await _buildTraderCards([roiRow]);
-      if (cards && cards[0]) { cardData = cards[0]; eligible = true; }
-    }
+  const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+  const roiRow = computed && computed.rows.find(r => r.user_id === userId);
+  if (roiRow) {
+    const cards = await _buildTraderCards([roiRow]);
+    if (cards && cards[0]) { cardData = cards[0]; eligible = true; }
   }
 
   let eligibilityNote;
   if (eligible) {
-    eligibilityNote = 'Ranked · ' + totalResolved + ' resolved trades';
-  } else if (!user.is_whale) {
-    eligibilityNote = 'Not a tracked wallet — scoring is currently limited to the whale set';
-  } else if (totalResolved < ROI_MIN_N_FLOOR) {
-    eligibilityNote = 'Not yet ranked — needs ' + ROI_MIN_N_FLOOR + ' resolved trades (has ' + totalResolved + ')';
+    eligibilityNote = 'Ranked · ' + cardData.n + ' durable resolved trades';
+  } else if (durableResolvedCount < ROI_MIN_N_FLOOR) {
+    eligibilityNote = 'Not yet ranked — needs ' + ROI_MIN_N_FLOOR + ' durable resolved trades (has ' + durableResolvedCount + ')';
   } else {
     eligibilityNote = 'Not yet ranked';
   }
 
-  // Best call / worst call — the actual biggest win and biggest loss, shown
-  // unconditionally per the spec ("no highlights-only mode"). If a trader
-  // has never won, "best call" is still their least-bad trade, not hidden.
+  // Best call / worst call / specialty / headline — sourced from DURABLE
+  // trades ONLY, same population the leaderboard score is computed from.
+  // The full trade_history below stays unfiltered (every trade, wins and
+  // losses, durable and ephemeral) — only the score-facing numbers exclude
+  // ephemeral trades, and that exclusion is disclosed via
+  // ephemeral_excluded_count below, never silently dropped.
   let bestCall = null, worstCall = null;
   const categoryStats = new Map(); // category -> { n, wins, roiSum }
-  let roiSum = 0, roiCount = 0;
+  let roiSum = 0, roiCount = 0, durableWins = 0, durableCapital = 0;
+  let ephemeralExcludedCount = 0;
 
   const history = tradeRows.map(t => {
     const pnl = Number(t.realized_pnl);
     const roi = t.realized_roi != null ? Number(t.realized_roi) : null;
     const category = classifyCardCategory(t.market_question);
     const result = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'push';
+    const durability = t.market_durability || 'durable'; // pre-column-existing rows default durable, same as classifyMarketDurability's own default
 
-    if (!bestCall || pnl > bestCall.pnl) bestCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
-    if (!worstCall || pnl < worstCall.pnl) worstCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
+    if (durability === 'durable') {
+      if (!bestCall || pnl > bestCall.pnl) bestCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
+      if (!worstCall || pnl < worstCall.pnl) worstCall = { question: t.market_question, side: (t.side || '').toUpperCase(), entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null, pnl, roi, closed_at: t.closed_at, result };
 
-    if (!categoryStats.has(category)) categoryStats.set(category, { n: 0, wins: 0, roiSum: 0, roiCount: 0 });
-    const cs = categoryStats.get(category);
-    cs.n++; if (pnl > 0) cs.wins++;
-    if (roi != null) { cs.roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); cs.roiCount++; }
+      if (!categoryStats.has(category)) categoryStats.set(category, { n: 0, wins: 0, roiSum: 0, roiCount: 0 });
+      const cs = categoryStats.get(category);
+      cs.n++; if (pnl > 0) cs.wins++;
+      if (roi != null) { cs.roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); cs.roiCount++; }
 
-    if (roi != null) { roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); roiCount++; }
+      if (roi != null) { roiSum += Math.min(Math.max(roi, -1.0), ROI_CAP); roiCount++; }
+      if (pnl > 0) durableWins++;
+      if (t.entry_cost_usd != null) durableCapital += Number(t.entry_cost_usd);
+    } else {
+      ephemeralExcludedCount++;
+    }
 
     return {
       question: t.market_question, side: (t.side || '').toUpperCase(),
@@ -13125,6 +13144,7 @@ async function _buildTraderProfile(user) {
       entry_cost_usd: t.entry_cost_usd != null ? Number(t.entry_cost_usd) : null,
       realized_pnl: pnl, realized_roi_pct: roi != null ? Math.round(roi * 1000) / 10 : null,
       result, closed_at: t.closed_at, close_reason: t.close_reason, category,
+      market_durability: durability,
     };
   });
 
@@ -13136,14 +13156,11 @@ async function _buildTraderProfile(user) {
     }))
     .sort((a, b) => b.n - a.n);
 
-  const wins = history.filter(h => h.result === 'win').length;
-  const totalCapital = tradeRows.reduce((s, t) => s + (t.entry_cost_usd != null ? Number(t.entry_cost_usd) : 0), 0);
-
   const headline = {
     realized_roi_pct: cardData ? cardData.score_pct : (roiCount ? Math.round((roiSum / roiCount) * 1000) / 10 : null),
-    win_rate_pct: totalResolved ? Math.round((wins / tradeRows.length) * 1000) / 10 : null,
-    n: totalResolved,
-    total_capital_usd: Math.round(totalCapital),
+    win_rate_pct: durableResolvedCount ? Math.round((durableWins / durableResolvedCount) * 1000) / 10 : null,
+    n: cardData ? cardData.n : durableResolvedCount,
+    total_capital_usd: Math.round(durableCapital),
     avg_return_pct: roiCount ? Math.round((roiSum / roiCount) * 1000) / 10 : null,
   };
 
@@ -13160,12 +13177,13 @@ async function _buildTraderProfile(user) {
     verdict: cardData ? cardData.verdict : null,
     score_pct: cardData ? cardData.score_pct : null,
     raw_weighted_roi_pct: cardData ? cardData.raw_weighted_roi_pct : null,
-    n: cardData ? cardData.n : totalResolved,
+    n: cardData ? cardData.n : durableResolvedCount,
     trend: cardData ? cardData.trend : null,
     evidence: cardData ? cardData.evidence : null,
     form: cardData ? cardData.form : null,
     streak: cardData ? cardData.streak : null,
     specialty: cardData ? cardData.specialty : null,
+    scope_label: durableScopeLabel(cardData ? cardData.n : durableResolvedCount),
 
     headline,
     best_call: bestCall,
@@ -13173,6 +13191,10 @@ async function _buildTraderProfile(user) {
     specialty_full: specialtyFull,
     trade_history: history,
     trade_history_total: totalResolved,
+    ephemeral_excluded_count: ephemeralExcludedCount,
+    ephemeral_excluded_note: ephemeralExcludedCount > 0
+      ? ephemeralExcludedCount + ' ephemeral-market trade' + (ephemeralExcludedCount === 1 ? '' : 's') + ' (5-min recurring binaries, parlays — cannot be independently verified against gamma) shown in the history below but excluded from the score above.'
+      : null,
     open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null })),
     open_positions_count: (openCountRow[0] && openCountRow[0].n) || openRows.length,
     void_note: 'Positions that could not be independently verified against Polymarket settlement data are excluded from this record rather than guessed at (see the redeemed-win correction fix, 2026-07-18). A wallet’s total on-chain activity may exceed the resolved-trade count shown here.',
