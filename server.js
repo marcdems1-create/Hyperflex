@@ -12459,10 +12459,20 @@ function _roiWindowClause(window) {
 
 async function _computeRoiLeaderboard(window, minN) {
   const windowClause = _roiWindowClause(window);
+  // Eligibility gate changed 2026-07-20: was `u.is_whale = true` (capital
+  // deployed). Found that selection axis structurally over-represents
+  // high-frequency ephemeral-market bots — 19/20 sampled whales came back
+  // ungradeable on held-loss verification (median verify rate 0%) because
+  // their volume is mostly 5-min recurring crypto binaries that age out of
+  // gamma before they can ever be verified. Gate is now
+  // `rt.market_durability = 'durable'` — durable, weeks/months-out markets
+  // (politics/macro/geopolitical/long-horizon futures) that gamma retains
+  // and we can actually verify. No more `users` join needed here: is_whale
+  // was the only reason for it, and no other user columns are read in this
+  // query (display fields are fetched separately below, by user_id).
   const baseWhere = `
     FROM realized_trades rt
-    JOIN users u ON u.id = rt.user_id::text
-    WHERE u.is_whale = true
+    WHERE rt.market_durability = 'durable'
       AND rt.realized_roi IS NOT NULL
       AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0
       AND rt.closed_at IS NOT NULL
@@ -12501,8 +12511,7 @@ async function _computeRoiLeaderboard(window, minN) {
       SUM((${cappedRoiExpr}) * (${weightExpr})) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS num_prior,
       SUM(${weightExpr}) FILTER (WHERE rt.closed_at >= NOW() - INTERVAL '180 days' AND rt.closed_at < NOW() - INTERVAL '90 days')::numeric AS den_prior
     FROM realized_trades rt
-    JOIN users u ON u.id = rt.user_id::text
-    WHERE u.is_whale = true AND rt.realized_roi IS NOT NULL
+    WHERE rt.market_durability = 'durable' AND rt.realized_roi IS NOT NULL
       AND rt.entry_cost_usd IS NOT NULL AND rt.entry_cost_usd > 0 AND rt.closed_at IS NOT NULL
     GROUP BY rt.user_id
   `).catch(() => []);
@@ -12547,6 +12556,7 @@ async function _computeRoiLeaderboard(window, minN) {
       raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
       score_pct: Math.round(shrunk * 1000) / 10,
       trend: trendByUser.get(r.user_id) || null,
+      scope_label: durableScopeLabel(n),
     };
   }).sort((a, b) => b.score_pct - a.score_pct);
 
@@ -12754,6 +12764,14 @@ function classifyMarketDurability(question, openedAt, closedAt) {
   return 'durable'; // default — includes rows we simply can't assess duration for (opened_at null)
 }
 
+// Scope disclosure — must travel with score+n on every surface that shows
+// either, same discipline as "score and n always together." The leaderboard
+// is durable-markets-only as of 2026-07-20; this is the honest label for
+// that scope, not a caveat buried in a tooltip.
+function durableScopeLabel(n) {
+  return 'Ranked on durable markets — resolving weeks or months out — n=' + n;
+}
+
 // Rules-based verdict line — thresholds only, no LLM. Ordered cascade: most
 // specific/interesting signal wins. Every branch must be able to fire on a
 // losing trader without the copy reading as false praise — that's the spec's
@@ -12822,11 +12840,19 @@ async function _buildTraderCards(roiRows) {
   const userIds = roiRows.map(r => r.user_id);
   if (!userIds.length) return [];
 
+  // market_durability = 'durable' — verdict/evidence/specialty/form must be
+  // sourced from the same population the leaderboard's n/score are drawn
+  // from (durable markets only), or a card and the leaderboard row behind
+  // it can disagree on n. This is realized_trades.user_id (native uuid),
+  // not users.id, so the ::uuid[] cast here is correct — see the type-
+  // mismatch note on the durable-market-scope endpoint for the column that
+  // ISN'T uuid.
   const tradeRows = await dbQuery(`
     SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
            entry_cost_usd, realized_pnl, realized_roi, closed_at
     FROM realized_trades
     WHERE user_id = ANY($1::uuid[]) AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+      AND market_durability = 'durable'
     ORDER BY user_id, closed_at ASC
   `, [userIds]).catch(e => { console.warn('[trader-cards] trade fetch error:', e.message); return null; });
   if (tradeRows == null) return null;
@@ -12939,6 +12965,7 @@ async function _buildTraderCards(roiRows) {
         worst: { category: specialty.worst.category, win_rate_pct: Math.round(specialty.worst.winRate * 1000) / 10, n: specialty.worst.n },
       } : null,
       win_rate_pct: Math.round(allTimeWinRate * 1000) / 10,
+      scope_label: durableScopeLabel(n),
       provisional: true,
     };
   });
@@ -44774,20 +44801,21 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
     const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
     const externalSyncId = `pm-act:${group.condId}:${group.outcome}`;
+    const marketDurability = classifyMarketDurability(group.question, firstOpenAt, lastCloseAt);
 
     try {
       const result = await dbQuery(
         `INSERT INTO realized_trades (
           user_id, polymarket_address, condition_id, token_id, market_question, side,
           shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
-          realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT (external_sync_id) DO NOTHING
         RETURNING id`,
         [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
          +totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
          +totalCost.toFixed(4), +totalProceeds.toFixed(4),
-         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId]
+         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId, marketDurability]
       );
       if (result.length) imported++;
     } catch (e) {
@@ -44910,18 +44938,21 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
       const closeReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
       const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+      // opened_at is null for this path (see comment on classifyMarketDurability)
+      // so this is title-pattern classification only, not duration-based.
+      const marketDurability = classifyMarketDurability(question, null, closedAt);
       try {
         const result = await dbQuery(
           `INSERT INTO realized_trades (
             user_id, polymarket_address, condition_id, token_id, market_question, side,
             shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
-            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, regraded_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, regraded_at, market_durability
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),$18)
           ON CONFLICT (external_sync_id) DO NOTHING
           RETURNING id`,
           [userId, eoaLower || null, condId, tokenId, question, outcome,
            +shares.toFixed(4), avgPrice, exitPrice, entryCost, exitValue,
-           realizedPnl, realizedRoi, null, closedAt, closeReason, externalSyncId]
+           realizedPnl, realizedRoi, null, closedAt, closeReason, externalSyncId, marketDurability]
         );
         if (result.length) redeemedImported++;
       } catch (e) {
@@ -59537,6 +59568,18 @@ if (pool) {
       // already independently verified — only pre-fix rows are ever NULL here.
       await dbQuery(`ALTER TABLE realized_trades ADD COLUMN IF NOT EXISTS regraded_at TIMESTAMPTZ`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_unregraded_redeem ON realized_trades(id) WHERE regraded_at IS NULL AND external_sync_id LIKE 'pm-redeem:%'`).catch(() => {});
+      // market_durability — 'durable' (resolves weeks/months out — politics,
+      // macro, geopolitical, long-horizon futures) vs 'ephemeral' (5-min
+      // recurring crypto binaries, parlays — ages out of gamma before it can
+      // ever be verified). Found 2026-07-20: the capital-selected whale set
+      // is 19/20 ungradeable on held-loss verification (median verify rate
+      // 0%) because it structurally over-represents high-frequency ephemeral-
+      // market bots. The leaderboard now selects and scores on durable
+      // markets only — see classifyMarketDurability(). NULL on existing rows
+      // until /api/admin/backfill-market-durability runs; new rows are
+      // stamped at insert time by backfillRealizedTrades going forward.
+      await dbQuery(`ALTER TABLE realized_trades ADD COLUMN IF NOT EXISTS market_durability TEXT`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_durability ON realized_trades(market_durability)`).catch(() => {});
       // users columns needed by backfill aggregate refresh
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
@@ -61255,6 +61298,48 @@ app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) 
     });
   } catch (e) {
     console.error('[durable-market-scope]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── BACKFILL: POST /api/admin/backfill-market-durability ────────────────────
+// Real writes (not a diagnostic). Stamps market_durability on existing
+// realized_trades rows inserted before that column existed. Going forward,
+// backfillRealizedTrades stamps it at insert time on both paths — this is
+// only for the current gap (~21,879 rows as of 2026-07-20, per the durable-
+// market-scope survey).
+//
+// Pure in-DB classification (classifyMarketDurability over already-stored
+// market_question/opened_at/closed_at) — zero external API calls, unlike
+// the held-loss backfill this is NOT gated on gamma availability or
+// rate limits, so it can run as one bounded batch instead of a cron. Safe
+// to re-run: only rows with market_durability IS NULL are touched, and
+// per-row UPDATEs are idempotent.
+//
+//   curl -X POST "https://hyperflex.network/api/admin/backfill-market-durability?secret=$ADMIN_SECRET"
+async function _backfillMarketDurabilityBatch(limit) {
+  const rows = await dbQuery(
+    `SELECT id, market_question, opened_at, closed_at FROM realized_trades WHERE market_durability IS NULL LIMIT $1`,
+    [limit]
+  );
+  let durable = 0, ephemeral = 0;
+  await _mapLimit(rows, 20, async (r) => {
+    const durability = classifyMarketDurability(r.market_question, r.opened_at, r.closed_at);
+    if (durability === 'durable') durable++; else ephemeral++;
+    await dbQuery(`UPDATE realized_trades SET market_durability = $1 WHERE id = $2`, [durability, r.id]).catch(() => {});
+  });
+  const remainingRow = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE market_durability IS NULL`).catch(() => [{ n: null }]);
+  return { processed: rows.length, durable, ephemeral, remaining: remainingRow[0] ? remainingRow[0].n : null };
+}
+
+app.post('/api/admin/backfill-market-durability', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const limit = Math.min(50000, Math.max(1, parseInt(req.query.limit, 10) || 30000));
+    const result = await _backfillMarketDurabilityBatch(limit);
+    res.json(result);
+  } catch (e) {
+    console.error('[backfill-market-durability]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
