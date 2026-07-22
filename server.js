@@ -12720,6 +12720,40 @@ function classifyCardCategory(question) {
   return 'other';
 }
 
+// Durable vs. ephemeral market classifier — a DIFFERENT axis than category
+// above (a market can be "crypto" category and either durable, e.g. "Will
+// Bitcoin close above $200k by end of 2026", or ephemeral, e.g. a 5-minute
+// recurring up/down binary). Built 2026-07-20 to investigate whether the
+// whale set (selected by capital deployed) structurally over-represents
+// high-frequency bots trading markets that age out of gamma before they can
+// ever be verified — see the held-loss-diagnostic batch survey (19/20
+// wallets ungradeable, median verify rate 0%).
+//
+// Title-pattern match is the primary signal and works for BOTH ingestion
+// origins (sold and redeemed positions). The open/close-duration fallback
+// only works for SOLD-path rows — redeemed-path rows have opened_at
+// hardcoded to null (see backfillRealizedTrades's redeemed-position INSERT,
+// ~line 44890), so duration can't be computed for them at all. That's a real
+// limitation, not an oversight to silently paper over: it means durability
+// classification for redeemed-origin rows rests entirely on the title match.
+const _EPHEMERAL_MARKET_PATTERNS = [
+  /\b\d{1,2}(:\d{2})?\s*(am|pm)\s*-\s*\d{1,2}(:\d{2})?\s*(am|pm)\s*et\b/i, // "8:50PM-8:55PM ET" recurring-window title
+  /\bup or down\b/i, // Polymarket's recurring crypto up/down binary series
+  /\bhourly\b/i,
+  /\b\d+\s*-?\s*(minute|min)\b/i, // "5-minute", "5 min"
+  /\bparlay\b/i,
+];
+const EPHEMERAL_DURATION_MS = 24 * 3600 * 1000; // resolved within a day of opening
+function classifyMarketDurability(question, openedAt, closedAt) {
+  const q = String(question || '');
+  if (_EPHEMERAL_MARKET_PATTERNS.some(re => re.test(q))) return 'ephemeral';
+  if (openedAt && closedAt) {
+    const durationMs = new Date(closedAt).getTime() - new Date(openedAt).getTime();
+    if (durationMs > 0 && durationMs < EPHEMERAL_DURATION_MS) return 'ephemeral';
+  }
+  return 'durable'; // default — includes rows we simply can't assess duration for (opened_at null)
+}
+
 // Rules-based verdict line — thresholds only, no LLM. Ordered cascade: most
 // specific/interesting signal wins. Every branch must be able to fire on a
 // losing trader without the copy reading as false praise — that's the spec's
@@ -60864,7 +60898,18 @@ async function _heldLossDiagnosticForAddress(address, opts = {}) {
 
   let projectedWins = 0, projectedLosses = 0, stillUnverifiable = 0;
   const sampleWins = [], sampleLosses = [], sampleUnverifiable = [];
+  // Durability split — same groups, classified on a different axis (see
+  // classifyMarketDurability). Leftover/held groups don't carry a reliable
+  // opened_at (redeemed-origin rows never do; these are un-ingested groups
+  // with no origin yet at all), so this is title-pattern-only for held
+  // groups — duration can't be computed here, unlike for already-captured rows.
+  const durabilityTally = {
+    durable: { total: 0, verified: 0 },
+    ephemeral: { total: 0, verified: 0 },
+  };
   for (const g of sampledMissing) {
+    const durability = classifyMarketDurability(g.question, null, null);
+    durabilityTally[durability].total++;
     const settlement = settlementByCondId.get(g.condId);
     if (!settlement) {
       stillUnverifiable++;
@@ -60881,6 +60926,7 @@ async function _heldLossDiagnosticForAddress(address, opts = {}) {
       if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
       continue;
     }
+    durabilityTally[durability].verified++;
     const wouldBePnl = outcomeWon ? +(g.shares * (1 - g.avgEntryPrice)).toFixed(4) : +(-g.entryCost).toFixed(4);
     const row = { question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_price: Math.round(g.avgEntryPrice * 1000) / 1000, would_be_pnl_usd: Math.round(wouldBePnl * 100) / 100, condition_id: g.condId };
     if (outcomeWon) { projectedWins++; if (sampleWins.length < 5) sampleWins.push(row); }
@@ -60892,6 +60938,10 @@ async function _heldLossDiagnosticForAddress(address, opts = {}) {
   // about what was actually verified vs. extrapolated.
   const sampledCount = sampledMissing.length;
   const verifyRatePct = sampledCount ? Math.round(((projectedWins + projectedLosses) / sampledCount) * 1000) / 10 : null;
+  const durableVerifyRatePct = durabilityTally.durable.total
+    ? Math.round((durabilityTally.durable.verified / durabilityTally.durable.total) * 1000) / 10 : null;
+  const ephemeralVerifyRatePct = durabilityTally.ephemeral.total
+    ? Math.round((durabilityTally.ephemeral.verified / durabilityTally.ephemeral.total) * 1000) / 10 : null;
 
   const projectedNewRows = projectedWins + projectedLosses;
   const projectedN = currentState.n + projectedNewRows;
@@ -60937,6 +60987,10 @@ async function _heldLossDiagnosticForAddress(address, opts = {}) {
     leftover_sampled: sampledCount,
     leftover_still_unverifiable: stillUnverifiable,
     verify_rate_pct: verifyRatePct,
+    by_durability: {
+      durable: { total: durabilityTally.durable.total, verified: durabilityTally.durable.verified, verify_rate_pct: durableVerifyRatePct },
+      ephemeral: { total: durabilityTally.ephemeral.total, verified: durabilityTally.ephemeral.verified, verify_rate_pct: ephemeralVerifyRatePct },
+    },
     win_rate_delta_pct: winRateDeltaPct,
     projected_new_rows: { total: projectedNewRows, wins: projectedWins, losses: projectedLosses },
     projected_state_if_backfilled: {
@@ -61055,6 +61109,132 @@ app.get('/api/admin/held-loss-diagnostic/batch', requireAdminSecret, async (req,
     });
   } catch (e) {
     console.error('[held-loss-diagnostic/batch]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DIAGNOSTIC: GET /api/admin/durable-market-scope ─────────────────────────
+// READ-ONLY, zero writes. Investigates whether the scoreboard is buildable
+// on Polymarket at all, given the held-loss batch survey found 19/20 whales
+// ungradeable (median verify rate 0%) — the whale set is selected by capital
+// deployed, which selects for high-frequency bots on ephemeral markets
+// (5-min crypto binaries, parlays) that age out of gamma before we can ever
+// verify them. That's a volume cohort, not a skill cohort.
+//
+// Three questions, three sections of this response:
+//   1. How many wallets qualify with >=10 resolved trades in DURABLE markets
+//      only (politics/macro/geopolitical — anything resolving weeks/months
+//      out), and what's THEIR held-loss verify rate specifically? (durable
+//      markets should still have gamma retention, unlike 5-min binaries.)
+//   2. What's the durable-vs-ephemeral split across ALL of realized_trades
+//      today — pure classification over data already in the DB, zero
+//      external API calls needed for this part.
+//   3. (Not computed here — a product decision, see the written report.)
+//      Whether to scope the leaderboard to durable markets only.
+//
+// Durability is classified via classifyMarketDurability() (title-pattern
+// primary signal, duration fallback only where opened_at is non-null — see
+// that function's comment for why redeemed-origin rows can't use duration).
+//
+//   curl "https://hyperflex.network/api/admin/durable-market-scope?secret=$ADMIN_SECRET"
+app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) => {
+  try {
+    const minDurableN = Math.max(1, parseInt(req.query.min_n, 10) || 10);
+    const sampleWallets = Math.min(30, Math.max(1, parseInt(req.query.sample_wallets, 10) || 15));
+    const groupSampleLimit = req.query.sample_limit ? parseInt(req.query.sample_limit, 10) : 50;
+
+    // ── Pull every realized_trades row that has enough to classify. No
+    // external calls — pure classification over data already captured. ──
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, market_question, opened_at, closed_at, realized_pnl
+      FROM realized_trades
+      WHERE market_question IS NOT NULL
+      LIMIT 200000
+    `).catch(e => { console.warn('[durable-market-scope] fetch error:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'realized_trades query failed' });
+
+    // ── Q2: overall durable vs. ephemeral split, plus a category cross-tab
+    // for extra context (cheap — already have the rows in memory). ──
+    let durableCount = 0, ephemeralCount = 0;
+    const categoryByDurability = { durable: {}, ephemeral: {} };
+    const durableCountByUser = new Map(); // user_id -> durable-trade count
+
+    for (const r of rows) {
+      const durability = classifyMarketDurability(r.market_question, r.opened_at, r.closed_at);
+      if (durability === 'durable') durableCount++; else ephemeralCount++;
+
+      const cat = classifyCardCategory(r.market_question);
+      categoryByDurability[durability][cat] = (categoryByDurability[durability][cat] || 0) + 1;
+
+      if (durability === 'durable' && r.user_id) {
+        durableCountByUser.set(r.user_id, (durableCountByUser.get(r.user_id) || 0) + 1);
+      }
+    }
+    const totalRows = rows.length;
+
+    // ── Q1 part 1: how many wallets qualify with >=minDurableN durable trades ──
+    const qualifyingUserIds = [...durableCountByUser.entries()]
+      .filter(([, n]) => n >= minDurableN)
+      .sort((a, b) => b[1] - a[1]); // most durable trades first
+
+    // ── Q1 part 2: run the held-loss mechanism on a bounded sample of the
+    // qualifying wallets and report THEIR durable-scoped verify rate — does
+    // scoping to durable markets actually fix the near-zero verify rate
+    // problem the batch survey found on the capital-selected whale set. ──
+    const sampleUserIds = qualifyingUserIds.slice(0, sampleWallets).map(([uid]) => uid);
+    let sampleWalletResults = [];
+    if (sampleUserIds.length) {
+      const addrRows = await dbQuery(
+        `SELECT id, polymarket_address FROM users WHERE id = ANY($1::uuid[]) AND polymarket_address IS NOT NULL`,
+        [sampleUserIds]
+      ).catch(() => []);
+      const durableNByUser = new Map(qualifyingUserIds);
+      await _mapLimit(addrRows, 3, async (u) => {
+        try {
+          const r = await _heldLossDiagnosticForAddress(u.polymarket_address.toLowerCase(), { groupSampleLimit });
+          sampleWalletResults.push({
+            user_id: u.id, address: u.polymarket_address,
+            existing_durable_n: durableNByUser.get(u.id) || null,
+            current_win_rate_pct: r.current_state.win_rate_pct,
+            durable_leftover: r.by_durability.durable,
+            ephemeral_leftover: r.by_durability.ephemeral,
+          });
+        } catch (e) {
+          sampleWalletResults.push({ user_id: u.id, address: u.polymarket_address, error: e.message });
+        }
+      });
+    }
+
+    const okSamples = sampleWalletResults.filter(r => !r.error);
+    const durableVerifyRates = okSamples.map(r => r.durable_leftover.verify_rate_pct).filter(v => v != null);
+    const avgDurableVerifyRate = durableVerifyRates.length
+      ? Math.round((durableVerifyRates.reduce((a, b) => a + b, 0) / durableVerifyRates.length) * 10) / 10 : null;
+
+    res.json({
+      totals: {
+        realized_trades_scanned: totalRows,
+        durable_count: durableCount,
+        ephemeral_count: ephemeralCount,
+        durable_pct: totalRows ? Math.round((durableCount / totalRows) * 1000) / 10 : null,
+        ephemeral_pct: totalRows ? Math.round((ephemeralCount / totalRows) * 1000) / 10 : null,
+      },
+      category_breakdown: categoryByDurability,
+      wallets_qualifying_on_durable_markets: {
+        min_durable_n_required: minDurableN,
+        qualifying_count: qualifyingUserIds.length,
+        top_durable_n_values: qualifyingUserIds.slice(0, 10).map(([, n]) => n),
+      },
+      durable_scoped_verify_rate_sample: {
+        wallets_sampled: sampleWalletResults.length,
+        wallets_errored: sampleWalletResults.length - okSamples.length,
+        avg_durable_verify_rate_pct: avgDurableVerifyRate,
+        per_wallet: sampleWalletResults,
+      },
+      note: 'Section 3 (whether to scope the leaderboard to durable markets only) is a product decision, not something this endpoint computes — see the written report.',
+      writes_performed: 0,
+    });
+  } catch (e) {
+    console.error('[durable-market-scope]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
