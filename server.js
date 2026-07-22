@@ -61143,21 +61143,37 @@ app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) 
     const sampleWallets = Math.min(30, Math.max(1, parseInt(req.query.sample_wallets, 10) || 15));
     const groupSampleLimit = req.query.sample_limit ? parseInt(req.query.sample_limit, 10) : 50;
 
-    // ── Pull every realized_trades row that has enough to classify. No
-    // external calls — pure classification over data already captured. ──
+    // ── Pull every realized_trades row that has enough to classify, LEFT
+    // JOINed against users for polymarket_address in the SAME query — this
+    // is the fix. The first version did this as two queries: build
+    // durableCountByUser here, then a SEPARATE `WHERE id = ANY($1::uuid[])`
+    // lookup for just the sampled user_ids. That second query threw (caught
+    // by a silent `.catch(() => [])`, which is exactly how it produced a
+    // clean-looking empty result instead of a visible error) because
+    // users.id is TEXT in this schema, not native uuid — the established
+    // join idiom elsewhere in this file (_computeRoiLeaderboard:
+    // `JOIN users u ON u.id = rt.user_id::text`) casts the OTHER side to
+    // text for exactly this reason. Casting the bind parameter to ::uuid[]
+    // instead compared a text column against a uuid array, which Postgres
+    // has no implicit operator for. Folding the address into this one query
+    // (same cast direction as the working precedent) removes the second
+    // round-trip and that whole failure class rather than just patching the
+    // cast direction and leaving the fragile two-query design in place. ──
     const rows = await dbQuery(`
-      SELECT user_id::text AS user_id, market_question, opened_at, closed_at, realized_pnl
-      FROM realized_trades
-      WHERE market_question IS NOT NULL
+      SELECT rt.user_id::text AS user_id, u.polymarket_address, rt.market_question, rt.opened_at, rt.closed_at, rt.realized_pnl
+      FROM realized_trades rt
+      LEFT JOIN users u ON u.id = rt.user_id::text
+      WHERE rt.market_question IS NOT NULL
       LIMIT 200000
-    `).catch(e => { console.warn('[durable-market-scope] fetch error:', e.message); return null; });
-    if (rows == null) return res.status(500).json({ error: 'realized_trades query failed' });
+    `).catch(e => { console.error('[durable-market-scope] realized_trades fetch error:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'realized_trades query failed — check server logs for the actual SQL error' });
 
     // ── Q2: overall durable vs. ephemeral split, plus a category cross-tab
     // for extra context (cheap — already have the rows in memory). ──
     let durableCount = 0, ephemeralCount = 0;
     const categoryByDurability = { durable: {}, ephemeral: {} };
     const durableCountByUser = new Map(); // user_id -> durable-trade count
+    const addressByUser = new Map(); // user_id -> polymarket_address (from the same scan, no second query)
 
     for (const r of rows) {
       const durability = classifyMarketDurability(r.market_question, r.opened_at, r.closed_at);
@@ -61166,6 +61182,7 @@ app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) 
       const cat = classifyCardCategory(r.market_question);
       categoryByDurability[durability][cat] = (categoryByDurability[durability][cat] || 0) + 1;
 
+      if (r.user_id && r.polymarket_address) addressByUser.set(r.user_id, r.polymarket_address);
       if (durability === 'durable' && r.user_id) {
         durableCountByUser.set(r.user_id, (durableCountByUser.get(r.user_id) || 0) + 1);
       }
@@ -61181,34 +61198,34 @@ app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) 
     // qualifying wallets and report THEIR durable-scoped verify rate — does
     // scoping to durable markets actually fix the near-zero verify rate
     // problem the batch survey found on the capital-selected whale set. ──
-    const sampleUserIds = qualifyingUserIds.slice(0, sampleWallets).map(([uid]) => uid);
+    const sampleTargets = qualifyingUserIds
+      .slice(0, sampleWallets)
+      .map(([uid, n]) => ({ user_id: uid, durable_n: n, address: addressByUser.get(uid) }))
+      .filter(t => !!t.address);
+    const missingAddressCount = Math.min(sampleWallets, qualifyingUserIds.length) - sampleTargets.length;
+
     let sampleWalletResults = [];
-    if (sampleUserIds.length) {
-      const addrRows = await dbQuery(
-        `SELECT id, polymarket_address FROM users WHERE id = ANY($1::uuid[]) AND polymarket_address IS NOT NULL`,
-        [sampleUserIds]
-      ).catch(() => []);
-      const durableNByUser = new Map(qualifyingUserIds);
-      await _mapLimit(addrRows, 3, async (u) => {
-        try {
-          const r = await _heldLossDiagnosticForAddress(u.polymarket_address.toLowerCase(), { groupSampleLimit });
-          sampleWalletResults.push({
-            user_id: u.id, address: u.polymarket_address,
-            existing_durable_n: durableNByUser.get(u.id) || null,
-            current_win_rate_pct: r.current_state.win_rate_pct,
-            durable_leftover: r.by_durability.durable,
-            ephemeral_leftover: r.by_durability.ephemeral,
-          });
-        } catch (e) {
-          sampleWalletResults.push({ user_id: u.id, address: u.polymarket_address, error: e.message });
-        }
-      });
-    }
+    await _mapLimit(sampleTargets, 3, async (t) => {
+      try {
+        const r = await _heldLossDiagnosticForAddress(t.address.toLowerCase(), { groupSampleLimit });
+        sampleWalletResults.push({
+          user_id: t.user_id, address: t.address,
+          existing_durable_n: t.durable_n,
+          current_win_rate_pct: r.current_state.win_rate_pct,
+          durable_leftover: r.by_durability.durable,
+          ephemeral_leftover: r.by_durability.ephemeral,
+        });
+      } catch (e) {
+        sampleWalletResults.push({ user_id: t.user_id, address: t.address, error: e.message });
+      }
+    });
 
     const okSamples = sampleWalletResults.filter(r => !r.error);
     const durableVerifyRates = okSamples.map(r => r.durable_leftover.verify_rate_pct).filter(v => v != null);
     const avgDurableVerifyRate = durableVerifyRates.length
       ? Math.round((durableVerifyRates.reduce((a, b) => a + b, 0) / durableVerifyRates.length) * 10) / 10 : null;
+    const sortedRates = [...durableVerifyRates].sort((a, b) => a - b);
+    const medianDurableVerifyRate = sortedRates.length ? sortedRates[Math.floor(sortedRates.length / 2)] : null;
 
     res.json({
       totals: {
@@ -61225,9 +61242,12 @@ app.get('/api/admin/durable-market-scope', requireAdminSecret, async (req, res) 
         top_durable_n_values: qualifyingUserIds.slice(0, 10).map(([, n]) => n),
       },
       durable_scoped_verify_rate_sample: {
+        wallets_requested: Math.min(sampleWallets, qualifyingUserIds.length),
+        wallets_missing_address: missingAddressCount,
         wallets_sampled: sampleWalletResults.length,
         wallets_errored: sampleWalletResults.length - okSamples.length,
         avg_durable_verify_rate_pct: avgDurableVerifyRate,
+        median_durable_verify_rate_pct: medianDurableVerifyRate,
         per_wallet: sampleWalletResults,
       },
       note: 'Section 3 (whether to scope the leaderboard to durable markets only) is a product decision, not something this endpoint computes — see the written report.',
