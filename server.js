@@ -60688,17 +60688,27 @@ app.get('/api/admin/regrade-redeemed-positions/status', requireAdminSecret, asyn
 // wallets this fix is meant to matter most for.
 //
 //   curl "https://hyperflex.network/api/admin/held-loss-diagnostic?address=0x4de883380632ffff2dd68116ac89cee5c1e776ba&secret=$ADMIN_SECRET"
-app.get('/api/admin/held-loss-diagnostic', requireAdminSecret, async (req, res) => {
-  try {
-    const address = String(req.query.address || '').toLowerCase();
-    if (!/^0x[0-9a-f]{40}$/.test(address)) {
-      return res.status(400).json({ error: 'address query param required, must be a 0x-prefixed 40-hex-char address' });
-    }
+//
+// Verdict calibration note (2026-07-20): the first version of this diagnostic
+// keyed its verdict on absolute n growth (n >= 3x). That's wrong — confirmed
+// live on two wallets with opposite profiles:
+//   - luficdm: 591 missing, 591 unverifiable (0% verify rate). 5-min BTC
+//     binaries + multi-leg parlays — ephemeral markets that age out of gamma
+//     before we ever look. Structurally ungradeable by this mechanism, no
+//     matter how large the raw gap number looks.
+//   - gloriafoster: 8 missing, 7 verified, ALL 7 losses. n only 6->13 (2.2x,
+//     would have FAILED the old >=3x threshold) but win_rate cratered
+//     100%->46.2% — exactly the fabrication signature breaking. This is the
+//     mechanism working.
+// The verdict now keys on win_rate movement and verify_rate, not n growth —
+// see computeVerdict() below.
+async function _heldLossDiagnosticForAddress(address, opts = {}) {
+  const groupSampleLimit = opts.groupSampleLimit || null; // cap gamma-verify calls per wallet (batch mode only — bounds wall-clock time across many wallets)
 
-    // ── Resolve to a users row, if one exists, so we can report a real
-    // before/after against the actual stored n/win_rate — not just the
-    // projection in isolation. ──
-    const userRows = await dbQuery(
+  // ── Resolve to a users row, if one exists, so we can report a real
+  // before/after against the actual stored n/win_rate — not just the
+  // projection in isolation. ──
+  const userRows = await dbQuery(
       `SELECT id, display_name, username, is_whale, whale_rank FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1`,
       [address]
     ).catch(() => []);
@@ -60838,75 +60848,213 @@ app.get('/api/admin/held-loss-diagnostic', requireAdminSecret, async (req, res) 
 
     // ── Verify each genuinely-missing group's market via the same gamma
     // helper the redeemed path and correction cron already trust. Bounded
-    // concurrency, same pattern as backfillRealizedTrades. ──
-    const uniqueCondIds = [...new Set(genuinelyMissing.map(g => g.condId))];
-    const settlementByCondId = new Map();
-    await _mapLimit(uniqueCondIds, 6, async (condId) => {
-      const s = await _verifyRedeemedSettlement(condId).catch(() => null);
-      if (s) settlementByCondId.set(condId, s);
-    });
+    // concurrency, same pattern as backfillRealizedTrades. groupSampleLimit
+    // (batch mode only) caps how many groups get gamma-verified per wallet —
+    // a wallet with hundreds of missing groups (luficdm had 591) would
+    // otherwise dominate the wall-clock time of a multi-wallet batch run.
+    // Uncapped for the single-wallet endpoint (proven fine in practice: both
+    // luficdm's 591 and gloriafoster's 8 completed in one request).
+  const sampledMissing = groupSampleLimit ? genuinelyMissing.slice(0, groupSampleLimit) : genuinelyMissing;
+  const uniqueCondIds = [...new Set(sampledMissing.map(g => g.condId))];
+  const settlementByCondId = new Map();
+  await _mapLimit(uniqueCondIds, 6, async (condId) => {
+    const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+    if (s) settlementByCondId.set(condId, s);
+  });
 
-    let projectedWins = 0, projectedLosses = 0, stillUnverifiable = 0;
-    const sampleWins = [], sampleLosses = [], sampleUnverifiable = [];
-    for (const g of genuinelyMissing) {
-      const settlement = settlementByCondId.get(g.condId);
-      if (!settlement) {
-        stillUnverifiable++;
-        if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
-        continue;
-      }
-      let outcomeWon;
-      if (settlement.winnerName) {
-        outcomeWon = settlement.winnerName.toUpperCase().trim() === g.outcome.trim();
-      } else if (g.outcome === 'YES' || g.outcome === 'NO') {
-        outcomeWon = g.outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
-      } else {
-        stillUnverifiable++;
-        if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
-        continue;
-      }
-      const wouldBePnl = outcomeWon ? +(g.shares * (1 - g.avgEntryPrice)).toFixed(4) : +(-g.entryCost).toFixed(4);
-      const row = { question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_price: Math.round(g.avgEntryPrice * 1000) / 1000, would_be_pnl_usd: Math.round(wouldBePnl * 100) / 100, condition_id: g.condId };
-      if (outcomeWon) { projectedWins++; if (sampleWins.length < 5) sampleWins.push(row); }
-      else { projectedLosses++; if (sampleLosses.length < 5) sampleLosses.push(row); }
+  let projectedWins = 0, projectedLosses = 0, stillUnverifiable = 0;
+  const sampleWins = [], sampleLosses = [], sampleUnverifiable = [];
+  for (const g of sampledMissing) {
+    const settlement = settlementByCondId.get(g.condId);
+    if (!settlement) {
+      stillUnverifiable++;
+      if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
+      continue;
     }
+    let outcomeWon;
+    if (settlement.winnerName) {
+      outcomeWon = settlement.winnerName.toUpperCase().trim() === g.outcome.trim();
+    } else if (g.outcome === 'YES' || g.outcome === 'NO') {
+      outcomeWon = g.outcome === 'YES' ? settlement.price > 0.95 : settlement.price < 0.05;
+    } else {
+      stillUnverifiable++;
+      if (sampleUnverifiable.length < 5) sampleUnverifiable.push({ question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_cost_usd: Math.round(g.entryCost * 100) / 100 });
+      continue;
+    }
+    const wouldBePnl = outcomeWon ? +(g.shares * (1 - g.avgEntryPrice)).toFixed(4) : +(-g.entryCost).toFixed(4);
+    const row = { question: g.question, side: g.outcome, shares: Math.round(g.shares * 100) / 100, entry_price: Math.round(g.avgEntryPrice * 1000) / 1000, would_be_pnl_usd: Math.round(wouldBePnl * 100) / 100, condition_id: g.condId };
+    if (outcomeWon) { projectedWins++; if (sampleWins.length < 5) sampleWins.push(row); }
+    else { projectedLosses++; if (sampleLosses.length < 5) sampleLosses.push(row); }
+  }
 
-    const projectedNewRows = projectedWins + projectedLosses;
-    const projectedN = currentState.n + projectedNewRows;
-    const projectedWinsTotal = currentState.wins + projectedWins;
-    const projectedWinRate = projectedN ? Math.round((projectedWinsTotal / projectedN) * 1000) / 10 : null;
+  // Verify rate is measured against the SAMPLE actually checked (sampledMissing),
+  // not the full genuinelyMissing count, so batch mode's numbers stay honest
+  // about what was actually verified vs. extrapolated.
+  const sampledCount = sampledMissing.length;
+  const verifyRatePct = sampledCount ? Math.round(((projectedWins + projectedLosses) / sampledCount) * 1000) / 10 : null;
+
+  const projectedNewRows = projectedWins + projectedLosses;
+  const projectedN = currentState.n + projectedNewRows;
+  const projectedWinsTotal = currentState.wins + projectedWins;
+  const projectedWinRate = projectedN ? Math.round((projectedWinsTotal / projectedN) * 1000) / 10 : null;
+  const winRateDeltaPct = (currentState.win_rate_pct != null && projectedWinRate != null)
+    ? Math.round((currentState.win_rate_pct - projectedWinRate) * 10) / 10 : null;
+
+  // Verdict keys on win_rate movement + verify_rate, NOT absolute n growth —
+  // see the calibration note above the function. A wallet can have a huge
+  // raw gap (luficdm: 591) that's entirely unverifiable (ephemeral markets
+  // aged out of gamma) — that's a real finding, just not "mechanism works."
+  // A wallet can have a tiny gap (gloriafoster: 8) that's almost entirely
+  // verifiable and completely inverts the win rate — that IS the mechanism
+  // working, regardless of how small n's absolute movement looks.
+  let verdict;
+  if (genuinelyMissing.length === 0) {
+    verdict = 'NO GAP — no leftover held positions found outside what is already in realized_trades for this wallet.';
+  } else if (verifyRatePct == null || verifyRatePct < 20) {
+    verdict = `MOSTLY UNGRADEABLE — only ${verifyRatePct == null ? 0 : verifyRatePct}% of the sampled missing positions verified against gamma (likely ephemeral/short-lived markets that have aged out of retention, e.g. 5-min recurring binaries). This mechanism alone will not close this wallet's gap regardless of how large the raw gap number is.`;
+  } else if (winRateDeltaPct != null && winRateDeltaPct >= 10) {
+    verdict = `MECHANISM WORKS — win rate fell ${winRateDeltaPct} points (${currentState.win_rate_pct}% -> ${projectedWinRate}%) at a ${verifyRatePct}% verify rate.`;
+  } else if (currentState.n === 0) {
+    verdict = 'NO PRIOR RECORD for this wallet — cannot compute a win-rate delta. Review projected_state_if_backfilled directly.';
+  } else {
+    verdict = `INCONCLUSIVE — verify rate ${verifyRatePct}%, win rate moved ${winRateDeltaPct == null ? 'n/a' : winRateDeltaPct} points. Review sample rows before drawing a conclusion.`;
+  }
+
+  return {
+    address, user_id: user ? user.id : null, display_name: user ? resolveDisplayName(user) : null, mapped: !!user,
+    current_state: currentState,
+    activity_fetch: {
+      capped_call_count: cappedActivity.length,
+      full_paginated_count: fullActivity.length,
+      pages_fetched: pagesFetched,
+      pagination_changed_results: fullActivity.length > cappedActivity.length,
+      capped_leftover_groups: cappedResult.leftoverGroups.length,
+      full_leftover_groups: fullResult.leftoverGroups.length,
+    },
+    leftover_groups_found: fullResult.leftoverGroups.length,
+    leftover_already_captured_elsewhere: alreadyCapturedElsewhere,
+    leftover_genuinely_missing: genuinelyMissing.length,
+    leftover_sampled: sampledCount,
+    leftover_still_unverifiable: stillUnverifiable,
+    verify_rate_pct: verifyRatePct,
+    win_rate_delta_pct: winRateDeltaPct,
+    projected_new_rows: { total: projectedNewRows, wins: projectedWins, losses: projectedLosses },
+    projected_state_if_backfilled: {
+      n: projectedN, wins: projectedWinsTotal, losses: currentState.losses + projectedLosses,
+      win_rate_pct: projectedWinRate,
+    },
+    sample_new_loss_rows: sampleLosses,
+    sample_new_win_rows: sampleWins,
+    sample_still_unverifiable: sampleUnverifiable,
+    verdict,
+    writes_performed: 0,
+  };
+}
+
+app.get('/api/admin/held-loss-diagnostic', requireAdminSecret, async (req, res) => {
+  try {
+    const address = String(req.query.address || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(address)) {
+      return res.status(400).json({ error: 'address query param required, must be a 0x-prefixed 40-hex-char address' });
+    }
+    const groupSampleLimit = req.query.sample_limit ? parseInt(req.query.sample_limit, 10) : null;
+    const result = await _heldLossDiagnosticForAddress(address, { groupSampleLimit });
+    res.json(result);
+  } catch (e) {
+    console.error('[held-loss-diagnostic]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DIAGNOSTIC: GET /api/admin/held-loss-diagnostic/batch ───────────────────
+// READ-ONLY, zero writes — same guarantee as the single-wallet version above.
+// Runs the diagnostic across a STRATIFIED SAMPLE of whales (spread evenly
+// across the whole whale_rank spectrum via NTILE, not just the top N — the
+// two wallets checked by hand so far, luficdm and gloriafoster, have wildly
+// different profiles, so a representative spread matters more than a big N).
+// Reports the distribution: what fraction of the whale set is gradeable
+// (gloriafoster-like — high verify rate, win rate corrects hard) vs.
+// structurally ungradeable (luficdm-like — near-zero verify rate, ephemeral
+// markets). That fraction is what determines whether this fix is worth
+// running as a full backfill, and how ungradeable wallets should be handled
+// once it does.
+//
+// Bounded for wall-clock safety: per-wallet gamma verification is capped at
+// `sample_limit` groups (default 50) instead of exhaustive, and wallets are
+// processed at limited outer concurrency. A wallet with hundreds of missing
+// groups (luficdm-scale) would otherwise dominate the runtime of the whole
+// batch. Use `offset` to run this in smaller chunks if 20 wallets still
+// times out in your environment.
+//
+//   curl "https://hyperflex.network/api/admin/held-loss-diagnostic/batch?limit=20&secret=$ADMIN_SECRET"
+app.get('/api/admin/held-loss-diagnostic/batch', requireAdminSecret, async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const groupSampleLimit = req.query.sample_limit ? parseInt(req.query.sample_limit, 10) : 50;
+
+    // Stratified sample: one whale per NTILE bucket across the whole
+    // whale_rank spectrum, so the survey spans best/mid/worst-ranked wallets
+    // instead of clustering at the top.
+    const whaleRows = await dbQuery(`
+      WITH ranked AS (
+        SELECT id, polymarket_address, whale_rank, realized_trade_count,
+               NTILE($1) OVER (ORDER BY whale_rank ASC NULLS LAST) AS tile
+        FROM users
+        WHERE is_whale = true AND polymarket_address IS NOT NULL AND polymarket_address <> ''
+      )
+      SELECT DISTINCT ON (tile) id, polymarket_address, whale_rank, realized_trade_count
+      FROM ranked
+      ORDER BY tile, whale_rank ASC NULLS LAST
+      OFFSET $2 LIMIT $3
+    `, [limit, offset, limit]).catch(e => { console.warn('[held-loss-diagnostic/batch] whale select error:', e.message); return null; });
+    if (whaleRows == null) return res.status(500).json({ error: 'whale selection query failed' });
+    if (!whaleRows.length) return res.json({ wallets: [], summary: null, note: 'No whales matched (offset past the end of the whale set, or none have a polymarket_address).' });
+
+    const results = [];
+    await _mapLimit(whaleRows, 3, async (w) => {
+      try {
+        const r = await _heldLossDiagnosticForAddress(w.polymarket_address.toLowerCase(), { groupSampleLimit });
+        results.push({ whale_rank: w.whale_rank, ...r });
+      } catch (e) {
+        results.push({ whale_rank: w.whale_rank, address: w.polymarket_address, error: e.message });
+      }
+    });
+    results.sort((a, b) => (a.whale_rank || 9e9) - (b.whale_rank || 9e9));
+
+    const ok = results.filter(r => !r.error);
+    const gradeable = ok.filter(r => r.verify_rate_pct != null && r.verify_rate_pct >= 50);
+    const ungradeable = ok.filter(r => r.verify_rate_pct == null || r.verify_rate_pct < 50);
+    const verifyRates = ok.map(r => r.verify_rate_pct).filter(v => v != null);
+    const avgVerifyRate = verifyRates.length ? Math.round((verifyRates.reduce((a, b) => a + b, 0) / verifyRates.length) * 10) / 10 : null;
+    const sortedVerifyRates = [...verifyRates].sort((a, b) => a - b);
+    const medianVerifyRate = sortedVerifyRates.length
+      ? sortedVerifyRates[Math.floor(sortedVerifyRates.length / 2)]
+      : null;
 
     res.json({
-      address, user_id: user ? user.id : null, display_name: user ? resolveDisplayName(user) : null, mapped: !!user,
-      current_state: currentState,
-      activity_fetch: {
-        capped_call_count: cappedActivity.length,
-        full_paginated_count: fullActivity.length,
-        pages_fetched: pagesFetched,
-        pagination_changed_results: fullActivity.length > cappedActivity.length,
-        capped_leftover_groups: cappedResult.leftoverGroups.length,
-        full_leftover_groups: fullResult.leftoverGroups.length,
+      wallets_surveyed: results.length,
+      wallets_errored: results.length - ok.length,
+      summary: {
+        gradeable_count: gradeable.length,
+        ungradeable_count: ungradeable.length,
+        gradeable_pct: ok.length ? Math.round((gradeable.length / ok.length) * 1000) / 10 : null,
+        avg_verify_rate_pct: avgVerifyRate,
+        median_verify_rate_pct: medianVerifyRate,
+        wallets_with_win_rate_correction_ge_10pts: ok.filter(r => r.win_rate_delta_pct != null && r.win_rate_delta_pct >= 10).length,
       },
-      leftover_groups_found: fullResult.leftoverGroups.length,
-      leftover_already_captured_elsewhere: alreadyCapturedElsewhere,
-      leftover_genuinely_missing: genuinelyMissing.length,
-      leftover_still_unverifiable: stillUnverifiable,
-      projected_new_rows: { total: projectedNewRows, wins: projectedWins, losses: projectedLosses },
-      projected_state_if_backfilled: {
-        n: projectedN, wins: projectedWinsTotal, losses: currentState.losses + projectedLosses,
-        win_rate_pct: projectedWinRate,
-      },
-      sample_new_loss_rows: sampleLosses,
-      sample_new_win_rows: sampleWins,
-      sample_still_unverifiable: sampleUnverifiable,
-      ground_truth_note: 'Polymarket profile for this wallet reportedly shows 571 total predictions (manually checked, not queried by this endpoint — this sandbox has no browser access to polymarket.com). Compare projected_state_if_backfilled.n against that by hand.',
-      verdict: projectedN >= currentState.n * 3 && projectedWinRate != null && projectedWinRate < 90
-        ? 'MECHANISM APPEARS TO WORK — n climbs substantially and win_rate drops out of the fabrication range.'
-        : 'MECHANISM DOES NOT MOVE THE NEEDLE ENOUGH — n and/or win_rate did not shift as expected. Do not proceed to a real backfill on this evidence.',
+      wallets: results.map(r => r.error ? r : {
+        address: r.address, whale_rank: r.whale_rank, display_name: r.display_name,
+        current_n: r.current_state.n, current_win_rate_pct: r.current_state.win_rate_pct,
+        leftover_genuinely_missing: r.leftover_genuinely_missing, leftover_sampled: r.leftover_sampled,
+        verify_rate_pct: r.verify_rate_pct, projected_n: r.projected_state_if_backfilled.n,
+        projected_win_rate_pct: r.projected_state_if_backfilled.win_rate_pct,
+        win_rate_delta_pct: r.win_rate_delta_pct, verdict: r.verdict,
+      }),
       writes_performed: 0,
     });
   } catch (e) {
-    console.error('[held-loss-diagnostic]', e.message);
+    console.error('[held-loss-diagnostic/batch]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
