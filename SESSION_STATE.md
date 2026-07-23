@@ -49,6 +49,32 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-21 (MILESTONE: Gate 1 clears — durable-market leaderboard hand-verified against real Polymarket profiles)
+
+**The gate that has blocked every trader-facing surface since 2026-07-18 is cleared.** Marc ran the actual backfill and hand-verified the resulting top of the leaderboard directly against polymarket.com. This is the first time in this whole arc that a leaderboard has survived that check.
+
+**Backfill, run for real (not the diagnostic estimate):** 21,934 rows processed, 3,992 classified durable. Close to the read-only survey's projection (21,879 / 3,986) — the small delta is new rows ingested between the survey and the actual run, not a discrepancy to chase.
+
+**Hand-verification, 3 wallets checked directly against polymarket.com:**
+- **taerv534** — 1,866 real Polymarket predictions, we score n=10. Highly selective, which is the point: only 10 of those 1,866 are durable and independently verifiable.
+- **TB14** — 689 predictions, scored n=26 at 46.2% win rate — and Polymarket shows them actually losing (down on the day, every visible position deep red: -29%, -84%, -94%, -82%). **This is the exact check that would have caught an inverted model or a residual fabrication bug, and it passed** — a losing trader is correctly ranked as losing, same discipline as the gloriafoster catch that started this whole investigation, except this time the system got it right.
+- **MELOCOTON007** — 136 predictions, scored n=20 at 80% win rate, biggest win $8,318, no open positions.
+
+**Caveat on the record, stated plainly rather than glossed over:** the Polymarket P&L panels checked were "Past Day," not lifetime "All" — TB14's -$450 figure is one day, not a career total. The position-level detail (multiple deeply-red individual positions) supports the losing-trader read regardless of the P&L window, but the lifetime figure itself was not pulled. Worth a lifetime-window spot-check before leaning on exact P&L numbers anywhere public-facing.
+
+**Also worth logging honestly: this hand-verification was performed by Marc directly against polymarket.com, not by Code.** Code's sandbox still has no network path to hyperflex.network or polymarket.com (confirmed repeatedly throughout this arc) — every number in the backfill/rebuild was written and reasoned about by Code, but the actual real-world check that clears Gate 1 was necessarily done outside this sandbox.
+
+**Active blockers:**
+- (none — Gate 1's hand-verification requirement is satisfied for the first time this arc)
+
+**Queued (priority order):**
+1. CLAUDE.md Gate 1 updated in this same entry's commit — see below.
+2. Bring the trader surface off the provisional flag: remove the provisional banners from `home-traders-preview.html`/`trader-profile.html`, strip `provisional:true`/`provisional_note` from the API responses, link trader cards from site nav, and decide whether `home-traders-preview.html` becomes the real `/` (replacing home.html's market grid) or a new route. **Not done in this entry — a distinct, higher-visibility action from writing documentation, held for explicit confirmation before touching anything public-facing.**
+3. Optional, lower priority: spot-check TB14's lifetime ("All") P&L window per the caveat above.
+
+**Notes for next session:**
+- If the "go public" step above is approved: `provisional`/`provisional_note` currently appear in `_buildTraderCards`' and `_buildTraderProfile`'s return objects, `/api/trader-cards`, and `/api/trader-record/:handle` — grep for `provisional` in server.js to find every emission point before stripping.
+
 ## 2026-07-20b (MAJOR: whale-set selection was structurally wrong — leaderboard rebuilt on durable markets, not capital)
 
 **Resolves the "Redeemed-win correction cron status: UNKNOWN" blocker from the entry below: Marc confirmed `remaining: 0` directly.** But draining the backlog surfaced a second, deeper bug: `/api/trader-cards` still showed a 100% win rate at n=35 for luficdm (0x4de88338...) — same fabrication signature as the original redeemed-win bug, on a wallet the correction cron claimed to have cleared.
