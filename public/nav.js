@@ -316,18 +316,18 @@
          equal-specificity unconditional rule would otherwise clobber it.
          Mobile (<1024px, see the max-width:768px blocks above) is untouched. */
       '@media(min-width:1024px){' +
-        '.topbar{padding:14px 32px}' +
-        '.topbar-logo{font-size:24px}' +
-        '.nav-links{gap:20px}' +
-        '.nav-link{font-size:17px;padding:8px 16px}' +
-        '.nav-signin{font-size:16px;padding:10px 18px}' +
-        '.nav-wallet-btn{padding:10px 16px}' +
-        '.nav-wallet-btn svg{width:18px;height:18px}' +
-        '.nav-wallet-btn span{font-size:16px}' +
-        '.nav-search-btn{padding:10px 16px}' +
-        '.nav-search-btn svg{width:18px;height:18px}' +
-        '.nav-search-btn span{font-size:16px}' +
-        '.nav-search-btn kbd{font-size:13px;padding:2px 7px}' +
+        '.topbar{padding:24px 40px}' +
+        '.topbar-logo{font-size:32px}' +
+        '.nav-links{gap:28px}' +
+        '.nav-link{font-size:20px;padding:10px 18px}' +
+        '.nav-signin{font-size:18px;padding:12px 22px}' +
+        '.nav-wallet-btn{padding:12px 20px}' +
+        '.nav-wallet-btn svg{width:20px;height:20px}' +
+        '.nav-wallet-btn span{font-size:18px}' +
+        '.nav-search-btn{padding:12px 20px}' +
+        '.nav-search-btn svg{width:20px;height:20px}' +
+        '.nav-search-btn span{font-size:18px}' +
+        '.nav-search-btn kbd{font-size:14px;padding:3px 8px}' +
       '}' +
       /* Overlay */
       '.hfx-search-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:none;align-items:flex-start;justify-content:center;padding:min(12vh,120px) 16px 16px}' +
