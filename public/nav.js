@@ -248,7 +248,7 @@
       '.topbar-logo{font-family:"Inter",-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none}' +
       '.topbar-logo span{background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}' +
       '.nav-links{display:flex;align-items:center;gap:6px;margin-left:auto}' +
-      '.nav-link{font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .15s;padding:6px 10px;border-radius:8px}' +
+      '.nav-link{font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .15s;padding:6px 10px;border-radius:8px;white-space:nowrap}' +
       '.nav-link:hover{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
       '.nav-link.active{color:#f0f0f5;background:rgba(255,255,255,0.08);font-weight:600}' +
       /* Hamburger More menu */
@@ -316,18 +316,18 @@
          equal-specificity unconditional rule would otherwise clobber it.
          Mobile (<1024px, see the max-width:768px blocks above) is untouched. */
       '@media(min-width:1024px){' +
-        '.topbar{padding:24px 40px}' +
-        '.topbar-logo{font-size:32px}' +
-        '.nav-links{gap:28px}' +
-        '.nav-link{font-size:20px;padding:10px 18px}' +
-        '.nav-signin{font-size:18px;padding:12px 22px}' +
-        '.nav-wallet-btn{padding:12px 20px}' +
-        '.nav-wallet-btn svg{width:20px;height:20px}' +
-        '.nav-wallet-btn span{font-size:18px}' +
-        '.nav-search-btn{padding:12px 20px}' +
-        '.nav-search-btn svg{width:20px;height:20px}' +
-        '.nav-search-btn span{font-size:18px}' +
-        '.nav-search-btn kbd{font-size:14px;padding:3px 8px}' +
+        '.topbar{padding:30px 40px}' +
+        '.topbar-logo{font-size:40px}' +
+        '.nav-links{gap:18px}' +
+        '.nav-link{font-size:24px;padding:10px 14px}' +
+        '.nav-signin{font-size:22px;padding:14px 26px}' +
+        '.nav-wallet-btn{padding:14px 24px}' +
+        '.nav-wallet-btn svg{width:24px;height:24px}' +
+        '.nav-wallet-btn span{font-size:22px}' +
+        '.nav-search-btn{padding:14px 24px}' +
+        '.nav-search-btn svg{width:24px;height:24px}' +
+        '.nav-search-btn span{font-size:22px}' +
+        '.nav-search-btn kbd{font-size:16px;padding:4px 9px}' +
       '}' +
       /* Overlay */
       '.hfx-search-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:none;align-items:flex-start;justify-content:center;padding:min(12vh,120px) 16px 16px}' +
