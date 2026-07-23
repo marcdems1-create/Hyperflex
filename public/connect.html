@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/trader-card.css">
+<style>
+  :root{
+    --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff; --purple:#a855f7; --amber:#f59e0b;
+    --paper:#0e0e15; --ink:#f0f0f5; --border:#1e1e2a; --muted:rgba(240,240,245,.45);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',-apple-system,sans-serif;}
+  #nav-root{position:sticky;top:0;z-index:100;}
+
+  main{max-width:760px;margin:0 auto;padding:0 24px 80px;}
+
+  /* ── hero: connect ── */
+  .hero{text-align:center;padding:56px 0 36px;}
+  .hero h1{font-size:34px;font-weight:900;letter-spacing:-.02em;margin:0 0 12px;}
+  .hero p{font-size:15px;color:var(--muted);max-width:480px;margin:0 auto 28px;line-height:1.5;}
+  .connect-btn{font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#0e0e15;background:linear-gradient(135deg,#00e68a,#4d9fff);border:none;border-radius:10px;padding:14px 28px;cursor:pointer;}
+  .connect-btn:hover{filter:brightness(1.08);}
+  .connect-btn:disabled{opacity:.5;cursor:default;filter:none;}
+  .connect-alt{margin-top:22px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+  .connect-alt input{font-family:'JetBrains Mono',monospace;font-size:13px;background:#111118;border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:10px 14px;width:340px;max-width:100%;}
+  .connect-alt button{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:10px 14px;cursor:pointer;}
+  .connect-alt button:hover{color:var(--ink);border-color:rgba(240,240,245,.3);}
+  .connect-err{color:var(--red);font-size:13px;margin-top:14px;}
+
+  /* ── listing notice ── */
+  .listing-notice{display:flex;align-items:flex-start;gap:14px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px;font-size:13px;line-height:1.5;color:rgba(240,240,245,.8);}
+  .listing-notice label{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;margin-left:auto;cursor:pointer;}
+  .listing-notice input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue);cursor:pointer;}
+
+  /* ── progress banner while the verified backfill runs ── */
+  .verify-banner{display:flex;align-items:center;gap:10px;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.22);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#4d9fff;}
+  .verify-spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(77,159,255,.25);border-top-color:#4d9fff;animation:spin .8s linear infinite;flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── raw record (shown before verification completes) ── */
+  .raw-card{background:#111118;border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:20px;}
+  .raw-identity{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .raw-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#0e0e15;}
+  .raw-addr{font-family:'JetBrains Mono',monospace;font-size:14px;color:rgba(240,240,245,.75);}
+  .raw-stats{font-size:14px;color:rgba(240,240,245,.7);line-height:1.6;}
+  .raw-stats b{color:#fff;}
+
+  /* ── non-qualifying progress (progress bar, not a rejection) ── */
+  .qual-progress{margin-top:14px;}
+  .qual-bar-track{width:100%;height:8px;border-radius:5px;background:rgba(240,240,245,.08);overflow:hidden;margin-top:8px;}
+  .qual-bar-fill{height:100%;background:linear-gradient(90deg,#4d9fff,#00e68a);border-radius:5px;transition:width .4s ease;}
+  .qual-note{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:8px;}
+
+  .category-stub{background:#111118;border:1px dashed var(--border);border-radius:10px;padding:18px;margin-top:20px;font-size:13px;color:var(--muted);line-height:1.6;}
+  .category-stub a{color:var(--blue);text-decoration:none;}
+  .category-stub a:hover{text-decoration:underline;}
+
+  .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
+  .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:10px;height:80px;}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  /* ── verified record (identical to /trader/:handle — same rendering code, see comment in JS) ── */
+  .p-header{padding:8px 0 28px;}
+  .p-identity{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
+  .p-avatar{width:56px;height:56px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;color:#0e0e15;}
+  .p-handle{font-family:'JetBrains Mono',monospace;font-size:16px;color:rgba(240,240,245,.7);}
+  .p-address{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px;margin-top:2px;background:none;border:none;padding:0;}
+  .p-address:hover{color:var(--ink);}
+  .p-rank{margin-left:auto;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);}
+
+  .p-verdict{font-size:30px;font-weight:900;line-height:1.18;letter-spacing:-.015em;color:#fff;margin-bottom:20px;}
+  .p-verdict.is-ineligible{color:rgba(240,240,245,.55);font-weight:700;font-size:22px;}
+
+  .p-scoreline{display:inline-flex;align-items:baseline;gap:10px;padding:12px 20px;border-radius:10px;font-family:'JetBrains Mono',monospace;}
+  .p-scoreline.is-positive{background:rgba(0,230,138,.09);border:1px solid rgba(0,230,138,.25);}
+  .p-scoreline.is-negative{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.22);}
+  .p-scoreline.is-neutral{background:rgba(240,240,245,.05);border:1px solid rgba(240,240,245,.12);}
+  .p-score{font-size:28px;font-weight:800;}
+  .p-scoreline.is-positive .p-score{color:#00e68a;}
+  .p-scoreline.is-negative .p-score{color:#ff4d6a;}
+  .p-scoreline.is-neutral .p-score{color:rgba(240,240,245,.6);}
+  .p-n{font-size:14px;color:rgba(240,240,245,.4);}
+  .p-scope{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
+
+  .p-section{margin-top:36px;}
+  .p-section-title{font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 16px;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;}
+  .stat-tile{background:#111118;border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+  .stat-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .stat-value{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:#fff;}
+  .stat-value.is-positive{color:#00e68a;}
+  .stat-value.is-negative{color:#ff4d6a;}
+
+  .call-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:700px){ .call-pair{grid-template-columns:1fr;} }
+  .call-card{background:#111118;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;}
+  .call-card.is-best{border:1px solid rgba(0,230,138,.25);}
+  .call-card.is-worst{border:1px solid rgba(255,77,106,.22);}
+  .call-kicker{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;}
+  .call-card.is-best .call-kicker{color:#00e68a;}
+  .call-card.is-worst .call-kicker{color:#ff4d6a;}
+  .call-q{font-size:16px;font-weight:700;line-height:1.4;color:#f0f0f5;}
+  .call-meta{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;}
+  .call-meta .amt{margin-left:8px;}
+  .call-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+
+  .specialty-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  .specialty-tile{background:#111118;border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .specialty-cat{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);margin-bottom:6px;}
+  .specialty-wr{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;}
+  .specialty-wr.is-positive{color:#00e68a;}
+  .specialty-wr.is-negative{color:#ff4d6a;}
+  .specialty-n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+
+  .form-row{display:flex;align-items:center;gap:16px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:18px 20px;}
+  .form-trend{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--muted);}
+  .form-trend.up{color:#00e68a;} .form-trend.down{color:#ff4d6a;}
+
+  .hist-filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .hist-filters select,.hist-filters button{font-family:'JetBrains Mono',monospace;font-size:12px;background:#111118;border:1px solid var(--border);color:var(--ink);border-radius:6px;padding:7px 12px;cursor:pointer;}
+  .hist-filters button.active{border-color:var(--blue);color:var(--blue);}
+
+  .hist-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:12.5px;}
+  .hist-table th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 10px 8px;border-bottom:1px solid var(--border);}
+  .hist-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  .hist-table tr:last-child td{border-bottom:none;}
+  .hist-q{max-width:360px;color:rgba(240,240,245,.8);font-family:'Inter',sans-serif;font-size:13px;}
+  .hist-result{font-weight:700;}
+  .hist-result.win{color:#00e68a;} .hist-result.loss{color:#ff4d6a;} .hist-result.push{color:var(--muted);}
+  .hist-count{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:10px;}
+
+  .open-list{display:flex;flex-direction:column;gap:8px;}
+  .open-row{display:flex;justify-content:space-between;gap:14px;background:#111118;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;}
+  .open-row .oq{color:rgba(240,240,245,.75);}
+  .open-row .os{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);flex-shrink:0;}
+
+  .void-note{font-size:12px;color:var(--muted);line-height:1.6;max-width:760px;}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/nav.js?v=22"></script>
+
+<main>
+  <div class="hero" id="hero">
+    <h1>What's your score?</h1>
+    <p>Connect your wallet to see your real Polymarket trading record — wins and losses, graded against what actually happened.</p>
+    <button class="connect-btn" id="connectBtn">Connect Wallet</button>
+    <div class="connect-alt">
+      <input type="text" id="pasteAddr" placeholder="or paste a wallet address to preview" autocomplete="off">
+      <button id="pasteBtn">Preview</button>
+    </div>
+    <div class="connect-err" id="connectErr" style="display:none;"></div>
+  </div>
+  <div id="result"></div>
+</main>
+
+<script src="/trader-card.js"></script>
+<script>
+// ── shared formatting helpers — identical to trader-profile.html by design.
+// Duplicated rather than extracted into a shared module for now (same
+// tradeoff already made between market.html/creator-dashboard.html
+// elsewhere in this codebase — see CLAUDE.md's "KNOWN duplication" note).
+// If this drifts from trader-profile.html's version, that's the signal to
+// finally extract both into one file.
+function esc(s){ return HFXTraderCard.esc(s); }
+function fmtPct(p){ if (p==null) return '—'; return (p>=0?'+':'') + p.toFixed(1) + '%'; }
+function fmtUsd(n){ if (n==null) return '—'; var v=Math.abs(n); var s=v>=1e6?'$'+(v/1e6).toFixed(1)+'M':v>=1e3?'$'+Math.round(v/1e3)+'K':'$'+Math.round(v); return (n<0?'-':'') + s; }
+function fmtDate(d){ if(!d) return '—'; var dt=new Date(d); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function initials(p){
+  var src = p.display_name || p.username || p.polymarket_address || p.address || '?';
+  var parts = String(src).replace(/^0x/,'').trim().split(/\s+/);
+  return (parts.length>=2 ? (parts[0][0]+parts[1][0]) : String(src).slice(0,2)).toUpperCase();
+}
+function avatarColor(seed){
+  var src = String(seed || 'x');
+  var hash = 0;
+  for (var i=0;i<src.length;i++) hash = (hash*31 + src.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (hash % 360) + ', 62%, 62%)';
+}
+function callLine(call){
+  if (!call) return null;
+  var verb = call.side === 'SELL' ? 'Sold' : 'Bought';
+  var entryC = call.entry_price != null ? Math.round(call.entry_price*100)+'¢' : null;
+  var outcome = call.result === 'win' ? 'WON' : call.result === 'loss' ? 'LOST' : 'PUSHED';
+  var pctText = call.roi != null ? fmtPct(call.roi*100) : '';
+  return (entryC ? verb + ' at ' + entryC + ' ' : verb + ' ') + '→ ' + outcome + (pctText ? ' <span class="amt">' + pctText + '</span>' : '');
+}
+function callCardHtml(call, kind){
+  var label = kind === 'best' ? 'Best call' : 'Worst call';
+  if (!call) {
+    return '<div class="call-card is-'+kind+'"><div class="call-kicker">'+label+'</div><div class="hist-count">No resolved trades yet.</div></div>';
+  }
+  var line = callLine(call);
+  return '<div class="call-card is-'+kind+'">'
+    + '<div class="call-kicker">'+label+(call.result==='loss'&&kind==='best'?' (still a loss)':'')+(call.result==='win'&&kind==='worst'?' (still a win)':'')+'</div>'
+    + '<div class="call-q">'+esc((call.question||'').slice(0,140))+'</div>'
+    + '<div class="call-meta" style="color:'+(call.pnl>=0?'#00e68a':'#ff4d6a')+'">'+line+'</div>'
+    + '<div class="call-date">'+esc(fmtDate(call.closed_at))+' · '+esc(fmtUsd(call.pnl))+'</div>'
+  + '</div>';
+}
+
+// ── connect state ──
+var _pollTimer = null;
+var _currentUserId = null;
+var _currentAddress = null;
+var _hasSigner = false; // true only when the address came from an actual wallet connect, not a pasted preview
+
+function showErr(msg){
+  var e = document.getElementById('connectErr');
+  e.textContent = msg;
+  e.style.display = 'block';
+}
+
+async function connectWallet(){
+  if (!window.ethereum) { showErr('No wallet extension detected in this browser. Paste an address below to preview instead.'); return; }
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (accounts && accounts[0]) { _hasSigner = true; handleAddress(accounts[0]); }
+  } catch (e) {
+    showErr('Wallet connection was rejected.');
+  }
+}
+
+function previewAddress(){
+  var v = (document.getElementById('pasteAddr').value || '').trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(v)) { showErr('Enter a valid Ethereum address (0x… 40 hex characters).'); return; }
+  _hasSigner = false;
+  handleAddress(v);
+}
+
+document.getElementById('connectBtn').addEventListener('click', connectWallet);
+document.getElementById('pasteBtn').addEventListener('click', previewAddress);
+document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if (e.key === 'Enter') previewAddress(); });
+
+async function handleAddress(addr){
+  document.getElementById('connectErr').style.display = 'none';
+  var connectBtn = document.getElementById('connectBtn');
+  var pasteBtn = document.getElementById('pasteBtn');
+  connectBtn.disabled = true; pasteBtn.disabled = true;
+  document.getElementById('result').innerHTML = '<div class="skel"></div>';
+
+  var res;
+  try {
+    var r = await fetch('/api/connect', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ address: addr }) });
+    res = await r.json();
+    if (!r.ok) throw new Error(res.error || 'connect_failed');
+  } catch (e) {
+    document.getElementById('result').innerHTML = '<div class="empty">Could not connect that wallet. ' + esc(e.message) + '</div>';
+    connectBtn.disabled = false; pasteBtn.disabled = false;
+    return;
+  }
+
+  _currentUserId = res.user_id;
+  _currentAddress = res.address;
+  renderRaw(res);
+  pollStatus();
+}
+
+function listingNoticeHtml(){
+  return '<div class="listing-notice" id="listingNotice">'
+    + '<span>Connecting adds you to the public HYPERFLEX leaderboard automatically — your trades are already public on-chain, but being ranked is a separate, reversible choice.</span>'
+    + '<label><input type="checkbox" id="optOutToggle"> Opt out</label>'
+  + '</div>';
+}
+
+function wireOptOut(){
+  var box = document.getElementById('optOutToggle');
+  if (!box) return;
+  box.addEventListener('change', async function(){
+    if (!_hasSigner) {
+      box.checked = !box.checked;
+      showErr('Connect your wallet (not just a pasted address) to change your listing status.');
+      return;
+    }
+    var ts = Date.now();
+    var message = 'HYPERFLEX leaderboard opt-out for ' + _currentAddress + ' — user ' + _currentUserId + ' — ts ' + ts;
+    try {
+      var sig = await window.ethereum.request({ method: 'personal_sign', params: [message, _currentAddress] });
+      var r = await fetch('/api/connect/opt-out', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ user_id: _currentUserId, address: _currentAddress, signature: sig, opted_out: box.checked, timestamp: ts })
+      });
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'opt_out_failed');
+    } catch (e) {
+      box.checked = !box.checked;
+      showErr('Could not update listing status: ' + e.message);
+    }
+  });
+}
+
+function renderRaw(res){
+  var html = '';
+  html += listingNoticeHtml();
+  html += '<div class="verify-banner" id="verifyBanner"><span class="verify-spin"></span> Verifying against Polymarket settlement data…</div>';
+  html += '<div class="raw-card">'
+    + '<div class="raw-identity">'
+      + '<div class="raw-avatar" style="background:'+avatarColor(res.user_id)+'">'+esc(initials({address: res.address}))+'</div>'
+      + '<div class="raw-addr">'+esc(res.address.slice(0,6)+'…'+res.address.slice(-4))+'</div>'
+    + '</div>'
+    + '<div class="raw-stats">Found <b>'+esc(res.raw_activity_events)+'</b> activity events across <b>'+esc(res.raw_distinct_markets)+'</b> markets on Polymarket. Unverified — the score below appears once settlement is independently checked, never guessed at.</div>'
+  + '</div>';
+  document.getElementById('result').innerHTML = html;
+  wireOptOut();
+}
+
+function pollStatus(){
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(async function(){
+    try {
+      var r = await fetch('/api/connect/status/' + _currentUserId);
+      var d = await r.json();
+      if (d.status === 'done') {
+        clearInterval(_pollTimer);
+        loadVerifiedRecord();
+      }
+    } catch (e) {}
+  }, 2000);
+}
+
+async function loadVerifiedRecord(){
+  var banner = document.getElementById('verifyBanner');
+  if (banner) banner.remove();
+  var rawCard = document.querySelector('.raw-card');
+  if (rawCard) rawCard.remove();
+  try {
+    var r = await fetch('/api/trader-record/' + _currentUserId);
+    var p = await r.json();
+    if (!r.ok) throw new Error(p.error || 'load_failed');
+    renderVerified(p);
+  } catch (e) {
+    var div = document.createElement('div');
+    div.className = 'empty';
+    div.textContent = 'Could not load your verified record: ' + e.message;
+    document.getElementById('result').appendChild(div);
+  }
+}
+
+// Renders the same record shape as /trader/:handle — same computation,
+// single source of truth (_buildTraderProfile server-side). Appends into
+// #result rather than replacing #main, since the listing notice above it
+// stays in place.
+function renderVerified(p){
+  var handle = p.username ? '@'+p.username : (p.display_name || 'Trader');
+  var addr = p.polymarket_address ? (p.polymarket_address.slice(0,6)+'…'+p.polymarket_address.slice(-4)) : null;
+  var eligible = p.eligible;
+  var scoreCls = !eligible ? 'is-neutral' : (p.score_pct >= 0 ? 'is-positive' : 'is-negative');
+  var verdictText = eligible ? p.verdict : (p.eligibility_note || 'Not yet ranked.');
+
+  var html = '<div class="p-header">'
+    + '<div class="p-identity">'
+      + '<div class="p-avatar" style="background:'+avatarColor(p.user_id || p.polymarket_address)+'">'+esc(initials(p))+'</div>'
+      + '<div>'
+        + '<div class="p-handle">'+esc(handle)+'</div>'
+        + (addr ? '<button class="p-address" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+esc(p.polymarket_address)+'\')" title="Copy full address">'+esc(addr)+' <span>⧉</span></button>' : '')
+      + '</div>'
+    + '</div>'
+    + '<div class="p-verdict' + (eligible ? '' : ' is-ineligible') + '">' + esc(verdictText) + '</div>'
+    + (eligible ? '<div class="p-scoreline '+scoreCls+'"><span class="p-score">'+esc(fmtPct(p.score_pct))+'</span><span class="p-n">n='+esc(p.n)+'</span></div>' : '')
+    + (eligible && p.scope_label ? '<div class="p-scope">'+esc(p.scope_label)+'</div>' : '');
+
+  // Non-qualifying: a progress bar, not a rejection. Parsed from
+  // eligibility_note ("Not yet ranked — needs 10 durable resolved trades
+  // (has 3)") rather than hardcoding the threshold, so this doesn't drift
+  // if ROI_MIN_N_FLOOR ever changes server-side.
+  if (!eligible) {
+    var m = /needs (\d+).*?\(has (\d+)\)/.exec(p.eligibility_note || '');
+    if (m) {
+      var need = parseInt(m[1], 10), has = parseInt(m[2], 10);
+      var pct = need > 0 ? Math.min(100, Math.round((has / need) * 100)) : 0;
+      html += '<div class="qual-progress">'
+        + '<div class="qual-bar-track"><div class="qual-bar-fill" style="width:'+pct+'%;"></div></div>'
+        + '<div class="qual-note">'+has+' of '+need+' durable resolved trades needed to appear on the public leaderboard.</div>'
+      + '</div>';
+    }
+  }
+  html += '</div>';
+
+  if (eligible) {
+    html += '<div class="p-section"><div class="p-section-title">Headline</div><div class="stat-row">'
+      + '<div class="stat-tile"><div class="stat-label">Realized ROI</div><div class="stat-value '+(p.headline.realized_roi_pct>=0?'is-positive':'is-negative')+'">'+esc(fmtPct(p.headline.realized_roi_pct))+'</div></div>'
+      + '<div class="stat-tile"><div class="stat-label">Win Rate</div><div class="stat-value">'+esc(p.headline.win_rate_pct!=null?p.headline.win_rate_pct.toFixed(1)+'%':'—')+'</div></div>'
+      + '<div class="stat-tile"><div class="stat-label">Resolved Trades</div><div class="stat-value">'+esc(p.headline.n)+'</div></div>'
+      + '<div class="stat-tile"><div class="stat-label">Capital Deployed</div><div class="stat-value">'+esc(fmtUsd(p.headline.total_capital_usd))+'</div></div>'
+      + '<div class="stat-tile"><div class="stat-label">Avg Return / Trade</div><div class="stat-value '+(p.headline.avg_return_pct>=0?'is-positive':'is-negative')+'">'+esc(fmtPct(p.headline.avg_return_pct))+'</div></div>'
+    + '</div></div>';
+  }
+
+  html += '<div class="p-section"><div class="p-section-title">Best call &amp; worst call</div><div class="call-pair">'
+    + callCardHtml(p.best_call, 'best')
+    + callCardHtml(p.worst_call, 'worst')
+  + '</div></div>';
+
+  if (p.specialty_full && p.specialty_full.length) {
+    html += '<div class="p-section"><div class="p-section-title">Specialty breakdown</div><div class="specialty-grid">'
+      + p.specialty_full.map(function(s){
+          var wrCls = s.win_rate_pct >= 50 ? 'is-positive' : 'is-negative';
+          return '<div class="specialty-tile">'
+            + '<div class="specialty-cat">'+esc(s.category)+'</div>'
+            + '<div class="specialty-wr '+wrCls+'">'+esc(s.win_rate_pct.toFixed(1))+'%</div>'
+            + '<div class="specialty-n">n='+esc(s.n)+(s.avg_roi_pct!=null?' · avg '+esc(fmtPct(s.avg_roi_pct)):'')+'</div>'
+          + '</div>';
+        }).join('')
+    + '</div></div>';
+  }
+
+  if (p.form && p.form.length) {
+    var trendCls = p.trend === 'up' ? 'up' : p.trend === 'down' ? 'down' : '';
+    var trendLabel = p.trend === 'up' ? 'Heating up' : p.trend === 'down' ? 'Cooling off' : 'Steady';
+    var streakText = p.streak && p.streak.count ? p.streak.count + (p.streak.type==='win'?'W':p.streak.type==='loss'?'L':'P') + ' streak' : '';
+    html += '<div class="p-section"><div class="p-section-title">Recent form</div><div class="form-row">'
+      + HFXTraderCard.sparkline(p.form, 140, 36)
+      + (streakText ? '<span class="tcard-streak is-'+esc(p.streak.type)+'">'+esc(streakText)+'</span>' : '')
+      + '<span class="form-trend '+trendCls+'">'+esc(trendLabel)+'</span>'
+    + '</div></div>';
+  }
+
+  // Non-qualifying wallets get a pointed next step per CLAUDE.md rule 4 —
+  // never a dead end. Category-filtered market discovery itself (which
+  // durable-market categories to surface, layout) is a separate build not
+  // done in this pass — this is an honest placeholder, not a silent gap.
+  if (!eligible) {
+    html += '<div class="category-stub">Building toward 10 durable resolved trades? Durable markets — politics, macro, geopolitical, long-horizon futures — are the ones that count toward your score. Browse the current leaderboard at <a href="/traders">/traders</a> to see what a qualifying record looks like. A dedicated by-category market browse for non-qualifying wallets is next up, not yet built.</div>';
+  }
+
+  html += '<div class="p-section"><div class="p-section-title">Full trade history</div>'
+    + (p.ephemeral_excluded_note ? '<div class="void-note" style="margin-bottom:14px;">'+esc(p.ephemeral_excluded_note)+'</div>' : '')
+    + '<div class="hist-filters">'
+      + '<select id="histCategory"><option value="">All categories</option></select>'
+      + '<button data-result="" class="active">All</button>'
+      + '<button data-result="win">Wins</button>'
+      + '<button data-result="loss">Losses</button>'
+    + '</div>'
+    + '<div class="hist-count" id="histCount"></div>'
+    + '<div style="overflow-x:auto;"><table class="hist-table" id="histTable">'
+      + '<thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Result</th><th>ROI</th><th>P&amp;L</th><th>Closed</th><th>Scope</th></tr></thead>'
+      + '<tbody id="histBody"></tbody>'
+    + '</table></div>'
+  + '</div>';
+
+  html += '<div class="p-section"><div class="p-section-title">Open positions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">— not counted in the score above</span></div>'
+    + (p.open_positions_count
+      ? '<div class="open-list">' + p.open_positions.map(function(o){
+          return '<div class="open-row"><span class="oq">'+esc((o.question||'').slice(0,100))+'</span><span class="os">'+esc(o.side)+(o.probability!=null?' · '+Math.round(o.probability*100)+'¢':'')+'</span></div>';
+        }).join('') + (p.open_positions_count > p.open_positions.length ? '<div class="hist-count">+'+(p.open_positions_count-p.open_positions.length)+' more not shown</div>' : '') + '</div>'
+      : '<div class="hist-count">No open positions.</div>')
+  + '</div>';
+
+  html += '<div class="p-section"><div class="p-section-title">Disclosure</div><div class="void-note">'+esc(p.void_note)+'</div></div>';
+
+  var slot = document.createElement('div');
+  slot.id = 'verifiedSlot';
+  slot.innerHTML = html;
+  document.getElementById('result').appendChild(slot);
+
+  // Wire history filters (client-side — full history is already fetched).
+  var allTrades = p.trade_history || [];
+  var cats = [...new Set(allTrades.map(function(t){return t.category;}))].sort();
+  var catSel = document.getElementById('histCategory');
+  cats.forEach(function(c){ var o=document.createElement('option'); o.value=c; o.textContent=c; catSel.appendChild(o); });
+
+  var activeResult = '';
+  function renderHistory(){
+    var cat = catSel.value;
+    var rows = allTrades.filter(function(t){
+      return (!cat || t.category === cat) && (!activeResult || t.result === activeResult);
+    });
+    document.getElementById('histCount').textContent = rows.length + ' of ' + allTrades.length + ' resolved trades' + (p.trade_history_total > allTrades.length ? ' (showing most recent ' + allTrades.length + ' of ' + p.trade_history_total + ' total)' : '');
+    document.getElementById('histBody').innerHTML = rows.map(function(t){
+      var isEphemeral = t.market_durability === 'ephemeral';
+      return '<tr' + (isEphemeral ? ' style="opacity:.55;"' : '') + '>'
+        + '<td class="hist-q">'+esc(t.question)+'</td>'
+        + '<td>'+esc(t.side)+'</td>'
+        + '<td>'+(t.entry_price!=null?Math.round(t.entry_price*100)+'¢':'—')+'</td>'
+        + '<td class="hist-result '+esc(t.result)+'">'+esc(t.result.toUpperCase())+'</td>'
+        + '<td>'+esc(fmtPct(t.realized_roi_pct))+'</td>'
+        + '<td>'+esc(fmtUsd(t.realized_pnl))+'</td>'
+        + '<td>'+esc(fmtDate(t.closed_at))+'</td>'
+        + '<td style="color:var(--muted);">'+(isEphemeral ? 'Ephemeral — excluded' : 'Durable')+'</td>'
+      + '</tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No trades match this filter.</td></tr>';
+  }
+  catSel.addEventListener('change', renderHistory);
+  document.querySelectorAll('.hist-filters button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.hist-filters button').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');
+      activeResult = btn.dataset.result;
+      renderHistory();
+    });
+  });
+  renderHistory();
+}
+</script>
+</body>
+</html>

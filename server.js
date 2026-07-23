@@ -12534,13 +12534,22 @@ async function _computeRoiLeaderboard(window, minN) {
   const userIds = perUser.map(r => r.user_id);
   if (!userIds.length) return { rows: [], popWeightedRoi };
 
+  // leaderboard_opt_out: per the participant-first connect flow (default-on
+  // listing, visible one-click opt-out — CLAUDE.md rule 5), an opted-out
+  // wallet must never appear ranked even if it otherwise qualifies. Filtered
+  // here rather than in the aggregate query above so the durable-trade
+  // eligibility math stays untouched — this is a display-layer exclusion,
+  // same as pulling display_name/username/polymarket_address.
   const userRows = await dbQuery(
-    `SELECT id, display_name, username, polymarket_address, whale_rank FROM users WHERE id = ANY($1)`,
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
     [userIds]
   ).catch(() => []);
   const userById = new Map(userRows.map(u => [u.id, u]));
 
-  const result = perUser.map(r => {
+  const result = perUser.filter(r => {
+    const u = userById.get(r.user_id);
+    return !(u && u.leaderboard_opt_out === true);
+  }).map(r => {
     const n = Number(r.n);
     const weightedRoi = Number(r.wroi_den) > 0 ? Number(r.wroi_num) / Number(r.wroi_den) : 0;
     const shrunk = (n / (n + ROI_SHRINK_K)) * weightedRoi + (ROI_SHRINK_K / (n + ROI_SHRINK_K)) * popWeightedRoi;
@@ -13232,6 +13241,162 @@ app.get('/trader/:handle', (req, res) => {
 app.get('/traders', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'home-traders-preview.html'));
+});
+
+// ── CONNECT FLOW — wallet connect → your score ──────────────────────────────
+// The new front door per the participant-first pivot: connect wallet → see
+// YOUR score, YOUR profile, YOUR record. Progressive UX per the ingestion-
+// timing measurements (total_ms 8.5s-14.7s across light/medium/heavy
+// wallets, gamma verification up to 73% of that): connect returns identity +
+// a fast, unverified raw record IMMEDIATELY (phase 1+2 only — the paginated
+// activity fetch + grouping, no gamma calls), then kicks off the full
+// verified backfill (backfillRealizedTrades, gamma-verified) in the
+// background. The frontend polls /api/connect/status/:userId and swaps in
+// the verified score once it flips to 'done' — never a blank wait.
+//
+// Address-only, no signup wall, no signature required to VIEW a score
+// (trades are already public on-chain — see CLAUDE.md rule 1: the score IS
+// the acquisition). This also means "paste an address to preview" (floated
+// in the spec as an option worth offering) is the SAME code path as a real
+// wallet connect, not a second flow. Ownership (wallet signature) is only
+// required to change the opt-out setting below — see /api/connect/opt-out —
+// so nobody else can opt a wallet in or out on someone's behalf.
+const _connectBackfillStatus = new Map(); // userId -> { status: 'running'|'done', started_at, finished_at }
+
+async function _ensureConnectedUser(addr) {
+  const existing = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]);
+  if (existing.length) return { userId: existing[0].id, isNew: false };
+  const displayName = addr.slice(0, 6) + '...' + addr.slice(-4);
+  const rows = await dbQuery(
+    `INSERT INTO users (display_name, polymarket_address, password_hash, leaderboard_opt_out, created_at)
+     VALUES ($1, $2, $3, false, NOW()) RETURNING id`,
+    [displayName, addr, 'wallet_connect_' + Date.now()]
+  );
+  return { userId: rows[0].id, isNew: true };
+}
+
+app.post('/api/connect', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const addr = String(req.body.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
+
+    const { userId, isNew } = await _ensureConnectedUser(addr);
+
+    const proxy = await ensureProxyStored(userId, addr);
+    if (!proxy) return res.status(502).json({ error: 'proxy_derivation_failed', user_id: userId });
+
+    // Fast path: phase 1+2 only (paginated activity fetch + grouping), no
+    // gamma verification — this is the "raw record" shown the instant
+    // connect completes, per the progressive design.
+    let activity = [];
+    { let offset = 0; const PAGE_LIMIT = 500;
+      while (true) {
+        let page = [];
+        try {
+          const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxy.toLowerCase()}&limit=${PAGE_LIMIT}&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
+          if (r.ok) { const j = await r.json(); page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); }
+        } catch { break; }
+        if (!page.length) break;
+        activity = activity.concat(page);
+        if (page.length < PAGE_LIMIT) break;
+        offset += PAGE_LIMIT;
+        if (offset >= 10000) break;
+      }
+    }
+    const groupKeys = new Set();
+    for (const t of activity) {
+      const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+      let outcome = String(t.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+        if (idx === 0) outcome = 'YES'; else if (idx === 1) outcome = 'NO';
+      }
+      if (condId && outcome) groupKeys.add(condId + ':' + outcome);
+    }
+
+    // Kick off the full verified backfill in the background — this is what
+    // populates realized_trades with gamma-verified rows (sold + redeemed
+    // paths, both). The frontend polls status below and re-fetches
+    // /api/trader-record/:userId once it flips to 'done'.
+    _connectBackfillStatus.set(userId, { status: 'running', started_at: Date.now() });
+    (async () => {
+      try {
+        await backfillRealizedTrades(userId, addr, proxy);
+      } catch (e) {
+        console.warn('[connect] background backfill failed for', userId, e.message);
+      } finally {
+        _connectBackfillStatus.set(userId, { status: 'done', finished_at: Date.now() });
+      }
+    })();
+
+    res.json({
+      user_id: userId,
+      is_new: isNew,
+      address: addr,
+      raw_activity_events: activity.length,
+      raw_distinct_markets: groupKeys.size,
+      backfill_status: 'running',
+    });
+  } catch (e) {
+    console.error('[connect]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/connect/status/:userId', (req, res) => {
+  const s = _connectBackfillStatus.get(req.params.userId);
+  if (!s) return res.json({ status: 'unknown' });
+  res.json(s);
+});
+
+// Opt-out toggle — requires a fresh wallet signature (ownership proof) so
+// nobody else can flip someone else's listing status. NOT the existing
+// /api/wallet/challenge + /api/wallet/verify pair — those require
+// requireAuth (an already-logged-in creator account linking an additional
+// wallet), which doesn't fit a connect-flow user who never signed up.
+// Lighter-weight instead: the client signs a message embedding its own
+// current timestamp, and the server rejects anything older than 5 minutes.
+// Not a stored one-time nonce like the requireAuth pair — a real nonce
+// store isn't worth building for an action this low-stakes (toggling public
+// leaderboard visibility, reversible, no funds or PII involved); a 5-minute
+// replay window is a deliberate, proportionate tradeoff, not an oversight.
+app.post('/api/connect/opt-out', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { user_id, address, signature, opted_out, timestamp } = req.body;
+    if (!user_id || !address || !signature || !timestamp) return res.status(400).json({ error: 'missing_fields' });
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 5 * 60 * 1000) {
+      return res.status(400).json({ error: 'stale_or_invalid_timestamp' });
+    }
+    const addr = String(address).trim().toLowerCase();
+    const expectedMessage = `HYPERFLEX leaderboard opt-out for ${addr} — user ${user_id} — ts ${ts}`;
+    const { ethers } = require('ethers');
+    let recovered;
+    try {
+      recovered = ethers.verifyMessage(expectedMessage, signature).toLowerCase();
+    } catch (e) {
+      return res.status(400).json({ error: 'bad_signature', detail: e.message });
+    }
+    if (recovered !== addr) return res.status(403).json({ error: 'signature_address_mismatch' });
+
+    const u = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = $1 LIMIT 1', [user_id]);
+    if (!u.length || String(u[0].polymarket_address || '').toLowerCase() !== addr) {
+      return res.status(403).json({ error: 'address_does_not_match_user' });
+    }
+
+    await dbQuery('UPDATE users SET leaderboard_opt_out = $1 WHERE id = $2', [!!opted_out, user_id]);
+    res.json({ user_id, leaderboard_opt_out: !!opted_out });
+  } catch (e) {
+    console.error('[connect/opt-out]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/connect', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'connect.html'));
 });
 
 // ── ROI leaderboard audit (read-only) ───────────────────────────────────────
@@ -59832,10 +59997,32 @@ if (pool) {
       // stamped at insert time by backfillRealizedTrades going forward.
       await dbQuery(`ALTER TABLE realized_trades ADD COLUMN IF NOT EXISTS market_durability TEXT`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_rt_durability ON realized_trades(market_durability)`).catch(() => {});
+      // market_settlement_cache — durable, cross-process cache of decisive
+      // gamma settlements. A market's real outcome never changes once
+      // decided, so this is safe to keep forever. Persists what
+      // _redeemDecisiveSettlementCache (in-memory Map, near
+      // _verifyRedeemedSettlement) already caches for the life of one
+      // process — the in-memory version is lost on every deploy, and this
+      // app redeploys on every push to main, so its real-world hit rate is
+      // far below "indefinite." Scoped 2026-07-23 after ingestion-timing
+      // measurements showed gamma verification at up to 73% of total
+      // first-connect time, on markets that overlap heavily across wallets.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_settlement_cache (
+        condition_id TEXT PRIMARY KEY,
+        price NUMERIC(6,4) NOT NULL,
+        winner_name TEXT,
+        verified_at TIMESTAMPTZ DEFAULT now()
+      )`).catch(() => {});
       // users columns needed by backfill aggregate refresh
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_backfill_at TIMESTAMPTZ`).catch(() => {});
+      // leaderboard_opt_out — participant-first connect flow (CLAUDE.md rule 5):
+      // connecting lists you on the public board by default; this is the
+      // one-click reversible opt-out, stated plainly at connect time. Default
+      // false (listed) so the network effect is on by default; the connect
+      // UI is what actually surfaces the notice + toggle to the user.
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS leaderboard_opt_out BOOLEAN DEFAULT false`).catch(() => {});
 
       // market_sport_tags — market-to-sport mapping for flex score filtering
       await dbQuery(`CREATE TABLE IF NOT EXISTS market_sport_tags (
@@ -60291,18 +60478,46 @@ function _parseOutcomeSettlement(m) {
 // "redeemed" for elections scheduled years in the future (impossible —
 // those markets can't have resolved yet). Reuses _parseOutcomeSettlement,
 // the same helper resolveSignalOutcomes uses, rather than forking new
-// resolution logic. Decisive settlements are cached indefinitely — a
-// resolved market's outcome never changes, and many whales overlap on the
-// same popular markets, so this cache pays for itself across wallets.
+// resolution logic.
+//
+// Two-tier cache, both indefinite (a decisive settlement never changes):
+// 1. In-memory Map — zero-latency for repeat lookups within one process's
+//    uptime (e.g. the many condition_ids shared across wallets in a single
+//    ingestion-timing or connect-flow call).
+// 2. `market_settlement_cache` table — survives deploys. This app redeploys
+//    on every push to main, which resets tier 1 to empty every time, so
+//    without tier 2 "indefinite" only ever meant "until the next push."
+//    Added 2026-07-23 after ingestion-timing measurements showed gamma
+//    verification at up to 73% of total first-connect time.
 const _redeemDecisiveSettlementCache = new Map(); // condition_id -> { price, winnerName }
 async function _verifyRedeemedSettlement(condId) {
   if (_redeemDecisiveSettlementCache.has(condId)) return _redeemDecisiveSettlementCache.get(condId);
+
+  if (pool) {
+    const cached = await dbQuery(
+      `SELECT price, winner_name FROM market_settlement_cache WHERE condition_id = $1`,
+      [condId]
+    ).catch(() => []);
+    if (cached.length) {
+      const settlement = { price: Number(cached[0].price), winnerName: cached[0].winner_name };
+      _redeemDecisiveSettlementCache.set(condId, settlement);
+      return settlement;
+    }
+  }
+
   const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(condId) + '&limit=1';
   const { ok, markets } = await _fetchGammaKeysetChecked(url);
   if (!ok || !markets.length) return null; // fetch failed or market not found — unverifiable, don't cache, retry later
   const settlement = _parseOutcomeSettlement(markets[0]);
   if (!settlement || (settlement.price <= 0.95 && settlement.price >= 0.05)) return null; // not decisively resolved — don't cache, retry later
   _redeemDecisiveSettlementCache.set(condId, settlement);
+  if (pool) {
+    dbQuery(
+      `INSERT INTO market_settlement_cache (condition_id, price, winner_name) VALUES ($1, $2, $3)
+       ON CONFLICT (condition_id) DO NOTHING`,
+      [condId, settlement.price, settlement.winnerName]
+    ).catch(e => console.warn('[market_settlement_cache] insert', condId, e.message));
+  }
   return settlement;
 }
 
@@ -61625,6 +61840,7 @@ app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
 
     let addresses;
+    const tierLabelByAddress = new Map(); // address -> { tier, existing_realized_trades_rows } — empty when addresses are explicitly passed
     if (req.query.addresses) {
       addresses = String(req.query.addresses).split(',').map(a => a.trim().toLowerCase()).filter(Boolean);
     } else {
@@ -61636,12 +61852,18 @@ app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
         ORDER BY n ASC
       `).catch(e => { console.error('[ingestion-timing] tier query error:', e.message); return []; });
       if (tiers.length >= 3) {
-        const light = tiers[Math.floor(tiers.length * 0.15)].polymarket_address;
-        const medium = tiers[Math.floor(tiers.length * 0.5)].polymarket_address;
-        const heavy = tiers[tiers.length - 1].polymarket_address;
-        addresses = [...new Set([light, medium, heavy, '0x4de883380632ffff2dd68116ac89cee5c1e776ba'])];
+        const light = tiers[Math.floor(tiers.length * 0.15)];
+        const medium = tiers[Math.floor(tiers.length * 0.5)];
+        const heavy = tiers[tiers.length - 1];
+        tierLabelByAddress.set(light.polymarket_address, { tier: 'light', existing_realized_trades_rows: light.n });
+        tierLabelByAddress.set(medium.polymarket_address, { tier: 'medium', existing_realized_trades_rows: medium.n });
+        tierLabelByAddress.set(heavy.polymarket_address, { tier: 'heavy', existing_realized_trades_rows: heavy.n });
+        addresses = [...new Set([light.polymarket_address, medium.polymarket_address, heavy.polymarket_address, '0x4de883380632ffff2dd68116ac89cee5c1e776ba'])];
       } else {
         addresses = ['0x4de883380632ffff2dd68116ac89cee5c1e776ba'];
+      }
+      if (!tierLabelByAddress.has('0x4de883380632ffff2dd68116ac89cee5c1e776ba')) {
+        tierLabelByAddress.set('0x4de883380632ffff2dd68116ac89cee5c1e776ba', { tier: 'reference-heavy', existing_realized_trades_rows: null });
       }
     }
     addresses = addresses.slice(0, 6); // bound total external calls per request
@@ -61651,10 +61873,11 @@ app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
 
     for (const addr of addresses) {
       const t0 = Date.now();
-      const timing = { address: addr };
+      const timing = { address: addr, ...(tierLabelByAddress.get(addr) || {}) };
 
       // Phase 1: paginated /activity TRADE fetch (mirrors the fix just shipped
       // in backfillRealizedTrades — see the comment there).
+      const tActivity = Date.now();
       let activity = [];
       let pages = 0;
       { let offset = 0;
@@ -61674,6 +61897,7 @@ app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
       }
       timing.activity_events = activity.length;
       timing.activity_pages_fetched = pages;
+      timing.activity_ms = Date.now() - tActivity;
 
       // Phase 2: grouping by (conditionId, outcome) — in-memory, should be
       // near-instant even for heavy wallets, but timed anyway so a surprise
