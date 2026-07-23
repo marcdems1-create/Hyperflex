@@ -6,24 +6,37 @@
 
 ## 🎯 WHAT HYPERFLEX IS (read before every feature decision — this governs everything)
 
-**HYPERFLEX is an on-chain trader scoreboard. We track and score traders. We do not promote markets.**
+**HYPERFLEX is where you plug in your wallet and see your real on-chain trading score.** Connect → your score, your profile, your record. Then see how you rank against everyone else.
 
 On-chain trading has no honest scoreboard. Everyone screenshots wins and deletes losses; every "alpha" caller is unfalsifiable because nobody keeps receipts. Hyperflex is where a trader's real record exists — wins *and* losses, graded against what actually happened, permanent and public.
 
-### The three rules that decide every feature
+**The product is participant-first, not spectator-first (pivoted 2026-07-21).** The primary user is someone checking *their own* record — not browsing strangers. That solves cold-start (every visitor is a potential entry), and it's inherently shareable (people post their own numbers, not a stranger's). The leaderboard is what your score is measured *against*, not the main event.
 
-1. **Traders are the product. Markets are evidence, never the headline.**
-   The homepage promotes *people* — the best traders, their scores, their records. A market appears only as proof of a call ("they bought this at 14¢"). If a surface leads with markets instead of traders, it is the wrong surface.
+### The rules that decide every feature
 
-2. **Venue order: Polymarket first, Hyperliquid second.** Same scoring layer across both. Polymarket is venue #1, NOT the identity. See the sequencing gate below.
+1. **Connect wallet → see your score. This is the front door.** Immediate, no gate, no signup wall. "What's my score?" is the hook. Everything else is downstream of that moment working well.
 
-3. **A win never appears naked.** Every showcased trade carries the trader's score and n. "0x5d18 hit 12x on Iran ceasefire — though they're down 18% lifetime across 89 trades" is a *better* card than the win alone. No competitor will ship that second clause. It is the entire moat.
+2. **Traders are the product. Markets are evidence, never the headline.** A market appears only as proof of a call ("bought this at 14¢"). If a surface leads with markets instead of traders, it is the wrong surface. **Exception:** market discovery for non-qualifying wallets — see rule 4.
+
+3. **A win never appears naked.** Every showcased trade carries the trader's score and n. "Hit 12x on Iran ceasefire — though they're down 18% lifetime across 89 trades" is a *better* card than the win alone. No competitor will ship that second clause. It is the entire moat.
+
+4. **A non-qualifying wallet must never hit a dead end.** Most connecting wallets will have <10 durable resolved trades — many will have zero. "You have no score" is a failed first experience. Instead: show what they DO have (their trades, unscored, honestly labeled), what they need to qualify, and **markets by category — sports, finance, politics, macro, crypto — as the path to building a record.** This is the one place markets lead, because the user has no record to lead with yet.
+
+5. **Listed by default, one-click opt-out — and the user is told at connect time.** Connecting adds you to the public leaderboard automatically; the connect flow states this plainly and offers a visible, reversible opt-out. Not buried in settings, not a dark pattern. Rationale on record: their trades are already public on-chain, but being *ranked* publicly is a different act than existing on-chain, and the person clicked "connect" to see their own score — not to be published. Default-on gets the network effect; visible opt-out keeps it honest and defensible.
+
+6. **Venue order: Polymarket first, Hyperliquid second.** Same scoring layer across both. Polymarket is venue #1, NOT the identity. See Gate 2 below.
 
 ### What this rules OUT (do not build, do not polish)
-- Market-browsing surfaces as primary UI: "Hot Right Now", "Closing Soon", "Events in Focus", market carousels, trending-market grids. Polymarket already does this and anyone can copy it.
+- Market-browsing surfaces as the primary UI: "Hot Right Now", "Closing Soon", "Events in Focus", trending-market grids. Polymarket already does this and anyone can copy it. (Category browsing for non-qualifying wallets per rule 4 is the sole exception, and it is a *destination for people without a record*, not the homepage.)
 - Any leaderboard, ranking, or showcase where the score is not independently verified.
 - Follower counts as a prominent metric (popularity ≠ skill), or any "trust score" blending performance with social signals.
 - Hiding, collapsing, or de-emphasizing losses anywhere.
+- Signup walls or email gates in front of "see my score." The score IS the acquisition.
+
+### ⚠️ Open risk on automatic listing — do not ignore
+Automatic entry means a wallet can be farmed to game the board: 10 cherry-picked durable trades and you're listed. **The board's honesty is the entire moat**, so this needs a real answer before scale — candidate mitigations: minimum capital deployed, minimum account age, minimum time span across trades, anomaly detection on suspiciously clean records. Not solved. Revisit before the board is a destination anyone has incentive to game.
+
+**What this changes about the trader surface already shipped (cards, profile, verdict line, specialty breakdown, `/traders` alongside `home.html`):** the scoring machinery carries over unchanged — it just gets pointed at a connected wallet instead of only showing the 76-wallet leaderboard cohort. The homepage question shifts from "curated showcase of featured traders" to "connect your wallet" as the hero. That is a different page than what's live at `/traders` today — the connect flow (wallet connect → score computation → profile, with the non-qualifying path and the opt-out notice) has not been built yet.
 
 ### ⛔ Sequencing gates — non-negotiable
 

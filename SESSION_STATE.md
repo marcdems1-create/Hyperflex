@@ -70,6 +70,27 @@
 2. Optional, lower priority, carried over from 2026-07-21: spot-check TB14's lifetime ("All") P&L window on Polymarket, since the original hand-verification only checked "Past Day."
 3. Not this session: the `home.html` → trader-first homepage swap. Explicitly gated on the design pass, no other precondition.
 
+## 2026-07-21b (PRODUCT PIVOT: participant-first — connect wallet, see your own score)
+
+**Marc reframed the product. CLAUDE.md's definition section is rewritten; read it before building anything.**
+
+**From spectator-first to participant-first.** Everything built so far assumed you browse *other* traders. The product is now: **connect your wallet → see YOUR score, YOUR profile, YOUR record.** The leaderboard is what you're measured against, not the main event.
+
+Why this is stronger: it solves cold-start (every visitor is a potential leaderboard entry, vs. 76 hand-selected wallets), and it's inherently shareable — people post their own numbers, not a stranger's. "What's my score?" is a far better hook than "here are traders you've never heard of."
+
+**Three decisions locked by Marc:**
+1. **Connect → score immediately.** No gate, no signup wall. The score IS the acquisition.
+2. **Non-qualifying wallets (<10 durable resolved trades) get markets by category** — sports, finance, politics, macro, crypto — as the path to building a record. This is the ONE place markets lead, because the user has no record to lead with yet. A dead end here is a failed first experience.
+3. **Listed on the public leaderboard by default, with a visible one-click opt-out stated at connect time** (Option B, chosen over fully-automatic-no-opt-out). Rationale on record: trades are already public on-chain, but being *ranked* is a different act than existing on-chain, and the user clicked connect to see their own score — not to be published. Default-on gets the network effect; visible opt-out keeps it defensible.
+
+**⚠️ Unsolved risk, logged deliberately:** automatic listing means the board can be farmed — 10 cherry-picked durable trades and you're on it. The board's honesty is the whole moat. Candidate mitigations (min capital, min account age, min time span across trades, anomaly detection on suspiciously clean records) are NOT implemented. Must be answered before the board is worth gaming.
+
+**What this means for existing work:** the trader cards, profile page, verdict line, specialty breakdown, best/worst call components all still apply — the scoring machinery is identical, it just gets pointed at a connected wallet. The homepage question changes though: it's now "connect your wallet" as the hero, not a curated showcase of featured traders.
+
+**Existing decision still standing:** trader surface goes public alongside `home.html`, not replacing it, until the design pass happens.
+
+**Sequencing note (added when this entry was merged into the log, 2026-07-23):** this pivot landed the same day Gate 1 cleared (see the entry directly below) but before the 2026-07-23 go-live work above. The go-live work shipped the *existing* trader-showcase surface (cards/profile/leaderboard) at `/traders` — that shipment is still correct under this pivot (the scoring machinery is unchanged), but it is not the participant-first connect flow described here. The connect flow (wallet connect → score computation → profile, non-qualifying path, opt-out notice) has not been built yet — that is the next spec.
+
 ## 2026-07-21 (MILESTONE: Gate 1 clears — durable-market leaderboard hand-verified against real Polymarket profiles)
 
 **The gate that has blocked every trader-facing surface since 2026-07-18 is cleared.** Marc ran the actual backfill and hand-verified the resulting top of the leaderboard directly against polymarket.com. This is the first time in this whole arc that a leaderboard has survived that check.
