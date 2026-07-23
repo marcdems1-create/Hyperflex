@@ -44928,22 +44928,40 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
 
   // Pull full trade history. /activity returns BUY/SELL events with
   // conditionId, outcome (YES/NO), side, size (shares), price, timestamp.
+  //
+  // Paginated — the API caps at 500 per call and serves the rest via offset,
+  // same pattern already used below for the redeemed-positions fetch. A
+  // single-shot limit=500 call silently truncated any wallet with more than
+  // 500 activity events (confirmed: 0x4de883380632ffff2dd68116ac89cee5c1e776ba
+  // has 1,316 — the un-paginated version only ever saw the newest 500). This
+  // matters most for a first-time connect, where the wallet has zero existing
+  // rows and the ENTIRE history comes from this one call.
   let trades = [];
   let fetchHttpStatus = null;
   let fetchError = null;
+  let activityPagesFetched = 0;
   console.log(`[backfill] fetching activity for proxy=${proxyLower} (user=${userId.slice(0,8)})`);
   try {
-    const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxyLower}&limit=500&type=TRADE`, { headers: { Accept: 'application/json' } });
-    fetchHttpStatus = r.status;
-    if (r.ok) {
+    let offset = 0;
+    const PAGE_LIMIT = 500;
+    while (true) {
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxyLower}&limit=${PAGE_LIMIT}&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
+      fetchHttpStatus = r.status;
+      activityPagesFetched++;
+      if (!r.ok) break;
       const j = await r.json();
-      trades = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      const page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      if (!page.length) break;
+      trades = trades.concat(page);
+      if (page.length < PAGE_LIMIT) break; // last page
+      offset += PAGE_LIMIT;
+      if (offset >= 10000) break; // safety cap — no legitimate wallet has 10,000+ trade events
     }
   } catch (e) {
     fetchError = e.message;
     console.warn('[backfillRealizedTrades] /activity fetch failed:', e.message);
   }
-  console.log(`[backfill] got trades=${trades.length} status=${fetchHttpStatus} error=${fetchError || 'none'} for proxy=${proxyLower}`);
+  console.log(`[backfill] got trades=${trades.length} pages=${activityPagesFetched} status=${fetchHttpStatus} error=${fetchError || 'none'} for proxy=${proxyLower}`);
   if (!trades.length) {
     console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} no_activity`);
     return { imported: 0, scanned: 0 };
@@ -61574,6 +61592,161 @@ app.post('/api/admin/backfill-market-durability', requireAdminSecret, async (req
     res.json(result);
   } catch (e) {
     console.error('[backfill-market-durability]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DIAGNOSTIC: GET /api/admin/ingestion-timing ──────────────────────────────
+// Step zero for the connect-flow spec: a connecting wallet has ZERO rows in
+// realized_trades (we only ever backfilled wallets we selected), so first
+// connect means on-demand ingestion of that address's full Polymarket
+// history. Whether that's 3s or 45s decides synchronous-spinner vs.
+// progressive-load vs. async-notify — this endpoint measures the real
+// number instead of guessing.
+//
+// READ-ONLY: mirrors backfillRealizedTrades's fetch → group → redeemed-fetch
+// → gamma-verify pipeline phase-by-phase and times each one, but never
+// touches realized_trades. Deliberately not the real function — a version
+// that writes would either (a) create rows under a synthetic user_id with no
+// matching users row, which could leak into the ROI leaderboard with no
+// display name, or (b) silently no-op on ON CONFLICT DO NOTHING for any
+// wallet already ingested under a real account, undercounting the insert
+// cost. Safe to re-run as often as needed; same reasoning as every other
+// diagnostic this arc (held-loss, durable-market-scope).
+//
+// No required params — auto-selects a light/medium/heavy spread from
+// wallets already in realized_trades (by existing row count, as a proxy for
+// real activity volume) plus the known heavy reference wallet from the
+// original coverage-gap investigation. Pass ?addresses=0xabc,0xdef to
+// override with specific wallets instead.
+//   curl "https://hyperflex.network/api/admin/ingestion-timing?secret=$ADMIN_SECRET"
+app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    let addresses;
+    if (req.query.addresses) {
+      addresses = String(req.query.addresses).split(',').map(a => a.trim().toLowerCase()).filter(Boolean);
+    } else {
+      const tiers = await dbQuery(`
+        SELECT polymarket_address, COUNT(*)::int AS n
+        FROM realized_trades
+        WHERE polymarket_address IS NOT NULL
+        GROUP BY polymarket_address
+        ORDER BY n ASC
+      `).catch(e => { console.error('[ingestion-timing] tier query error:', e.message); return []; });
+      if (tiers.length >= 3) {
+        const light = tiers[Math.floor(tiers.length * 0.15)].polymarket_address;
+        const medium = tiers[Math.floor(tiers.length * 0.5)].polymarket_address;
+        const heavy = tiers[tiers.length - 1].polymarket_address;
+        addresses = [...new Set([light, medium, heavy, '0x4de883380632ffff2dd68116ac89cee5c1e776ba'])];
+      } else {
+        addresses = ['0x4de883380632ffff2dd68116ac89cee5c1e776ba'];
+      }
+    }
+    addresses = addresses.slice(0, 6); // bound total external calls per request
+
+    const PAGE_LIMIT = 500;
+    const results = [];
+
+    for (const addr of addresses) {
+      const t0 = Date.now();
+      const timing = { address: addr };
+
+      // Phase 1: paginated /activity TRADE fetch (mirrors the fix just shipped
+      // in backfillRealizedTrades — see the comment there).
+      let activity = [];
+      let pages = 0;
+      { let offset = 0;
+        while (true) {
+          let page = [];
+          try {
+            const r = await fetch(`https://data-api.polymarket.com/activity?user=${addr}&limit=${PAGE_LIMIT}&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
+            if (r.ok) { const j = await r.json(); page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); }
+          } catch { break; }
+          pages++;
+          if (!page.length) break;
+          activity = activity.concat(page);
+          if (page.length < PAGE_LIMIT) break;
+          offset += PAGE_LIMIT;
+          if (offset >= 10000) break;
+        }
+      }
+      timing.activity_events = activity.length;
+      timing.activity_pages_fetched = pages;
+
+      // Phase 2: grouping by (conditionId, outcome) — in-memory, should be
+      // near-instant even for heavy wallets, but timed anyway so a surprise
+      // here (e.g. a pathological wallet with thousands of distinct markets)
+      // isn't invisible.
+      const tGroup = Date.now();
+      const groups = new Map();
+      for (const t of activity) {
+        const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+        let outcome = String(t.outcome || '').toUpperCase();
+        if (!outcome) {
+          const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+          if (idx === 0) outcome = 'YES'; else if (idx === 1) outcome = 'NO';
+        }
+        if (!condId || !outcome) continue;
+        const key = condId + ':' + outcome;
+        if (!groups.has(key)) groups.set(key, 0);
+        groups.set(key, groups.get(key) + 1);
+      }
+      timing.sold_groups = groups.size;
+      timing.grouping_ms = Date.now() - tGroup;
+
+      // Phase 3: paginated redeemed-positions fetch.
+      const tRedeem = Date.now();
+      let allRedeemed = [];
+      let redeemPages = 0;
+      { let offset = 0;
+        while (true) {
+          let page = [];
+          try {
+            const r = await fetch(`https://data-api.polymarket.com/positions?user=${addr}&redeemed=true&limit=${PAGE_LIMIT}&offset=${offset}`, { headers: { Accept: 'application/json' } });
+            if (r.ok) { const j = await r.json(); page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); }
+          } catch { break; }
+          redeemPages++;
+          if (!page.length) break;
+          allRedeemed = allRedeemed.concat(page);
+          if (page.length < PAGE_LIMIT) break;
+          offset += PAGE_LIMIT;
+          if (offset >= 5000) break;
+        }
+      }
+      timing.redeemed_positions = allRedeemed.length;
+      timing.redeemed_pages_fetched = redeemPages;
+      timing.redeemed_fetch_ms = Date.now() - tRedeem;
+
+      // Phase 4: gamma settlement verification — the same bounded-concurrency
+      // batch backfillRealizedTrades runs before trusting any redeemed row.
+      // This is very likely the dominant cost on a wallet with many distinct
+      // resolved markets, since each unverified conditionId is a real
+      // external gamma call.
+      const tVerify = Date.now();
+      const uniqueCondIds = [...new Set(allRedeemed.map(p => String(p.conditionId || p.condition_id || '').toLowerCase()).filter(Boolean))];
+      const REDEEM_VERIFY_MAX = 300;
+      let verifiedCount = 0;
+      await _mapLimit(uniqueCondIds.slice(0, REDEEM_VERIFY_MAX), 6, async (condId) => {
+        const s = await _verifyRedeemedSettlement(condId).catch(() => null);
+        if (s) verifiedCount++;
+      });
+      timing.unique_redeemed_markets = uniqueCondIds.length;
+      timing.gamma_verify_ms = Date.now() - tVerify;
+      timing.gamma_verified_count = verifiedCount;
+      timing.gamma_verify_truncated = uniqueCondIds.length > REDEEM_VERIFY_MAX;
+
+      timing.total_ms = Date.now() - t0;
+      results.push(timing);
+    }
+
+    res.json({
+      wallets: results,
+      note: 'Read-only — mirrors backfillRealizedTrades exactly (post-pagination-fix) but performs zero writes, so it is safe to re-run and cannot leak synthetic data into the leaderboard. total_ms per wallet is the number that should drive the connect-flow UX decision (sync spinner vs. progressive vs. async).',
+    });
+  } catch (e) {
+    console.error('[ingestion-timing]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
