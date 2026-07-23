@@ -49,6 +49,31 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-23d (URGENT report: connect flow undercounting real wallets — diagnostic shipped, not yet run)
+
+**Live report, flagged highest priority:** wallet `0x434939528988ee7078340d389813011c4cdafc6d` connected, shows 8 resolved trades (all redeemed-path) and 25+ open positions on `/connect`, but `/activity?type=TRADE` returned **zero** events for it. Since the sold-path entirely depends on `/activity`, this wallet's real record is being badly undercounted — exactly the kind of wrong-number-reported-to-a-real-user this whole project exists to prevent.
+
+**Traced the code, found one real bug already, without needing to run anything live:**
+- `/api/connect`'s fast-path activity fetch was silently swallowing non-ok HTTP statuses and thrown fetch errors — a real API failure and a genuinely empty result were indistinguishable in the logs. Fixed: explicit `console.warn` on non-ok status / thrown error, plus a log line pointing at the new diagnostic whenever a connect completes with zero activity events. `backfillRealizedTrades`'s own activity fetch already logged this correctly (from earlier this session's pagination fix) — only the newer `/api/connect` fast path had the gap.
+- Traced `ensureProxyStored`: if this wallet already had a `users` row from before (e.g. an existing HYPERFLEX account, whale import, or legacy signup) with a `polymarket_proxy` already stored, the connect flow's call hits an early-exit that reuses whatever's stored **without re-verifying it**. If that stored proxy is stale or was never the wallet's real activity address, this would produce exactly the reported symptom. Real risk, unconfirmed without checking this specific wallet's `users` row.
+- A second real possibility that isn't a bug in our code at all: `computeProxyAddress` on the Safe factory is a **pure/deterministic function** — it returns an address whether or not that Safe was ever actually deployed or used. If this wallet acquired its positions via SPLIT/MERGE (depositing collateral directly to mint a complete set) rather than CLOB trades, `/activity?type=TRADE` would correctly show zero at the right address while `/positions?redeemed=true` still shows real redeemed positions — no mismatch, no silent failure, just a real gap in what the TRADE-type filter covers.
+
+**Shipped:** `GET /api/admin/connect-activity-diagnostic` — read-only, answers all three of Marc's questions in one call:
+- Single-wallet mode (`?address=0x...`): reports whether a `users` row already existed for this address (and what proxy was stored on it, if so), the freshly-derived Safe-factory proxy, and — for every distinct candidate address (EOA, stored proxy, freshly-derived proxy) — the `/activity?type=TRADE` count with explicit HTTP status per page, a broader all-types `/activity` check (to catch the SPLIT/MERGE case) when the TRADE-filtered count is zero, and the `/positions?redeemed=true` count for cross-reference.
+- Batch mode (no `address` param): scans the top N currently-qualifying durable wallets (by existing `realized_trades` row count) and reports what fraction show the same zero-activity-with-no-error pattern — answers "systemic or one-off" directly.
+
+**Active blockers:**
+- **The actual diagnosis is not in this entry — the diagnostic is built but has not been run.** Code's sandbox still has no network path to hyperflex.network (confirmed, same as every prior entry). Whoever picks this up next: `curl "https://hyperflex.network/api/admin/connect-activity-diagnostic?address=0x434939528988ee7078340d389813011c4cdafc6d&secret=$ADMIN_SECRET"` for the reported wallet, then the batch-mode curl (no address param) to check systemic rate, before deciding on a fix.
+
+**Queued (priority order):**
+1. Run the single-wallet diagnostic on the reported address. If `existing_user.stored_polymarket_proxy` differs from `freshly_derived_proxy`, that's hypothesis 1 confirmed — the fix is having `ensureProxyStored` re-verify (or the connect flow bypass the cached-proxy early-exit and re-derive fresh on every connect, which has cost/latency tradeoffs worth weighing).
+2. If addresses agree but `activity_all_types.distinct_types` shows SPLIT/MERGE-only history, that's the filter-gap hypothesis — the fix is widening `backfillRealizedTrades`'s sold-path ingestion to also capture SPLIT-acquired-then-redeemed positions (which may already be partially handled by the redeemed path, needs checking whether SPLIT positions without a later SELL are double-counted or missed entirely).
+3. Run batch mode to quantify how many of the 76 durable-qualifying wallets share this pattern — decides whether this is a one-wallet edge case or changes the leaderboard's real coverage numbers.
+
+**Notes for next session:**
+- Also still queued from 2026-07-23b: not yet run — the ingestion-timing diagnostic's actual `total_ms` readings ARE in hand (8.5-14.7s, logged in that entry), but this NEW diagnostic is a different endpoint and hasn't been touched yet.
+- Desktop CSS sizing on `/connect` and `nav.js` went through several more rounds this session (see commits `3ed6dcc`, `6942774`, `687a19f` on this same day) — final state: nav ~119px bar height, connect hero h1 108px. A real bug was caught mid-pass: `.nav-link` never had `white-space:nowrap`, invisible at the old 12px size but very visible at 24px+ (two-word labels wrapped to 2 lines); fixing that then exposed a second real issue (10 nav links no longer fit before the Sign In pill, which rendered off-screen past the viewport edge) — fixed by tightening gap/padding, not font size. All still unverified against actual production; every round shipped by request ("bigger") without a confirmation loop back from Marc yet on how the latest round actually looks.
+
 ## 2026-07-23c (Connect flow shipped: progressive UX, durable settlement cache, opt-out — plus the diagnostic bug fix)
 
 **Real numbers came back from the ingestion-timing diagnostic:** total_ms 8,513 / 9,475 / 12,842 / 14,663 across the light/medium/heavy/reference wallets — squarely in the spec's 5-30s "progressive" band. gamma_verify_ms was 6,491 / 2,184 / 9,318 / 8,541 — up to 73% of total time on the worst wallet. Pagination itself is fast (3-12 pages). This decided the UX: progressive, not sync or async.

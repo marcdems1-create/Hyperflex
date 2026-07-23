@@ -13289,20 +13289,40 @@ app.post('/api/connect', async (req, res) => {
     // Fast path: phase 1+2 only (paginated activity fetch + grouping), no
     // gamma verification — this is the "raw record" shown the instant
     // connect completes, per the progressive design.
+    //
+    // Non-ok statuses and thrown errors are logged explicitly rather than
+    // silently treated as "zero activity" — a failed fetch and a genuinely
+    // empty result must never look identical in the logs. Found missing
+    // here 2026-07-23 while investigating a report of a wallet with real
+    // redeemed positions but 0 activity events: this exact silent-failure
+    // shape would make a real API error indistinguishable from a wallet
+    // that simply never traded via the CLOB (e.g. SPLIT/MERGE-only
+    // positions) — see /api/admin/connect-activity-diagnostic.
     let activity = [];
     { let offset = 0; const PAGE_LIMIT = 500;
       while (true) {
         let page = [];
         try {
           const r = await fetch(`https://data-api.polymarket.com/activity?user=${proxy.toLowerCase()}&limit=${PAGE_LIMIT}&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
-          if (r.ok) { const j = await r.json(); page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []); }
-        } catch { break; }
+          if (r.ok) {
+            const j = await r.json();
+            page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+          } else {
+            console.warn(`[connect] activity fetch non-ok status=${r.status} user=${userId.slice(0,8)} proxy=${proxy.slice(0,10)} offset=${offset}`);
+          }
+        } catch (e) {
+          console.warn(`[connect] activity fetch threw user=${userId.slice(0,8)} proxy=${proxy.slice(0,10)}:`, e.message);
+          break;
+        }
         if (!page.length) break;
         activity = activity.concat(page);
         if (page.length < PAGE_LIMIT) break;
         offset += PAGE_LIMIT;
         if (offset >= 10000) break;
       }
+    }
+    if (!activity.length) {
+      console.log(`[connect] zero activity events for user=${userId.slice(0,8)} proxy=${proxy.slice(0,10)} — check /api/admin/connect-activity-diagnostic?address=${addr} if this looks wrong`);
     }
     const groupKeys = new Set();
     for (const t of activity) {
@@ -61971,6 +61991,188 @@ app.get('/api/admin/ingestion-timing', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[ingestion-timing]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DIAGNOSTIC: GET /api/admin/connect-activity-diagnostic ──────────────────
+// Investigates a live report: wallet 0x4349...afc6d shows 8 resolved trades
+// (all redeemed-path) and 25+ open positions on /connect, but the sold-path
+// /activity?type=TRADE fetch returned ZERO events for it — meaning every
+// connecting user whose real trading history came in this shape gets a
+// badly undercounted record. Answers, in one call, all three questions this
+// could be:
+//   1. Wrong address — does the connect flow's derived proxy differ from
+//      whatever address actually holds this wallet's real activity?
+//   2. Silent failure — is /activity erroring (bad status, thrown exception)
+//      and getting swallowed as an empty array, indistinguishable from a
+//      genuine empty result?
+//   3. Systemic vs one-off — how many of the currently-qualifying durable
+//      wallets show the same zero-activity pattern?
+// READ-ONLY: no writes, no cache mutation beyond derivePolymarketProxy's
+// existing 24h in-memory cache (same as any other page load would trigger).
+//
+//   Single wallet:  curl "https://hyperflex.network/api/admin/connect-activity-diagnostic?address=0x...&secret=$ADMIN_SECRET"
+//   Systemic batch: curl "https://hyperflex.network/api/admin/connect-activity-diagnostic?batch=true&secret=$ADMIN_SECRET"
+async function _fetchActivityDiagnostic(addr, opts = {}) {
+  const typeFilter = opts.typeFilter !== false; // default true — mirrors the real ingestion path
+  const PAGE_LIMIT = 500;
+  let events = [];
+  let pages = 0;
+  let statuses = [];
+  let errorMsg = null;
+  let offset = 0;
+  while (true) {
+    const url = `https://data-api.polymarket.com/activity?user=${addr}&limit=${PAGE_LIMIT}&offset=${offset}` + (typeFilter ? '&type=TRADE' : '');
+    let page = [];
+    try {
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      statuses.push(r.status);
+      if (!r.ok) {
+        let bodyText = null;
+        try { bodyText = (await r.text()).slice(0, 300); } catch {}
+        errorMsg = `HTTP ${r.status}` + (bodyText ? `: ${bodyText}` : '');
+        break;
+      }
+      const j = await r.json();
+      page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+    } catch (e) {
+      errorMsg = `fetch threw: ${e.message}`;
+      break;
+    }
+    pages++;
+    if (!page.length) break;
+    events = events.concat(page);
+    if (page.length < PAGE_LIMIT) break;
+    offset += PAGE_LIMIT;
+    if (offset >= 10000) break;
+  }
+  const distinctTypes = [...new Set(events.map(e => e.type || e.eventType || null).filter(Boolean))];
+  return { url_type_filter: typeFilter, pages_fetched: pages, http_statuses: statuses, error: errorMsg, total_events: events.length, distinct_event_types: distinctTypes };
+}
+
+async function _fetchRedeemedCountDiagnostic(addr) {
+  const PAGE_LIMIT = 500;
+  let count = 0, offset = 0, errorMsg = null;
+  while (true) {
+    let page = [];
+    try {
+      const r = await fetch(`https://data-api.polymarket.com/positions?user=${addr}&redeemed=true&limit=${PAGE_LIMIT}&offset=${offset}`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) { errorMsg = `HTTP ${r.status}`; break; }
+      const j = await r.json();
+      page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+    } catch (e) { errorMsg = `fetch threw: ${e.message}`; break; }
+    if (!page.length) break;
+    count += page.length;
+    if (page.length < PAGE_LIMIT) break;
+    offset += PAGE_LIMIT;
+    if (offset >= 5000) break;
+  }
+  return { redeemed_count: count, error: errorMsg };
+}
+
+app.get('/api/admin/connect-activity-diagnostic', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    if (!req.query.address) {
+      // ── Systemic batch mode: how common is the zero-activity pattern
+      // across currently-qualifying durable wallets? ──
+      const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 20));
+      const tiers = await dbQuery(`
+        SELECT polymarket_address, COUNT(*)::int AS n
+        FROM realized_trades
+        WHERE polymarket_address IS NOT NULL AND market_durability = 'durable'
+        GROUP BY polymarket_address
+        HAVING COUNT(*) >= 10
+        ORDER BY n DESC
+        LIMIT $1
+      `, [limit]).catch(e => { console.error('[connect-activity-diagnostic] tier query error:', e.message); return []; });
+
+      const results = [];
+      for (const row of tiers) {
+        const addr = String(row.polymarket_address).toLowerCase();
+        const activity = await _fetchActivityDiagnostic(addr, { typeFilter: true });
+        results.push({
+          address: addr,
+          existing_durable_rows: row.n,
+          activity_type_trade_count: activity.total_events,
+          activity_error: activity.error,
+        });
+      }
+      const zeroCount = results.filter(r => r.activity_type_trade_count === 0 && !r.activity_error).length;
+      const errorCount = results.filter(r => r.activity_error).length;
+      return res.json({
+        mode: 'batch',
+        wallets_checked: results.length,
+        zero_activity_count: zeroCount,
+        zero_activity_pct: results.length ? Math.round((zeroCount / results.length) * 1000) / 10 : null,
+        fetch_error_count: errorCount,
+        results,
+        note: 'zero_activity_count counts wallets where /activity?type=TRADE genuinely returned 0 events with no fetch error — i.e. wallets whose durable-market rows came entirely from the redeemed path, same shape as the reported wallet.',
+      });
+    }
+
+    // ── Single-wallet deep dive ──
+    const eoa = String(req.query.address).trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(eoa)) return res.status(400).json({ error: 'invalid_address' });
+
+    const existingUser = await dbQuery(
+      'SELECT id, display_name, polymarket_address, polymarket_proxy, is_whale, created_at FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1',
+      [eoa]
+    ).catch(() => []);
+
+    const freshlyDerivedProxy = await derivePolymarketProxy(eoa).catch(e => { console.error('[connect-activity-diagnostic] derive error:', e.message); return null; });
+
+    // Candidate addresses to check, deduplicated: the EOA itself, whatever
+    // proxy is already stored on the user row (if one exists), and whatever
+    // the Safe factory derives fresh right now. If these disagree, that's
+    // hypothesis 1 (wrong address) confirmed directly.
+    const candidates = new Map(); // address -> label(s)
+    const addLabel = (addr, label) => {
+      if (!addr) return;
+      const a = addr.toLowerCase();
+      if (!candidates.has(a)) candidates.set(a, []);
+      candidates.get(a).push(label);
+    };
+    addLabel(eoa, 'eoa');
+    if (existingUser[0]?.polymarket_proxy) addLabel(existingUser[0].polymarket_proxy, 'stored_proxy');
+    addLabel(freshlyDerivedProxy, 'freshly_derived_proxy');
+
+    const perAddress = [];
+    for (const [addr, labels] of candidates.entries()) {
+      const activityTrade = await _fetchActivityDiagnostic(addr, { typeFilter: true });
+      const activityAll = activityTrade.total_events === 0 && !activityTrade.error
+        ? await _fetchActivityDiagnostic(addr, { typeFilter: false })
+        : null;
+      const redeemed = await _fetchRedeemedCountDiagnostic(addr);
+      perAddress.push({
+        address: addr,
+        labels,
+        activity_type_trade: { count: activityTrade.total_events, pages: activityTrade.pages_fetched, http_statuses: activityTrade.http_statuses, error: activityTrade.error },
+        activity_all_types: activityAll ? { count: activityAll.total_events, distinct_types: activityAll.distinct_event_types, error: activityAll.error } : 'skipped — type=TRADE already found events',
+        redeemed_positions: redeemed,
+      });
+    }
+
+    res.json({
+      mode: 'single_wallet',
+      eoa,
+      existing_user: existingUser[0] ? {
+        user_id: existingUser[0].id,
+        display_name: existingUser[0].display_name,
+        stored_polymarket_address: existingUser[0].polymarket_address,
+        stored_polymarket_proxy: existingUser[0].polymarket_proxy,
+        is_whale: existingUser[0].is_whale,
+        created_at: existingUser[0].created_at,
+        pre_existing_account: true,
+      } : { pre_existing_account: false, note: 'No users row for this address — /api/connect would create a fresh one.' },
+      freshly_derived_proxy: freshlyDerivedProxy,
+      addresses_checked: perAddress,
+      note: 'If existing_user.stored_polymarket_proxy differs from freshly_derived_proxy, ensureProxyStored\'s cached-proxy early-exit is serving a stale/different address than a fresh connect would derive today. If activity_type_trade.count is 0 but redeemed_positions.redeemed_count > 0 at the SAME address, the gap is upstream of our code (Polymarket /activity not covering however this wallet actually acquired its positions — e.g. SPLIT/MERGE instead of CLOB trades) rather than an address mismatch — check activity_all_types.distinct_types for confirmation.',
+    });
+  } catch (e) {
+    console.error('[connect-activity-diagnostic]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
