@@ -864,6 +864,26 @@ See `NARRATIVES.md` for full spec. TL;DR: banner rotates 6 locked narrative trac
 
 ---
 
+## Future Consideration: Onchain Expansion (NOT ACTIVE — documented for future evaluation only)
+
+**This is not a current workstream.** No code, schema, or roadmap commitment exists for this today. Current priority remains shipping The Fade (formerly Resolution Bias) and the win/loss card feed on Polymarket. This section exists so the thesis is written down somewhere durable, not lost between sessions.
+
+**Core thesis:** HYPERFLEX's reputation-layer model — wallet-level CLV grading, ROI-based win/loss tracking, resolution-bias detection — is built today on Polymarket's specific market structure (conditional tokens, resolution oracles, CLOB). But the underlying mechanism the model actually depends on is more general: a public wallet, a public transaction, a public price. Nothing about grading a wallet's decision quality against a public price history is inherently Polymarket-specific.
+
+**Long-term possibility — "the place for onchain scores":** as other onchain venues mature, the same reputation model could extend to tracking wallet performance across those venues too, under one consistent grading framework. **Hyperliquid is the named first candidate** (onchain perps/spot) — Marc flagged it directly (2026-07-13) as the answer to "which second venue first." The moat (verified track record + social graph, see "Why This Wins" above) plausibly generalizes beyond prediction markets specifically to "provable onchain trading skill," with HYPERFLEX as the cross-venue scoreboard.
+
+**Explicitly NOT in current scope:**
+- No Hyperliquid integration is planned, scoped, or scheduled — this is a locked answer to an open question, not a green light to build
+- This does not change the Polymarket-native pivot or the mantra above
+- Do not let this leak into feature decisions, endpoint design, or copy until it's actually picked up as a workstream
+
+**Open questions, flagged for whenever this gets revisited (not now):**
+1. ~~Which second venue first?~~ **Locked: Hyperliquid** (crypto perps/spot) over tokenized equities — different liquidity, different data availability, different user overlap with existing Polymarket traders than an equities venue would have.
+2. How does "a trade" get defined per venue? Polymarket's model is entry-to-resolution (binary outcome). Hyperliquid perps/spot are entry-to-exit (continuous, no forced resolution event). These are structurally different grading problems, not just a config change.
+3. Does expansion happen after Polymarket traction is fully compounded, or in parallel once the reputation infra is generalized enough to support multiple venues concurrently?
+
+---
+
 ## The Ask
 
 Marc is the founder. Claude is the CTO. Be proactive, stay in context, don't ask what we're building — you already know. Read the brief, check git status, and get to work.
