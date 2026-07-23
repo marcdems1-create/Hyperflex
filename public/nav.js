@@ -309,6 +309,26 @@
       '.nav-search-btn span{font-family:"Inter",-apple-system,sans-serif;font-size:11px;color:#8888a0;white-space:nowrap}' +
       '.nav-search-btn kbd{font-family:"Inter",-apple-system,sans-serif;font-size:10px;color:#666680;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:4px;padding:1px 5px;margin-left:4px}' +
       '@media(max-width:768px){.nav-search-btn kbd{display:none}.nav-search-btn span{display:none}}' +
+      /* Desktop scale-up (>=1024px) — the topbar was tiny site-wide at every
+         width (11-12px link/pill text, 18px logo, 6px gaps). Placed after
+         every base rule it overrides (including .nav-search-btn above) —
+         a media query does NOT win on specificity alone; a later
+         equal-specificity unconditional rule would otherwise clobber it.
+         Mobile (<1024px, see the max-width:768px blocks above) is untouched. */
+      '@media(min-width:1024px){' +
+        '.topbar{padding:14px 32px}' +
+        '.topbar-logo{font-size:24px}' +
+        '.nav-links{gap:20px}' +
+        '.nav-link{font-size:17px;padding:8px 16px}' +
+        '.nav-signin{font-size:16px;padding:10px 18px}' +
+        '.nav-wallet-btn{padding:10px 16px}' +
+        '.nav-wallet-btn svg{width:18px;height:18px}' +
+        '.nav-wallet-btn span{font-size:16px}' +
+        '.nav-search-btn{padding:10px 16px}' +
+        '.nav-search-btn svg{width:18px;height:18px}' +
+        '.nav-search-btn span{font-size:16px}' +
+        '.nav-search-btn kbd{font-size:13px;padding:2px 7px}' +
+      '}' +
       /* Overlay */
       '.hfx-search-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:none;align-items:flex-start;justify-content:center;padding:min(12vh,120px) 16px 16px}' +
       '.hfx-search-overlay.active{display:flex}' +
