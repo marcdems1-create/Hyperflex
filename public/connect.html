@@ -30,6 +30,33 @@
   .connect-alt button:hover{color:var(--ink);border-color:rgba(240,240,245,.3);}
   .connect-err{color:var(--red);font-size:13px;margin-top:14px;}
 
+  /* ── desktop hero scale (>=1024px) — mobile below this breakpoint is
+     untouched. Fixes the front door rendering as a tiny cluster on wide
+     viewports: #pageMain centers the hero vertically in the remaining
+     viewport height (below the sticky nav) until a connect is in flight —
+     JS adds .is-active to #pageMain at that point so the page reverts to
+     normal top-down flow once there's real content to read top-to-bottom. ── */
+  @media (min-width: 1024px) {
+    main { max-width: 700px; }
+    #pageMain {
+      min-height: calc(100vh - 72px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    #pageMain.is-active {
+      min-height: 0;
+      justify-content: flex-start;
+      padding-top: 40px;
+    }
+    .hero h1 { font-size: 68px; }
+    .hero p { font-size: 21px; max-width: 600px; }
+    .connect-btn { min-width: 220px; font-size: 19px; padding: 18px 40px; }
+    .connect-alt { margin-top: 28px; }
+    .connect-alt input { font-size: 17px; width: 420px; padding: 15px 20px; }
+    .connect-alt button { font-size: 15px; padding: 15px 22px; }
+  }
+
   /* ── listing notice ── */
   .listing-notice{display:flex;align-items:flex-start;gap:14px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px;font-size:13px;line-height:1.5;color:rgba(240,240,245,.8);}
   .listing-notice label{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;margin-left:auto;cursor:pointer;}
@@ -146,7 +173,7 @@
 <div id="nav-root"></div>
 <script src="/nav.js?v=22"></script>
 
-<main>
+<main id="pageMain">
   <div class="hero" id="hero">
     <h1>What's your score?</h1>
     <p>Connect your wallet to see your real Polymarket trading record — wins and losses, graded against what actually happened.</p>
@@ -243,6 +270,7 @@ async function handleAddress(addr){
   var connectBtn = document.getElementById('connectBtn');
   var pasteBtn = document.getElementById('pasteBtn');
   connectBtn.disabled = true; pasteBtn.disabled = true;
+  document.getElementById('pageMain').classList.add('is-active'); // desktop: stop centering, flow top-down once there's real content
   document.getElementById('result').innerHTML = '<div class="skel"></div>';
 
   var res;
