@@ -12700,14 +12700,13 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
 // ZERO Anthropic calls, by design (Anthropic credits are off; a verdict that
 // requires an LLM call wouldn't render at all).
 //
-// GATE: this endpoint computes on the CURRENT realized_trades data, which as
-// of this build still includes rows the redeemed-win correction cron hasn't
-// reached yet (~262K-row backlog draining in the background — see
-// SESSION_STATE.md 2026-07-18/19). Every response is stamped
-// `provisional: true` until that cron drains and the top 10 is hand-verified
-// against real polymarket.com profiles. Do not remove the stamp, and do not
-// link this endpoint's consumer page from site nav, until that verification
-// happens — see public/home-traders-preview.html for the enforcement.
+// GATE 1 CLEARED 2026-07-21: durable-market backfill ran for real
+// (21,934 rows processed, 3,992 durable), leaderboard rebuilt on
+// durable-only scoring, and the resulting top of the board was hand-verified
+// against real polymarket.com profiles (taerv534, TB14, MELOCOTON007 —
+// including a losing trader correctly scored as losing). See CLAUDE.md
+// Gate 1 and SESSION_STATE.md 2026-07-21 for the full record. The
+// `provisional` stamp that gated this surface has been removed accordingly.
 
 // Deterministic keyword classifier — NOT category data we store, because
 // realized_trades only carries market_question text. First matching category
@@ -12966,7 +12965,6 @@ async function _buildTraderCards(roiRows) {
       } : null,
       win_rate_pct: Math.round(allTimeWinRate * 1000) / 10,
       scope_label: durableScopeLabel(n),
-      provisional: true,
     };
   });
 
@@ -12975,7 +12973,7 @@ async function _buildTraderCards(roiRows) {
 
 app.get('/api/trader-cards', async (req, res) => {
   try {
-    if (!pool) return res.json({ cards: [], provisional: true });
+    if (!pool) return res.json({ cards: [] });
     const window = ['30d', '90d', 'all'].includes(req.query.window) ? req.query.window : 'all';
     const minN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.min_n, 10) || ROI_MIN_N_FLOOR);
     const limit = Math.min(24, parseInt(req.query.limit, 10) || 12);
@@ -12989,11 +12987,11 @@ app.get('/api/trader-cards', async (req, res) => {
     } else {
       rows = rows.slice(0, limit);
     }
-    if (!rows.length) return res.json({ cards: [], provisional: true });
+    if (!rows.length) return res.json({ cards: [] });
 
     const cards = await _buildTraderCards(rows);
     if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
-    res.json({ cards, provisional: true, provisional_note: 'Redeemed-win correction cron has not fully drained and this data has not been hand-verified against polymarket.com. Do not treat any ranking here as final.' });
+    res.json({ cards });
   } catch (e) {
     console.error('[trader-cards]', e.message);
     res.status(500).json({ error: e.message });
@@ -13013,9 +13011,9 @@ app.get('/api/trader-cards', async (req, res) => {
 // disagree, which is the one thing the spec calls out as the actual bug case
 // ("if a card says +181% and the profile says +178%, trust dies").
 //
-// GATE: provisional:true on every response, same as /api/trader-cards, for
-// the same reason — the redeemed-win correction cron hasn't drained and this
-// hasn't been hand-verified. Do not remove the stamp before that happens.
+// GATE 1 CLEARED 2026-07-21 — see the note above _CARD_CATEGORY_RULES and
+// CLAUDE.md. The provisional stamp this endpoint used to carry has been
+// removed accordingly.
 
 // Resolves a UUID, username, or Polymarket address to a user row. Handle vs
 // address vs UUID formats don't overlap, so a single ordered lookup is safe
@@ -13198,8 +13196,6 @@ async function _buildTraderProfile(user) {
     open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null })),
     open_positions_count: (openCountRow[0] && openCountRow[0].n) || openRows.length,
     void_note: 'Positions that could not be independently verified against Polymarket settlement data are excluded from this record rather than guessed at (see the redeemed-win correction fix, 2026-07-18). A wallet’s total on-chain activity may exceed the resolved-trade count shown here.',
-    provisional: true,
-    provisional_note: 'Redeemed-win correction cron has not fully drained and this data has not been hand-verified against polymarket.com. Do not treat this record as final.',
   };
 }
 
@@ -13219,11 +13215,23 @@ app.get('/api/trader-record/:handle', async (req, res) => {
 
 // Serves the trader profile page for any handle/address/UUID. Static file,
 // client-side fetch to /api/trader-record/:handle does the rest — same
-// pattern as /m/:userId serving member.html. NOT linked from site nav (see
-// CLAUDE.md Gate 1) — reachable only via a trader card's link or a direct URL.
+// pattern as /m/:userId serving member.html. Linked from site nav as of
+// Gate 1 clearing (2026-07-21) — see CLAUDE.md.
 app.get('/trader/:handle', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'trader-profile.html'));
+});
+
+// Trader-first surface at a real, permanently-linked route — launched
+// ALONGSIDE home.html (still `/`), not replacing it. The trader page is
+// structurally correct (product definition: traders are the product,
+// markets are evidence) but visually unfinished — a design pass was
+// deliberately deferred so this surface could be observed under real
+// traffic first. Do not treat this route's existence as authorization to
+// swap it in for `/` — that's a distinct, separate decision.
+app.get('/traders', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'home-traders-preview.html'));
 });
 
 // ── ROI leaderboard audit (read-only) ───────────────────────────────────────

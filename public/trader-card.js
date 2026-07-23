@@ -112,10 +112,6 @@
       + (streakText ? '<span class="' + streakCls + '">' + esc(streakText) + '</span>' : '')
       + '</div>';
 
-    if (card.provisional) {
-      html += '<div class="tcard-provisional">Provisional — pending verification</div>';
-    }
-
     html += '</a>';
     return html;
   }

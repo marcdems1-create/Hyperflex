@@ -49,6 +49,27 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-23 (Trader surface goes live — ALONGSIDE home.html, not replacing it)
+
+**Marc authorized items 1-3 from the 2026-07-21 entry's queue outright, and modified item 4 rather than approving it as proposed.** Item 4 as originally framed was "flip `home-traders-preview.html` → `/`." Marc's actual instruction: launch alongside, not replacing — put the trader surface on a real route (`/traders`), link it prominently in nav, leave `home.html` at `/` untouched. Reasoning on record: the trader page is structurally right but visually unfinished (a design pass was deliberately deferred), and swapping the homepage before that pass would make the least-polished surface the front door. Trader-first is still the stated destination and `home.html`'s market grid is still "on borrowed time" — the swap happens after the design pass, not before it.
+
+**Shipped, this branch:**
+1. **Stripped `provisional`/`provisional_note`** from every emission point: `_buildTraderCards`' return object, both early-return branches and the success response in `GET /api/trader-cards`, and `_buildTraderProfile`'s return object. `ephemeral_excluded_note` and `void_note` were left alone — those are permanent disclosure copy per the product definition (disclose, not hide), not gate-era provisional flags.
+2. **Removed the `.gate-banner` divs** from `home-traders-preview.html` and `trader-profile.html`, and the per-card `<div class="tcard-provisional">` badge + its CSS from `trader-card.js`/`trader-card.css`. Also dropped stale gate-era copy: the homepage preview's empty-state message referencing "the correction cron is still draining" (that cron finished draining on 2026-07-21) and the `noindex, nofollow` robots meta + "(preview, not live)" page titles on both files.
+3. **Linked the trader surface from site nav** (`public/nav.js`): added `{ href: '/traders', label: 'Traders', gold: true }` as the first primary link (ahead of World Cup/Feed), and added a `Traders` entry to the Cmd+K search index.
+4. **Added a real Express route**, `app.get('/traders', ...)` serving `home-traders-preview.html` — mirrors the existing `/trader/:handle` pattern. Both files gained the shared `#nav-root` + `/nav.js` include so they're consistent with the rest of the site now that they're real, linked pages (they didn't have the shared nav before — they were unlinked static files with their own header only).
+
+**What was explicitly NOT done, per Marc's own reasoning:** no visual/design polish pass on `home-traders-preview.html` or `trader-profile.html`, and `home.html` was not touched — it stays at `/` exactly as-is.
+
+**Verification:** `node --check server.js` / `nav.js` / `trader-card.js` all pass. Locally mocked both pages' fetch calls (scratch copies, never committed) and screenshotted via the pre-installed Chromium at 1440px and mobile widths — nav renders correctly on both pages with the Traders link active/highlighted, no leftover banner, scope label shows, a losing trade renders correctly (red, "LOST"), and an ephemeral trade correctly displays dimmed with "Ephemeral — excluded" in the Scope column. One real bug caught and fixed in the process: the homepage preview's empty-state copy was stale (referenced a cron that already finished). No bugs found in the actual shipped page code — two false alarms during verification were both bugs in my own throwaway test mocks (wrong field names on mock trade/call objects), not in the real code; confirmed by cross-checking the mock against `_buildTraderProfile`'s actual field names (`pnl`/`roi`/`result` on best/worst call, `realized_pnl`/`realized_roi_pct`/`result`/`category` on trade_history rows) before re-testing.
+
+**Active blockers:** none for this go-live step. Deferred by explicit instruction: the design pass on the trader surface, and the eventual `home.html` → trader-first swap (not scheduled, no date attached).
+
+**Queued (priority order):**
+1. Whenever picked back up: the deferred design pass on `home-traders-preview.html`/`trader-profile.html`, informed by real traffic on `/traders` now that it's live and linked.
+2. Optional, lower priority, carried over from 2026-07-21: spot-check TB14's lifetime ("All") P&L window on Polymarket, since the original hand-verification only checked "Past Day."
+3. Not this session: the `home.html` → trader-first homepage swap. Explicitly gated on the design pass, no other precondition.
+
 ## 2026-07-21 (MILESTONE: Gate 1 clears — durable-market leaderboard hand-verified against real Polymarket profiles)
 
 **The gate that has blocked every trader-facing surface since 2026-07-18 is cleared.** Marc ran the actual backfill and hand-verified the resulting top of the leaderboard directly against polymarket.com. This is the first time in this whole arc that a leaderboard has survived that check.

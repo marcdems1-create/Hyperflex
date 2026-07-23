@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trader record — HYPERFLEX (preview, not live)</title>
-<meta name="robots" content="noindex, nofollow">
+<title>Trader record — HYPERFLEX</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/trader-card.css">
 <style>
@@ -14,13 +13,6 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',-apple-system,sans-serif;}
-
-  .gate-banner{
-    background:rgba(245,158,11,.1);border-bottom:1px solid rgba(245,158,11,.3);
-    padding:12px 24px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  }
-  .gate-banner b{color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
-  .gate-banner span{font-size:12px;color:rgba(240,240,245,.7);}
 
   main{max-width:1000px;margin:0 auto;padding:0 24px 80px;}
   @media (min-width:1024px){ main{max-width:min(1200px,90vw);} }
@@ -108,14 +100,13 @@
   .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:10px;height:120px;}
   @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  #nav-root { position: sticky; top: 0; z-index: 100; }
 </style>
 </head>
 <body>
 
-<div class="gate-banner">
-  <b>Provisional preview</b>
-  <span>Not linked from site navigation. The redeemed-win correction cron has not fully drained and this record has not been hand-verified against polymarket.com. Do not treat anything on this page as final — see CLAUDE.md Gate 1 / SESSION_STATE.md.</span>
-</div>
+<div id="nav-root"></div>
+<script src="/nav.js?v=22"></script>
 
 <main id="main"><div class="skel" style="margin-top:32px;"></div></main>
 

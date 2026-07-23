@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HYPERFLEX — Trader-first homepage (preview, not live)</title>
-<meta name="robots" content="noindex, nofollow">
+<title>HYPERFLEX — Traders</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/trader-card.css">
 <style>
@@ -14,13 +13,6 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',-apple-system,sans-serif;}
-
-  .gate-banner{
-    background:rgba(245,158,11,.1);border-bottom:1px solid rgba(245,158,11,.3);
-    padding:12px 24px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  }
-  .gate-banner b{color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
-  .gate-banner span{font-size:12px;color:rgba(240,240,245,.7);}
 
   header{padding:32px 24px 8px;max-width:1400px;margin:0 auto;}
   header h1{font-size:28px;font-weight:900;letter-spacing:-.02em;margin:0 0 6px;}
@@ -73,18 +65,17 @@
        snap that let the row rest mid-card. */
     .scroll-row { scroll-snap-type: x mandatory; }
   }
+  #nav-root { position: sticky; top: 0; z-index: 100; }
 </style>
 </head>
 <body>
 
-<div class="gate-banner">
-  <b>Provisional preview</b>
-  <span>Not linked from site navigation. The redeemed-win correction cron has not fully drained and this top-10 has not been hand-verified against polymarket.com. Do not treat any ranking here as final, and do not link this page publicly until that verification happens — see CLAUDE.md Gate 1 / SESSION_STATE.md.</span>
-</div>
+<div id="nav-root"></div>
+<script src="/nav.js?v=22"></script>
 
 <header>
-  <h1>Trader-first homepage — preview</h1>
-  <p>Replaces the market-grid layout. We track and score traders; markets appear only as evidence of a call. Every card carries score and n together — a win never appears naked.</p>
+  <h1>Traders</h1>
+  <p>We track and score traders; markets appear only as evidence of a call. Every card carries score and n together — a win never appears naked. Ranked on durable markets — resolving weeks or months out, hand-verified against real Polymarket profiles.</p>
 </header>
 
 <main>
@@ -111,7 +102,7 @@ fetch('/api/trader-cards?limit=12')
   .then(function(d){
     var cards = (d && d.cards) || [];
     if (!cards.length) {
-      document.getElementById('heroRow').innerHTML = '<div class="empty">No wallets currently meet the minimum sample size (n≥10) for a card. This is expected while the correction cron is still draining — check back once it clears.</div>';
+      document.getElementById('heroRow').innerHTML = '<div class="empty">No wallets currently meet the minimum sample size (n≥10 durable resolved trades) for a card.</div>';
       document.getElementById('moversRow').innerHTML = '';
       document.getElementById('callsList').innerHTML = '<div class="empty">Nothing to show yet.</div>';
       return;

@@ -93,14 +93,6 @@
 .tcard-streak.is-loss { color: #ff4d6a; background: rgba(255,77,106,.07); border: 1px solid rgba(255,77,106,.18); }
 .tcard-streak.is-push { color: rgba(240,240,245,.4); background: rgba(240,240,245,.05); border: 1px solid rgba(240,240,245,.1); }
 
-/* ── provisional stamp — must be impossible to accidentally omit ── */
-.tcard-provisional {
-  font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
-  letter-spacing: .1em; text-transform: uppercase; color: #f59e0b;
-  background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.22);
-  border-radius: 5px; padding: 3px 7px; width: fit-content;
-}
-
 /* ── variants ── */
 .tcard-hero { width: 100%; max-width: 480px; padding: 26px; gap: 18px; }
 .tcard-hero .tcard-avatar { width: 48px; height: 48px; font-size: 16px; }
@@ -109,7 +101,7 @@
 .tcard-feed { flex-shrink: 0; width: 300px; }
 
 .tcard-compact { flex-shrink: 0; width: 220px; padding: 14px; gap: 10px; }
-.tcard-compact .tcard-evidence, .tcard-compact .tcard-provisional, .tcard-compact .tcard-scope { display: none; }
+.tcard-compact .tcard-evidence, .tcard-compact .tcard-scope { display: none; }
 .tcard-compact .tcard-avatar { width: 28px; height: 28px; font-size: 11px; }
 /* Compact stays the tightest density by design ("minimum viable: identity +
    score + n") — dial the shared base sizes back down so a 220px card doesn't

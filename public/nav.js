@@ -359,6 +359,7 @@
   // as a first-class route. The homepage (/) will be rebuilt into the
   // townsquare per spec §6; once that lands the two URLs diverge.
   var primaryLinks = [
+    { href: '/traders', label: 'Traders', gold: true },
     { href: '/worldcup', label: '⚽ World Cup', gold: true },
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
@@ -740,6 +741,7 @@
   (function() {
     // Page definitions for static search
     var pages = [
+      { name: 'Traders', desc: 'Trader scoreboard — real records, verified against durable markets', href: '/traders', icon: '🏆' },
       { name: 'Whales', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
       { name: 'Predictors', desc: 'Top predictor leaderboard', href: '/predictors', icon: '🏆' },
       { name: 'Odds', desc: 'Cross-platform odds comparison', href: '/odds', icon: '🎲' },
