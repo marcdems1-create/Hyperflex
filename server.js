@@ -45003,7 +45003,7 @@ async function ensureProxyStored(userId, eoa) {
   if (!pool || !userId || !eoa) return null;
   try {
     const u = await dbQuery(
-      'SELECT polymarket_address, polymarket_proxy, is_whale FROM users WHERE id = $1 LIMIT 1',
+      'SELECT polymarket_address, polymarket_proxy, is_whale, password_hash FROM users WHERE id = $1 LIMIT 1',
       [userId]
     );
 
@@ -45022,11 +45022,33 @@ async function ensureProxyStored(userId, eoa) {
     // tonight patched the existing rows; this code change prevents the
     // ordering bug from recurring.
     //
-    // Pattern: if is_whale is true and the stored proxy disagrees with
-    // the address, overwrite + null last_backfill_at so the cron picks
-    // the user up next tick. Idempotent on re-call. Lowercase both sides
-    // before comparing so case drift doesn't cause spurious reconciles.
-    if (u[0]?.is_whale && u[0].polymarket_address) {
+    // ⚠️ 2026-07-23: the is_whale check alone isn't sufficient — added the
+    // password_hash LIKE 'whale_profile_%' gate (the same auto_created
+    // marker already used at ~8 other call sites in this file) after a
+    // live report: a connect-flow user (polymarket_address = a REAL EOA,
+    // polymarket_proxy correctly Safe-factory-derived) later got flagged
+    // is_whale=true — plausibly by a leaderboard scrape matching their EOA
+    // directly via ensureWhaleProfile's "existing user" branch, which sets
+    // is_whale without ever touching polymarket_address/proxy. Without
+    // this gate, EVERY subsequent ensureProxyStored call for that user
+    // took this branch, saw polymarket_proxy (correct) disagreed with
+    // polymarket_address (the EOA — NOT a proxy for this user), and
+    // overwrote the correct proxy with the EOA on every single call —
+    // /activity?user=<EOA> then legitimately returns zero, undercounting
+    // a real 197-trade/25-redemption history down to whatever partial
+    // data was captured before the corruption started. This branch must
+    // only fire for rows that actually originated from the whale-import
+    // scrape, where polymarket_address really is the proxy by contract —
+    // never for a connect-flow (or any other) user who happens to also be
+    // a whale by trading volume.
+    //
+    // Pattern: if is_whale is true, the row is whale-import-created, and
+    // the stored proxy disagrees with the address, overwrite + null
+    // last_backfill_at so the cron picks the user up next tick. Idempotent
+    // on re-call. Lowercase both sides before comparing so case drift
+    // doesn't cause spurious reconciles.
+    const isWhaleImportRow = u[0]?.password_hash && String(u[0].password_hash).startsWith('whale_profile_');
+    if (u[0]?.is_whale && isWhaleImportRow && u[0].polymarket_address) {
       const addr   = String(u[0].polymarket_address).toLowerCase();
       const stored = u[0].polymarket_proxy ? String(u[0].polymarket_proxy).toLowerCase() : null;
       if (stored !== addr) {
@@ -62173,6 +62195,77 @@ app.get('/api/admin/connect-activity-diagnostic', requireAdminSecret, async (req
     });
   } catch (e) {
     console.error('[connect-activity-diagnostic]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── FIX: POST /api/admin/repair-whale-proxy-corruption ──────────────────────
+// Root-cause fix for the wrong-address bug found 2026-07-23:
+// ensureProxyStored's whale-reconcile branch fired for ANY is_whale=true
+// user, not just genuinely whale-import-created ones — a connect-flow user
+// (polymarket_address = a real EOA, polymarket_proxy correctly derived) who
+// later got flagged is_whale=true (plausibly via a leaderboard scrape
+// matching their EOA through ensureWhaleProfile's "existing user" branch,
+// which sets is_whale without touching address/proxy) had their correct
+// proxy overwritten with their EOA on every subsequent ensureProxyStored
+// call. The code fix (gating the branch on password_hash LIKE
+// 'whale_profile_%', already this codebase's established auto-created
+// marker) stops it happening again — this endpoint finds and repairs
+// accounts already caught by it.
+//
+// Detection: is_whale=true, NOT whale-import-created, and
+// polymarket_proxy = polymarket_address (the exact state the buggy branch
+// produces — a real Safe-derived proxy essentially never coincidentally
+// equals the EOA it was derived from). For each match, re-derives fresh via
+// the Safe factory (now proven correct against the reported wallet) and
+// updates polymarket_proxy + nulls last_backfill_at so the next backfill
+// picks up real history. Read-only if dry_run=true (default false).
+//
+//   Detect + repair: curl -X POST "https://hyperflex.network/api/admin/repair-whale-proxy-corruption?secret=$ADMIN_SECRET"
+//   Detect only:     curl -X POST "https://hyperflex.network/api/admin/repair-whale-proxy-corruption?dry_run=true&secret=$ADMIN_SECRET"
+app.post('/api/admin/repair-whale-proxy-corruption', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const dryRun = req.query.dry_run === 'true';
+
+    const candidates = await dbQuery(`
+      SELECT id, polymarket_address, polymarket_proxy, display_name
+      FROM users
+      WHERE is_whale = true
+        AND (password_hash IS NULL OR password_hash NOT LIKE 'whale_profile_%')
+        AND polymarket_proxy IS NOT NULL
+        AND polymarket_address IS NOT NULL
+        AND LOWER(polymarket_proxy) = LOWER(polymarket_address)
+      LIMIT 200
+    `).catch(e => { console.error('[repair-whale-proxy-corruption] query error:', e.message); return null; });
+    if (candidates == null) return res.status(500).json({ error: 'candidate query failed — check server logs' });
+
+    const results = [];
+    for (const u of candidates) {
+      const eoa = String(u.polymarket_address).toLowerCase();
+      const freshProxy = await derivePolymarketProxy(eoa).catch(() => null);
+      const entry = { user_id: u.id, display_name: u.display_name, eoa, corrupted_proxy: u.polymarket_proxy, freshly_derived_proxy: freshProxy };
+      if (freshProxy && freshProxy.toLowerCase() !== eoa) {
+        if (!dryRun) {
+          await dbQuery('UPDATE users SET polymarket_proxy = $1, last_backfill_at = NULL WHERE id = $2', [freshProxy, u.id]);
+        }
+        entry.repaired = !dryRun;
+      } else {
+        entry.repaired = false;
+        entry.skip_reason = freshProxy ? 'fresh derivation also equals EOA — unexpected, needs manual look' : 'fresh derivation failed';
+      }
+      results.push(entry);
+    }
+
+    res.json({
+      dry_run: dryRun,
+      candidates_found: candidates.length,
+      repaired_count: results.filter(r => r.repaired).length,
+      results,
+      note: dryRun ? 'Dry run — no writes performed. Re-run without dry_run=true to apply.' : 'Repaired rows will pick up correct proxy on their next backfill/connect (last_backfill_at nulled). This does not retroactively fix realized_trades rows already inserted under the wrong address — those get corrected the next time backfillRealizedTrades runs for that user (ON CONFLICT DO NOTHING on external_sync_id means new correct rows are added, not deduped away).',
+    });
+  } catch (e) {
+    console.error('[repair-whale-proxy-corruption]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
