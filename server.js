@@ -45259,7 +45259,16 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     const avgEntryPrice = +(totalCost / totalSharesClosed).toFixed(4);
     const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
     const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
-    const externalSyncId = `pm-act:${group.condId}:${group.outcome}`;
+    // external_sync_id must be scoped per user — it was 'pm-act:<condId>:<outcome>'
+    // with NO user component, but the UNIQUE constraint on this column is
+    // table-wide, not per-user. Any two users who both traded the same
+    // market+outcome collided: whoever inserted first silently "owned" that
+    // slot forever via ON CONFLICT DO NOTHING, and every other user's real
+    // trade on that same market+outcome was dropped with zero error. Found
+    // 2026-07-23 investigating a wallet with 59 resolved sold-path groups
+    // and 0 imported — see /api/admin/migrate-external-sync-id-scope for the
+    // one-time backfill that fixes already-collided rows.
+    const externalSyncId = `pm-act:${userId}:${group.condId}:${group.outcome}`;
     const marketDurability = classifyMarketDurability(group.question, firstOpenAt, lastCloseAt);
 
     try {
@@ -45396,7 +45405,9 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const tokenId = pos.asset || pos.token_id || null;
       const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
       const closeReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
-      const externalSyncId = `pm-redeem:${condId}:${outcome}`;
+      // Scoped per user — see the identical fix + comment on the sold-path
+      // externalSyncId a few hundred lines up in this same function.
+      const externalSyncId = `pm-redeem:${userId}:${condId}:${outcome}`;
       // opened_at is null for this path (see comment on classifyMarketDurability)
       // so this is title-pattern classification only, not duration-based.
       const marketDurability = classifyMarketDurability(question, null, closedAt);
@@ -61849,6 +61860,67 @@ app.post('/api/admin/backfill-market-durability', requireAdminSecret, async (req
     res.json(result);
   } catch (e) {
     console.error('[backfill-market-durability]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── FIX: POST /api/admin/migrate-external-sync-id-scope ─────────────────────
+// One-time repair for a severe, platform-wide bug found 2026-07-23:
+// external_sync_id was built as 'pm-act:<condId>:<outcome>' /
+// 'pm-redeem:<condId>:<outcome>' — NO user component — but the UNIQUE
+// constraint on this column is table-wide, not per-user. Any two users who
+// both traded the same market+outcome collided: whoever's row got inserted
+// FIRST silently "owned" that external_sync_id forever via
+// ON CONFLICT DO NOTHING, and every other user who also traded that same
+// market+outcome had their real trade dropped with zero error, zero log
+// line, nothing. Confirmed via a wallet with 197 scanned / 59 resolved
+// sold-path groups and 0 imported — every one of those 59 collided against
+// an existing row some OTHER user already owned for that market+outcome.
+// This is not a connect-flow-specific bug — it's been silently under-
+// counting the whole realized_trades table (whale-import backfills
+// included) since this schema shipped, worst on popular durable markets
+// (elections, Fed decisions) that many different traders all piled into —
+// exactly the markets the durable-cohort leaderboard is built from.
+//
+// The code-level fix (this same commit) makes both insert paths in
+// backfillRealizedTrades include user_id in the ID going forward. This
+// endpoint is the one-time backfill for rows already in the table:
+// rewrites every row whose CURRENT external_sync_id still exactly matches
+// the OLD (userless) reconstruction from that row's own stored
+// condition_id/side/user_id — i.e. only touches genuinely-unmigrated rows,
+// safe to re-run. Provably collision-free: under the OLD unique constraint,
+// at most one row could ever exist per old-format ID (that's what "silently
+// dropped" means), so rewriting that one row's ID to include ITS OWN
+// user_id can never collide with anything else in the table.
+//
+// After migration: the user who originally "won" a given market+outcome
+// keeps their row (their next backfill computes the same new-format ID,
+// ON CONFLICT correctly no-ops, no duplicate). Every other user who was
+// silently dropped has never had a row under ANY format — their next
+// backfill inserts fresh and their real trade finally appears.
+//
+//   curl -X POST "https://hyperflex.network/api/admin/migrate-external-sync-id-scope?secret=$ADMIN_SECRET"
+app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const result = await dbQuery(`
+      UPDATE realized_trades
+      SET external_sync_id = CASE
+        WHEN external_sync_id LIKE 'pm-act:%' THEN 'pm-act:' || user_id || ':' || condition_id || ':' || side
+        WHEN external_sync_id LIKE 'pm-redeem:%' THEN 'pm-redeem:' || user_id || ':' || condition_id || ':' || side
+        ELSE external_sync_id
+      END
+      WHERE (external_sync_id LIKE 'pm-act:%' AND external_sync_id = 'pm-act:' || condition_id || ':' || side)
+         OR (external_sync_id LIKE 'pm-redeem:%' AND external_sync_id = 'pm-redeem:' || condition_id || ':' || side)
+      RETURNING id
+    `).catch(e => { console.error('[migrate-external-sync-id-scope] error:', e.message); return null; });
+    if (result == null) return res.status(500).json({ error: 'migration query failed — check server logs' });
+    res.json({
+      migrated_rows: result.length,
+      note: 'Rewrote external_sync_id to include user_id for every row still on the old collision-prone format. Re-running backfillRealizedTrades for any affected wallet should now surface trades that were previously silently dropped against another user\'s row on the same market+outcome. Safe to re-run — already-migrated rows (new format) are excluded by the WHERE clause and left untouched.',
+    });
+  } catch (e) {
+    console.error('[migrate-external-sync-id-scope]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
