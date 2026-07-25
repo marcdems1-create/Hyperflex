@@ -61925,6 +61925,50 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
   }
 });
 
+// ── GET /api/admin/durable-leaderboard-top10 ─────────────────────────────────
+// Minimal, read-only pull of the current durable leaderboard for hand-
+// verification against polymarket.com — same purpose as the 2026-07-21
+// taerv534/TB14/MELOCOTON007 check, re-run now that the proxy-corruption and
+// external_sync_id-collision fixes + migration (24,508 rows rewritten) have
+// changed the underlying data. Deliberately NOT /api/trader-cards: that
+// endpoint bundles verdict/evidence/form/streak/specialty for card
+// rendering, which is noise for a quick copy-the-addresses-and-check
+// workflow. Reuses _computeRoiLeaderboard (same single source of truth as
+// every other trader-facing surface) and win_rate_pct via _buildTraderCards
+// — no separate computation, so this can't disagree with what the public
+// surfaces show. "total Polymarket predictions" isn't a field we store —
+// that number only ever comes from looking at the wallet's real profile on
+// polymarket.com directly (same as the 2026-07-21 hand-check), so it's
+// intentionally absent here rather than faked.
+//   curl "https://hyperflex.network/api/admin/durable-leaderboard-top10?secret=$ADMIN_SECRET"
+app.get('/api/admin/durable-leaderboard-top10', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    const top = computed.rows.slice(0, limit);
+    const cards = await _buildTraderCards(top);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+    res.json({
+      qualifying_count: computed.rows.length,
+      top: cards.map((c, i) => ({
+        rank: i + 1,
+        display_name: c.display_name,
+        polymarket_address: c.polymarket_address,
+        n_durable: c.n,
+        win_rate_pct: c.win_rate_pct,
+        score_pct: c.score_pct,
+        total_polymarket_predictions: null,
+      })),
+      note: 'total_polymarket_predictions is always null — not a field this system tracks. Get it by checking each polymarket_address\'s real profile page directly, same as the 2026-07-21 hand-verification.',
+    });
+  } catch (e) {
+    console.error('[durable-leaderboard-top10]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── DIAGNOSTIC: GET /api/admin/ingestion-timing ──────────────────────────────
 // Step zero for the connect-flow spec: a connecting wallet has ZERO rows in
 // realized_trades (we only ever backfilled wallets we selected), so first

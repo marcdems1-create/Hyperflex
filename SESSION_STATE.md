@@ -49,6 +49,25 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-23h (Minimal read-only top-10 pull shipped for re-verification; strategy-Claude confirms both fixes verified stable in production)
+
+**Reconciled against a strategy-Claude SESSION_STATE.md upload** (its own 2026-07-23g entry, not duplicated verbatim here — see that upload for the full account): **both bugs from the prior two entries are confirmed fixed, deployed, AND verified stable in production.** Migration ran for real: `migrated_rows: 24508` — nearly the entire table was on the collision-prone format. On Marc's own wallet: `n` went 8 → 60 (imported 52), held stable across two reads a minute apart (19W/41L, 31.7%). Qualifying wallet count moved 76 → 89 → 90 across both fixes. This closes the six-day ingestion-bug chain this session's connect-flow work surfaced.
+
+**⚠️ Consequence, flagged by strategy-Claude and acted on this entry: every prior hand-verification (taerv534/TB14/MELOCOTON007 on 2026-07-21, and the original 76-wallet durable-market-scope survey) was computed on pre-migration, collision-undercounted data.** Directionally honest, quantitatively low. Gate 1's bar is unchanged but the data under it moved — the corrected top 10 needs a fresh hand-check against polymarket.com before anyone is promoted publicly. This is explicitly Marc's/strategy-Claude's step to do (2-minute manual check, same as before), not a Code task — the only Code part is producing the current top 10 to check.
+
+**Shipped:** `GET /api/admin/durable-leaderboard-top10` — minimal, read-only, admin-gated. Returns exactly `rank, display_name, polymarket_address, n_durable, win_rate_pct, score_pct` for the current top N (default 10), reusing `_computeRoiLeaderboard` + `_buildTraderCards` (same single source of truth as every public trader surface, so this can't disagree with what `/traders` or `/connect` show). Deliberately not `/api/trader-cards` — that bundles verdict/evidence/form/streak/specialty, noise for a quick copy-the-addresses-and-check workflow. `total_polymarket_predictions` is always `null` in the response — that number was never a stored field, only ever produced by looking at each wallet's real profile on polymarket.com directly (same manual step as the 2026-07-21 check).
+
+**Active blockers:**
+- **Not run yet — same sandbox limitation as every entry this arc.** `curl "https://hyperflex.network/api/admin/durable-leaderboard-top10?secret=$ADMIN_SECRET"`, then hand-check each `polymarket_address` against its real polymarket.com profile before promoting anyone.
+
+**Queued (priority order):**
+1. Run the top-10 pull, hand-verify against polymarket.com (Marc/strategy-Claude's step).
+2. Still not run: `repair-whale-proxy-corruption?dry_run=true` (corrected auth: query string, not body) — unknown how many other accounts had the proxy-corruption bug.
+3. Explicitly deferred, not touched: the desktop design pass on `/connect`/`/traders`/profile pages ("failed nine times blind" per Marc — a consolidated single-prompt attempt across all three surfaces is one option on the table if wanted before hiring a designer, not started) and the "provisional headline score for sub-threshold wallets" feature (`/connect` currently shows no headline number below the n=10 ranking threshold — best/worst call and history render, but no score; not built yet).
+
+**Notes for next session:**
+- If the "provisional score for sub-threshold wallets" feature gets picked up: compute it the same way as ranked wallets (realized ROI, win rate, n) but label it plainly "Provisional — not ranked until 10 durable trades," and make sure it uses the same underlying aggregate rather than a parallel calculation — same single-source-of-truth discipline as everything else on this surface.
+
 ## 2026-07-23f (SECOND real bug on the same wallet: external_sync_id has no user scope — table-wide collisions dropping trades platform-wide)
 
 **The proxy fix worked — Marc confirmed backfill now reads the correct address (proxy `0x51f0d8...04e9`, scanned 197). But `imported: 0` despite `resolved: 59`, and `n` stayed at 8.** Asked to explain the 197→59→0 gap and check three hypotheses: dedup against existing rows, gamma-verification failure, or a wrong user_id on write.
