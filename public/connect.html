@@ -112,6 +112,9 @@
   .p-n{font-size:14px;color:rgba(240,240,245,.4);}
   .p-scope{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
 
+  .p-scoreline.is-provisional{border-style:dashed;}
+  .p-provisional-label{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.02em;color:#f59e0b;margin-top:10px;margin-bottom:16px;}
+
   .p-section{margin-top:36px;}
   .p-section-title{font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 16px;}
 
@@ -397,6 +400,22 @@ function renderVerified(p){
   // eligibility_note ("Not yet ranked — needs 10 durable resolved trades
   // (has 3)") rather than hardcoding the threshold, so this doesn't drift
   // if ROI_MIN_N_FLOOR ever changes server-side.
+  // Provisional headline — a wallet under the ranking floor still gets a
+  // real number, computed via the identical scoring pipeline a ranked
+  // wallet uses (see server.js _buildTraderProfile). The 10-durable floor
+  // gates public RANKING, not seeing your own score.
+  if (!eligible && p.provisional) {
+    var pv = p.provisional;
+    var pvScoreCls = pv.score_pct >= 0 ? 'is-positive' : 'is-negative';
+    html += '<div class="p-scoreline ' + pvScoreCls + ' is-provisional"><span class="p-score">' + esc(fmtPct(pv.score_pct)) + '</span><span class="p-n">n=' + esc(pv.n) + '</span></div>'
+      + '<div class="p-provisional-label">' + esc(pv.label) + '</div>'
+      + '<div class="stat-row">'
+        + '<div class="stat-tile"><div class="stat-label">Realized ROI</div><div class="stat-value ' + pvScoreCls + '">' + esc(fmtPct(pv.raw_weighted_roi_pct)) + '</div></div>'
+        + '<div class="stat-tile"><div class="stat-label">Win Rate</div><div class="stat-value">' + esc(pv.win_rate_pct != null ? pv.win_rate_pct.toFixed(1) + '%' : '—') + '</div></div>'
+        + '<div class="stat-tile"><div class="stat-label">Durable Trades</div><div class="stat-value">' + esc(pv.n) + '</div></div>'
+      + '</div>';
+  }
+
   if (!eligible) {
     var m = /needs (\d+).*?\(has (\d+)\)/.exec(p.eligibility_note || '');
     if (m) {

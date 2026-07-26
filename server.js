@@ -13101,6 +13101,23 @@ async function _buildTraderProfile(user) {
     if (cards && cards[0]) { cardData = cards[0]; eligible = true; }
   }
 
+  // Provisional score for sub-threshold wallets. ROI_MIN_N_FLOOR gates public
+  // RANKING eligibility, not whether a wallet's own number can be computed —
+  // someone who connects to see their score must see a score. Reuses the
+  // identical _computeRoiLeaderboard/_buildTraderCards pipeline with minN=1
+  // instead of ROI_MIN_N_FLOOR, so a sub-threshold wallet's score/win-rate/n
+  // go through the exact same shrinkage-adjusted formula a ranked wallet
+  // gets — no separate math. Never touches cardData/eligible above.
+  let provisionalData = null;
+  if (!eligible) {
+    const provComputed = await _computeRoiLeaderboard('all', 1);
+    const provRoiRow = provComputed && provComputed.rows.find(r => r.user_id === userId);
+    if (provRoiRow) {
+      const provCards = await _buildTraderCards([provRoiRow]);
+      if (provCards && provCards[0]) provisionalData = provCards[0];
+    }
+  }
+
   let eligibilityNote;
   if (eligible) {
     eligibilityNote = 'Ranked · ' + cardData.n + ' durable resolved trades';
@@ -13191,6 +13208,19 @@ async function _buildTraderProfile(user) {
     streak: cardData ? cardData.streak : null,
     specialty: cardData ? cardData.specialty : null,
     scope_label: durableScopeLabel(cardData ? cardData.n : durableResolvedCount),
+
+    // Sub-threshold wallets only (null once eligible — ranked fields above
+    // are the sole source of truth at that point). Same score/win-rate/n
+    // shape as the ranked-wallet fields, computed via the same pipeline,
+    // just not yet past the ranking floor.
+    provisional: provisionalData ? {
+      score_pct: provisionalData.score_pct,
+      raw_weighted_roi_pct: provisionalData.raw_weighted_roi_pct,
+      win_rate_pct: provisionalData.win_rate_pct,
+      n: provisionalData.n,
+      trend: provisionalData.trend,
+      label: 'Provisional — not ranked until ' + ROI_MIN_N_FLOOR + ' durable trades',
+    } : null,
 
     headline,
     best_call: bestCall,

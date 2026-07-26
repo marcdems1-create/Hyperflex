@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-25b (✅ SHIPPED — provisional headline score on /connect for sub-threshold wallets)
+
+**Fixes the gap flagged in 2026-07-25a: a wallet under the 10-durable ranking floor connected and saw best/worst call, specialty, and full history — but no number telling them how they're doing. The 10-durable threshold gates public RANKING, not seeing your own score, and that distinction wasn't reflected in the product.**
+
+`_buildTraderProfile` (server.js:13046) now runs a **second** `_computeRoiLeaderboard('all', 1)` call (vs. the existing `ROI_MIN_N_FLOOR`-gated call that only fires for ranked wallets) whenever the wallet isn't eligible, and pipes that row through the same `_buildTraderCards` used everywhere else. Zero separate math — same shrinkage-adjusted formula, same verdict/score/win-rate pipeline a ranked wallet gets, just not floor-gated. Result exposed as a new `provisional` field (`score_pct`, `raw_weighted_roi_pct`, `win_rate_pct`, `n`, `trend`, `label`) on the profile response, additive only — `eligible`/`cardData`/the ranked-wallet fields are untouched, still `null` below the floor. Zero Anthropic calls (this whole pipeline never called an LLM).
+
+`public/connect.html`'s `renderVerified()` renders the provisional block — dashed-border scoreline (`+34.2% n=3` style), amber "Provisional — not ranked until 10 durable trades" label, then a 3-tile stat row (Realized ROI / Win Rate / Durable Trades) — positioned above the existing `.qual-progress` "not yet ranked" bar, reusing the `.p-scoreline`/`.stat-row`/`.stat-tile` classes already in the eligible-wallet render path (2 new CSS rules only: `.is-provisional` dashed border, `.p-provisional-label` amber text).
+
+Verified locally (sandbox has no path to hyperflex.network — this is code-review + Playwright against a scratch copy with mocked `/api/trader-record/` fetch, not production): a mock wallet with 3 durable trades (2W/1L, +34.2% ROI, 66.7% win rate) renders the provisional scoreline + label + stat row correctly positioned above the qual-progress bar (`provisional_above_qual: true` in the computed bounding-rect check), and the ranked-wallet "Headline" section correctly does NOT render for this non-eligible wallet — confirming the eligible path wasn't touched. Screenshot confirms visually: no blank space, no "no score," a real number front and center. `node --check server.js` clean.
+
+Not yet done: the design pass flagged in 2026-07-25a (item 1) is still separate, still not queued for Code per that entry's explicit framing.
+
+## 2026-07-25a (✅ LEADERBOARD RE-VERIFIED on corrected data — Gate 1 fully clear — reconciled from strategy-Claude upload; sub-threshold provisional score feature now being built)
+
+**Reconciled from a strategy-Claude SESSION_STATE.md upload** (its own 2026-07-25 entry, not duplicated verbatim — see that upload for the full account). Headline: **the corrected board (post external_sync_id migration, post proxy fix) was hand-verified against polymarket.com and holds. Gate 1 is now clear on data known to be complete.** Qualifying count is now 93 (76 → 89 → 90 → 93 across the ingestion fixes). Board reshaped at the top — new #1 is **Nadmi** (n_durable 189, win 43.9%, score 87.8, 5,204 real predictions) — geopolitics/macro, 43.9% win rate but top score because winners are large (Nobel NO +149.5%, Lee Jae-myung +56.8%): the honest scoreboard working exactly as designed, rewarding being right when it pays rather than being right often. taerv534 and TB14 re-verified at #2/#3, consistent with the 2026-07-21 read. **This closes the six-day ingestion-bug arc** — resolver, dedup, matcher, redeemed-win fabrication, whale-selection axis, proxy corruption, table-wide collision: all fixed, all verified against reality.
+
+**Remaining before/at public promotion, per that entry (neither is a bug):**
+1. Design pass on `/connect`/`/traders`/profile — 9 rounds of blind sizing got structure right, proportion wrong. Needs a designer with the browser open.
+2. Sub-threshold score display on `/connect` — being built this entry, see below.
+
+**This session's task:** add a provisional headline score to `/connect` for wallets under the 10-durable ranking threshold. Currently they see best/worst call, specialty, and full history, but no number — and seeing your own score must not require qualifying for the public board (the 10-durable threshold gates RANKING, not visibility). See the next entry (same day) for the build.
+
 ## 2026-07-23h (Minimal read-only top-10 pull shipped for re-verification; strategy-Claude confirms both fixes verified stable in production)
 
 **Reconciled against a strategy-Claude SESSION_STATE.md upload** (its own 2026-07-23g entry, not duplicated verbatim here — see that upload for the full account): **both bugs from the prior two entries are confirmed fixed, deployed, AND verified stable in production.** Migration ran for real: `migrated_rows: 24508` — nearly the entire table was on the collision-prone format. On Marc's own wallet: `n` went 8 → 60 (imported 52), held stable across two reads a minute apart (19W/41L, 31.7%). Qualifying wallet count moved 76 → 89 → 90 across both fixes. This closes the six-day ingestion-bug chain this session's connect-flow work surfaced.
