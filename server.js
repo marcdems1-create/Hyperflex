@@ -12980,6 +12980,116 @@ async function _buildTraderCards(roiRows) {
   return cards;
 }
 
+// ── CATEGORY LEADERBOARDS (read/compute only — no promotion, no UI yet) ────
+// Best trader PER CATEGORY (macro, politics, world/geopolitics, crypto,
+// sports, entertainment, tech — the classifyCardCategory buckets), scored
+// the SAME WAY as the global durable-market board: time-decayed weighted
+// ROI, shrunk toward a population mean, n>=10 to qualify. Category isn't a
+// stored column — realized_trades only carries market_question text — so
+// this fetches raw durable trade rows once and classifies + aggregates in
+// JS instead of SQL. The aggregation formula itself (weight expr, ROI cap,
+// shrinkage) is copied verbatim from _computeRoiLeaderboard's SQL, not
+// reinvented, so a category score can't silently drift from how the global
+// board computes the same thing.
+//
+// PER-CATEGORY threshold reuses ROI_MIN_N_FLOOR (10): a wallet with 189
+// total durable trades but only 8 in sports does not qualify for the sports
+// board. The shrinkage prior (population mean) is ALSO category-scoped —
+// same relationship the global board has between a wallet's score and the
+// global population mean, just narrowed to that category's population.
+async function _computeCategoryRoiLeaderboards() {
+  const rows = await dbQuery(`
+    SELECT user_id::text AS user_id, market_question, entry_cost_usd, realized_roi, realized_pnl, closed_at
+    FROM realized_trades
+    WHERE market_durability = 'durable'
+      AND realized_roi IS NOT NULL
+      AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+      AND closed_at IS NOT NULL
+  `).catch(e => { console.warn('[category-leaderboard] query error:', e.message); return null; });
+  if (rows == null) return null;
+
+  const now = Date.now();
+  const byCategory = new Map(); // category -> derived per-trade rows
+
+  for (const r of rows) {
+    const category = classifyCardCategory(r.market_question);
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    const roi = Number(r.realized_roi);
+    const cappedRoi = Math.min(Math.max(roi, -1.0), ROI_CAP);
+    const cost = Number(r.entry_cost_usd);
+    const daysAgo = (now - new Date(r.closed_at).getTime()) / 86400000;
+    const weight = cost * Math.pow(0.5, daysAgo / ROI_HALF_LIFE_DAYS);
+    byCategory.get(category).push({
+      user_id: r.user_id, cappedRoi, weight, cost,
+      pnl: r.realized_pnl != null ? Number(r.realized_pnl) : null,
+    });
+  }
+
+  // Display fields + opt-out, fetched once across every category (cheaper
+  // than a per-category query) — same leaderboard_opt_out discipline as the
+  // global board: an opted-out wallet must never rank, category board
+  // included.
+  const allUserIds = [...new Set(rows.map(r => r.user_id))];
+  const userRows = allUserIds.length ? await dbQuery(
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
+    [allUserIds]
+  ).catch(() => []) : [];
+  const userById = new Map(userRows.map(u => [u.id, u]));
+
+  const result = {};
+  for (const [category, catRows] of byCategory.entries()) {
+    // Population aggregate (shrinkage prior), scoped to this category —
+    // mirrors the GROUPING SETS ((rt.user_id), ()) population row in
+    // _computeRoiLeaderboard's SQL, computed here over the category subset.
+    let popNum = 0, popDen = 0;
+    for (const cr of catRows) { popNum += cr.cappedRoi * cr.weight; popDen += cr.weight; }
+    const popWeightedRoi = popDen > 0 ? popNum / popDen : 0;
+
+    const byUser = new Map();
+    for (const cr of catRows) {
+      if (!byUser.has(cr.user_id)) byUser.set(cr.user_id, { n: 0, totalCapital: 0, wroiNum: 0, wroiDen: 0, wins: 0, losses: 0, pushes: 0 });
+      const u = byUser.get(cr.user_id);
+      u.n++;
+      u.totalCapital += cr.cost;
+      u.wroiNum += cr.cappedRoi * cr.weight;
+      u.wroiDen += cr.weight;
+      if (cr.pnl > 0) u.wins++; else if (cr.pnl < 0) u.losses++; else u.pushes++;
+    }
+
+    const catResult = [];
+    for (const [userId, u] of byUser.entries()) {
+      if (u.n < ROI_MIN_N_FLOOR) continue; // per-category threshold — global n does not count here
+      const userRow = userById.get(userId);
+      if (userRow && userRow.leaderboard_opt_out === true) continue;
+      const weightedRoi = u.wroiDen > 0 ? u.wroiNum / u.wroiDen : 0;
+      const shrunk = (u.n / (u.n + ROI_SHRINK_K)) * weightedRoi + (ROI_SHRINK_K / (u.n + ROI_SHRINK_K)) * popWeightedRoi;
+      catResult.push({
+        user_id: userId,
+        display_name: resolveDisplayName(userRow || {}) || 'Trader',
+        username: (userRow && userRow.username) || null,
+        polymarket_address: (userRow && userRow.polymarket_address) || null,
+        n: u.n,
+        wins: u.wins,
+        losses: u.losses,
+        win_rate_pct: u.n ? Math.round((u.wins / u.n) * 1000) / 10 : null,
+        total_capital_usd: Math.round(u.totalCapital),
+        raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
+        score_pct: Math.round(shrunk * 1000) / 10,
+        scope_label: 'Ranked on durable ' + category + ' markets — n=' + u.n,
+      });
+    }
+    catResult.sort((a, b) => b.score_pct - a.score_pct);
+    result[category] = {
+      qualifying_count: catResult.length,
+      pop_weighted_roi_pct: Math.round(popWeightedRoi * 1000) / 10,
+      total_durable_trades_in_category: catRows.length,
+      leaderboard: catResult,
+    };
+  }
+
+  return result;
+}
+
 app.get('/api/trader-cards', async (req, res) => {
   try {
     if (!pool) return res.json({ cards: [] });
@@ -61995,6 +62105,62 @@ app.get('/api/admin/durable-leaderboard-top10', requireAdminSecret, async (req, 
     });
   } catch (e) {
     console.error('[durable-leaderboard-top10]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/admin/category-leaderboard-report ───────────────────────────────
+// Read/compute only — no promotion, no UI wired to this yet. Reports how
+// many wallets qualify (n>=10 durable trades WITHIN that category) per
+// classifyCardCategory bucket, so we can see which category tiers are even
+// viable before building anything. Reuses _computeCategoryRoiLeaderboards —
+// same scoring math as the global board (_computeRoiLeaderboard), just
+// scoped per category; no separate formula.
+//   curl "https://hyperflex.network/api/admin/category-leaderboard-report?secret=$ADMIN_SECRET"
+app.get('/api/admin/category-leaderboard-report', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const perCategoryLimit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const byCategory = await _computeCategoryRoiLeaderboards();
+    if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
+
+    const summary = Object.entries(byCategory)
+      .map(([category, c]) => ({
+        category,
+        qualifying_count: c.qualifying_count,
+        total_durable_trades_in_category: c.total_durable_trades_in_category,
+        viable: c.qualifying_count >= 5, // enough to be worth a UI, not a hard product rule — eyeball threshold for this report only
+      }))
+      .sort((a, b) => b.qualifying_count - a.qualifying_count);
+
+    const categories = {};
+    for (const [category, c] of Object.entries(byCategory)) {
+      categories[category] = {
+        qualifying_count: c.qualifying_count,
+        pop_weighted_roi_pct: c.pop_weighted_roi_pct,
+        total_durable_trades_in_category: c.total_durable_trades_in_category,
+        top: c.leaderboard.slice(0, perCategoryLimit).map((r, i) => ({
+          rank: i + 1,
+          display_name: r.display_name,
+          polymarket_address: r.polymarket_address,
+          n: r.n,
+          wins: r.wins,
+          losses: r.losses,
+          win_rate_pct: r.win_rate_pct,
+          score_pct: r.score_pct,
+          raw_weighted_roi_pct: r.raw_weighted_roi_pct,
+          scope_label: r.scope_label,
+        })),
+      };
+    }
+
+    res.json({
+      summary,
+      categories,
+      note: '"viable" in the summary is a >=5-qualifying-wallets eyeball threshold for this report only, not a product decision — read the qualifying_count per category and decide the real bar. Per-category threshold for qualifying is n>=10 durable trades IN THAT CATEGORY (ROI_MIN_N_FLOOR), separate from the global 10-durable-trade floor — a wallet can qualify globally without qualifying in any single category, or vice versa.',
+    });
+  } catch (e) {
+    console.error('[category-leaderboard-report]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

@@ -49,6 +49,16 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-25c (🔧 SHIPPED, compute-only — category leaderboard report endpoint, no UI, awaiting real numbers)
+
+**Read/compute only per explicit instruction — no promotion, no UI.** Added `_computeCategoryRoiLeaderboards()` (server.js, after `_buildTraderCards`): best trader PER CATEGORY (macro, politics, world/geopolitics, crypto, sports, entertainment, tech — the existing `classifyCardCategory` buckets), scored with the identical formula `_computeRoiLeaderboard` uses for the global board (time-decayed weighted ROI, shrunk toward a population mean, ROI-capped at 1000%) — copied verbatim, not reinvented, because category isn't a stored column (only `market_question` text) so this classifies + aggregates in JS off a raw durable-trade fetch instead of SQL GROUPING SETS. **Per-category threshold is n>=10 durable trades IN THAT CATEGORY** (reuses `ROI_MIN_N_FLOOR`) — a wallet with 189 total durable trades but 8 in sports does not qualify for the sports board. The shrinkage prior (population mean) is also category-scoped, not global. `leaderboard_opt_out` respected, same as the global board.
+
+New endpoint `GET /api/admin/category-leaderboard-report` (requireAdminSecret) returns, per category: `qualifying_count`, `pop_weighted_roi_pct`, `total_durable_trades_in_category`, and a `top` list (display_name, address, n, wins, losses, win_rate_pct, score_pct, scope_label) — score+n+wins+losses always together, same integrity discipline as every other trader surface.
+
+**Cannot run this from the sandbox** — no network path to hyperflex.network or the production DB (confirmed all session). Marc: hit `curl "https://hyperflex.network/api/admin/category-leaderboard-report?secret=$ADMIN_SECRET"` once and the `summary` array up top gives qualifying_count per category sorted descending — that's the number to eyeball for which tiers are worth building UI for. The endpoint's own `viable` flag (>=5 qualifying wallets) is a report-only eyeball threshold, not a product decision.
+
+`node --check server.js` clean. No UI changes this entry — category tiers are not promoted or linked anywhere yet, per the instruction.
+
 ## 2026-07-25b (✅ SHIPPED — provisional headline score on /connect for sub-threshold wallets)
 
 **Fixes the gap flagged in 2026-07-25a: a wallet under the 10-durable ranking floor connected and saw best/worst call, specialty, and full history — but no number telling them how they're doing. The 10-durable threshold gates public RANKING, not seeing your own score, and that distinction wasn't reflected in the product.**
