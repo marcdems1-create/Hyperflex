@@ -250,6 +250,8 @@ FLEX Score is a derived rating, not an accumulated currency. It is bounded and n
 
 The old "FLEX Points" framing — earn-on-trade, accumulate, spend — is retired. No accumulation currency, no shop, no spend, no tiers to unlock. One score, earned by being right.
 
+**⚠️ Do not confuse the above with "Flex Wallet" balance (added 2026-07-26, `flex_wallet_balance`/`flex_wallet_ledger` tables).** That is a NEW, distinct, wallet-native **play-money** currency built for reputation-backing (staking on a predictor's future record) — not a revival of the retired earn/accumulate/spend system, and not the same table as the old `flex_points`/`flex_points_log` (which stays retired/dead code, untouched). Flex Wallet balance is keyed to `polymarket_address` specifically so a `/connect` wallet-only user (no login, no JWT) can hold and move a balance — the three pre-existing balance systems (`users.balance`, `community_balances`, `flex_points`) are all JWT-gated and unreachable by that user (see the 2026-07-26 audit, SESSION_STATE.md). Hard rule carried over from that build: **no cashout, no purchase, no fiat/crypto on-ramp, anywhere, ever** — staking real money on a person's future performance is likely an unregistered security/derivative; play-money proves the mechanic at zero regulatory risk, and real money (if it ever happens) is a separate, later, lawyered decision, not an extension of this currency.
+
 ### 9. What the platform never does
 
 - Never uses exclamation points in default register (reserved for the 5 warmth triggers, and even there, used once per message maximum)

@@ -13467,6 +13467,100 @@ async function _ensureConnectedUser(addr) {
   return { userId: rows[0].id, isNew: true };
 }
 
+// ── FLEX WALLET BALANCE (Phase 0 of reputation-backing, 2026-07-26) ────────
+// A NEW, distinct, play-money balance — NOT the old earn/accumulate/spend
+// "Flex Points" that CLAUDE.md's Voice & Posture §8 retired (that's
+// flex_points/flex_points_log, untouched here), and NOT users.balance or
+// community_balances (both JWT-login-gated, unreachable by a /connect
+// wallet-only user — see the audit in SESSION_STATE.md 2026-07-26). Keyed to
+// polymarket_address, the identity /connect already uses. No cashout, no
+// purchase, no on-ramp — anywhere, ever, in this build.
+//
+// flex_wallet_balance.balance_centpoints is a derived CACHE. The append-only
+// flex_wallet_ledger is the actual source of truth — every mutation inserts
+// a ledger row and updates the cached balance in the SAME transaction, never
+// one without the other. See supabase_migration_flex_wallet_balance.sql.
+const FLEX_WALLET_SIGNUP_GRANT_CENTPOINTS = 100000; // 1,000 FP
+
+async function _flexWalletAdjust(address, deltaCentpoints, reason, refId = null) {
+  const addr = String(address || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) throw new Error('invalid_address');
+  if (!Number.isFinite(deltaCentpoints) || deltaCentpoints === 0) throw new Error('invalid_delta');
+  if (!pool) throw new Error('no_pool');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Ledger row first. For reason='signup_grant' the unique partial index
+    // (idx_flex_wallet_ledger_one_grant_per_address) makes this idempotent —
+    // a second grant attempt throws a unique-violation (23505) here, which
+    // the caller (see _flexWalletGrantSignupBonus below) treats as an
+    // expected no-op rather than a real error.
+    await client.query(
+      `INSERT INTO flex_wallet_ledger (address, delta_centpoints, reason, ref_id) VALUES ($1, $2, $3, $4)`,
+      [addr, deltaCentpoints, reason, refId]
+    );
+    const upd = await client.query(
+      `INSERT INTO flex_wallet_balance (address, balance_centpoints)
+       VALUES ($1, $2)
+       ON CONFLICT (address) DO UPDATE SET
+         balance_centpoints = flex_wallet_balance.balance_centpoints + EXCLUDED.balance_centpoints,
+         updated_at = NOW()
+       RETURNING balance_centpoints`,
+      [addr, deltaCentpoints]
+    );
+    await client.query('COMMIT');
+    return upd.rows[0].balance_centpoints;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Grants the one-time signup bonus for a newly-connected wallet. Idempotent
+// at the DB level (see the unique partial index) — safe to call more than
+// once for the same address; only the first call actually credits anything.
+async function _flexWalletGrantSignupBonus(address) {
+  try {
+    const balance = await _flexWalletAdjust(address, FLEX_WALLET_SIGNUP_GRANT_CENTPOINTS, 'signup_grant');
+    return { granted: true, balance_centpoints: balance };
+  } catch (e) {
+    if (e.code === '23505') {
+      // Already granted — expected on any retry/duplicate connect, not an error.
+      const rows = await dbQuery('SELECT balance_centpoints FROM flex_wallet_balance WHERE address = $1', [String(address).toLowerCase()]).catch(() => []);
+      return { granted: false, already_granted: true, balance_centpoints: rows[0] ? Number(rows[0].balance_centpoints) : null };
+    }
+    console.warn('[flex-wallet] signup grant failed for', address, ':', e.message);
+    return { granted: false, error: e.message };
+  }
+}
+
+// GET /api/flex/balance?address=0x… — public, no auth, read-only. Same
+// precedent as GET /api/polymarket/positions/:address (public, wallet-keyed,
+// nothing sensitive about a play-money balance being address-readable). A
+// pure SELECT — never inserts a row, so merely checking an address's
+// balance can't itself create one or trigger a grant.
+app.get('/api/flex/balance', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const addr = String(req.query.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
+    const rows = await dbQuery('SELECT balance_centpoints, created_at, updated_at FROM flex_wallet_balance WHERE address = $1', [addr]);
+    const row = rows[0];
+    res.json({
+      address: addr,
+      balance_centpoints: row ? Number(row.balance_centpoints) : 0,
+      balance_fp: row ? Number(row.balance_centpoints) / 100 : 0,
+      exists: !!row,
+    });
+  } catch (e) {
+    console.error('[flex-balance]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/connect', async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
@@ -13474,6 +13568,13 @@ app.post('/api/connect', async (req, res) => {
     if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
 
     const { userId, isNew } = await _ensureConnectedUser(addr);
+
+    // Flex Wallet signup grant — attempted on every connect, not just
+    // isNew, so it self-heals any wallet whose users row predates this
+    // feature (e.g. an old whale-import row that never got a grant). The
+    // DB-level unique partial index (see migration) is what actually
+    // prevents a double-grant; isNew is not relied on for that guarantee.
+    const flexGrant = await _flexWalletGrantSignupBonus(addr);
 
     const proxy = await ensureProxyStored(userId, addr);
     if (!proxy) return res.status(502).json({ error: 'proxy_derivation_failed', user_id: userId });
@@ -13549,6 +13650,7 @@ app.post('/api/connect', async (req, res) => {
       raw_activity_events: activity.length,
       raw_distinct_markets: groupKeys.size,
       backfill_status: 'running',
+      flex_wallet_balance_centpoints: flexGrant.balance_centpoints,
     });
   } catch (e) {
     console.error('[connect]', e.message);
@@ -62157,6 +62259,40 @@ app.get('/api/admin/durable-leaderboard-top10', requireAdminSecret, async (req, 
     });
   } catch (e) {
     console.error('[durable-leaderboard-top10]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/admin/flex-wallet-ledger ────────────────────────────────────────
+// One-shot verification for Phase 0 of reputation-backing: confirms a
+// connected wallet actually got a Flex Wallet balance, the ledger recorded
+// it, and there's exactly one signup_grant row (no double-grant). Read-only.
+//   curl "https://hyperflex.network/api/admin/flex-wallet-ledger?address=0x...&secret=$ADMIN_SECRET"
+app.get('/api/admin/flex-wallet-ledger', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const addr = String(req.query.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
+
+    const balRows = await dbQuery('SELECT balance_centpoints, created_at, updated_at FROM flex_wallet_balance WHERE address = $1', [addr]);
+    const ledgerRows = await dbQuery(
+      'SELECT id, delta_centpoints, reason, ref_id, created_at FROM flex_wallet_ledger WHERE address = $1 ORDER BY created_at ASC', [addr]
+    );
+    const signupGrants = ledgerRows.filter(r => r.reason === 'signup_grant');
+    const ledgerSum = ledgerRows.reduce((s, r) => s + Number(r.delta_centpoints), 0);
+    const cachedBalance = balRows[0] ? Number(balRows[0].balance_centpoints) : 0;
+
+    res.json({
+      address: addr,
+      cached_balance_centpoints: cachedBalance,
+      ledger_sum_centpoints: ledgerSum,
+      balance_matches_ledger: cachedBalance === ledgerSum,
+      signup_grant_count: signupGrants.length,
+      no_double_grant: signupGrants.length <= 1,
+      ledger: ledgerRows.map(r => ({ delta_centpoints: Number(r.delta_centpoints), reason: r.reason, ref_id: r.ref_id, created_at: r.created_at })),
+    });
+  } catch (e) {
+    console.error('[flex-wallet-ledger]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
