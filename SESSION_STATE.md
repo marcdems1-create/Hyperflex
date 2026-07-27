@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-26b (✅ SHIPPED — "King of the Castle" replaces home.html as the homepage, ahead of the design pass)
+
+**Explicit override of the earlier deferred decision** (2026-07-23/2026-07-26 entries both said hold the home.html swap until the designer's token system lands) — Marc asked directly for this tonight, confirmed via AskUserQuestion ("Replace home.html now" over "new page, leave home.html alone"). Root motivation in his words: "right now we are a shitty polymarket clone... if we have the best of the best predictors then people need to come here to see what the kings are doing."
+
+`app.get('/', ...)` now serves new `public/home-kings.html` instead of `home.html` (left on disk, unrouted — not deleted, easy rollback). New page, reusing only already-shipped visual language and data, nothing invented blind:
+- Hero: "What's your score?" + Connect Wallet / paste-address — same copy register as `/connect`, front door per CLAUDE.md rule 1 stays intact. Connect button links to `/connect`; paste-address hands off via `?address=0x…` rather than duplicating the wallet-connect/polling flow on two pages. `connect.html` gained a small addition to read that query param and auto-run on load.
+- **"King of the Castle"**: the #1 overall-ranked trader, full card (verdict/evidence/form/streak intact) via the existing `_buildTraderCards`/`_computeRoiLeaderboard` pipeline — same data `/traders`' Featured row already showed, just now the homepage hero content instead of buried on a second page.
+- **"Category Kings"**: #1 wallet from each category clearing `qualifying_count >= 5` (reuses the 2026-07-25c category-leaderboard work), sorted by depth so this adapts automatically as thin categories (macro/world/crypto/entertainment) grow — nothing hardcoded to sports+politics forever, though those two are what qualifies today.
+- "Movers" row underneath, same `/api/trader-cards` feed `/traders` uses, linking out to the full leaderboard.
+
+New backend: `GET /api/kings` (public, no auth) — zero new scoring math, wraps the existing global + per-category leaderboard functions. Verified locally via Playwright at mobile (390px) and desktop (1440px) with mocked API responses: king card, both category kings, and the movers row all render with real-shaped data; empty-state fallbacks (no qualifying wallet yet) checked in the JS, not just the happy path. `node --check server.js` clean.
+
+Not done: this is NOT the designer's visual system — it's the existing dark/gold/JetBrains-Mono card language repointed at new information architecture (kings-first instead of market-grid). The actual design pass (2026-07-26 entry above) still lands separately and will restyle this page along with everything else once tokens exist.
+
 ## 2026-07-26 (📋 DECISION LOCKED — design brief commissioned; resolves the "design pass" backlog item from 2026-07-25a with a concrete plan, not yet executed)
 
 **Marc uploaded `hyperflexdesignbrief.md` and is sending it to an outside designer** (not a Code task — no code changes this entry). Root diagnosis of the 9-round desktop-sizing failure documented across this session: every round fought a wide desktop market-grid, which is structurally the wrong shape for this product and reads as a Polymarket clone. **Fix is mobile-first single-column** — design for the phone, let desktop become a centered ~600-720px column of the same design. No wide layout left to get proportions wrong in. Reference: Dreamcash (dreamcash.xyz) for feel/simplicity only, not its trading-terminal density.

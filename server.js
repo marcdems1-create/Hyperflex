@@ -729,10 +729,12 @@ ${urls.join('\n')}
   }
 });
 
-// Homepage → FLEX Feed
+// Homepage → King of the Castle (2026-07-26). Replaces the market-grid
+// home.html per explicit call — see SESSION_STATE.md 2026-07-26. home.html
+// stays on disk, unrouted, for reference/rollback rather than deleted.
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(require('path').join(__dirname, 'public', 'home.html'));
+  res.sendFile(require('path').join(__dirname, 'public', 'home-kings.html'));
 });
 
 // Legacy accuracy page → the one honest track-record surface. The old
@@ -13113,6 +13115,56 @@ app.get('/api/trader-cards', async (req, res) => {
     res.json({ cards });
   } catch (e) {
     console.error('[trader-cards]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/kings ────────────────────────────────────────────────────────
+// Public, no auth — the homepage's "King of the Castle" hook. Overall #1 is
+// a full card via _buildTraderCards (verdict/evidence/form/streak intact,
+// identical to what /traders' Featured row shows). Category kings come from
+// _computeCategoryRoiLeaderboards — same per-category scoring shipped
+// 2026-07-25c, just the #1 wallet from each category that clears a real
+// depth bar (qualifying_count >= 5, matching the eyeball threshold used in
+// that report), sorted by depth so the homepage adapts automatically if a
+// thin category (macro/world/crypto/entertainment) grows enough wallets to
+// be worth showing later — nothing hardcoded to "sports + politics forever".
+// Zero Anthropic calls, zero new scoring math — same single source of truth
+// as every other trader surface.
+app.get('/api/kings', async (req, res) => {
+  try {
+    if (!pool) return res.json({ overall: [], categories: [] });
+
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    const overall = computed.rows.length ? await _buildTraderCards(computed.rows.slice(0, 1)) : [];
+
+    const byCategory = await _computeCategoryRoiLeaderboards();
+    const categories = [];
+    if (byCategory) {
+      const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' King';
+      const viable = Object.entries(byCategory)
+        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= 5 && c.leaderboard[0])
+        .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count)
+        .slice(0, 3);
+      for (const [cat, c] of viable) {
+        const r = c.leaderboard[0];
+        categories.push({
+          category: cat,
+          label: labelFor(cat),
+          qualifying_count: c.qualifying_count,
+          card: {
+            user_id: r.user_id, display_name: r.display_name, username: r.username,
+            polymarket_address: r.polymarket_address, n: r.n, wins: r.wins, losses: r.losses,
+            win_rate_pct: r.win_rate_pct, score_pct: r.score_pct, scope_label: r.scope_label,
+          },
+        });
+      }
+    }
+
+    res.json({ overall: overall || [], categories });
+  } catch (e) {
+    console.error('[kings]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
