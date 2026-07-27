@@ -49,6 +49,16 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-26 (📋 DECISION LOCKED — design brief commissioned; resolves the "design pass" backlog item from 2026-07-25a with a concrete plan, not yet executed)
+
+**Marc uploaded `hyperflexdesignbrief.md` and is sending it to an outside designer** (not a Code task — no code changes this entry). Root diagnosis of the 9-round desktop-sizing failure documented across this session: every round fought a wide desktop market-grid, which is structurally the wrong shape for this product and reads as a Polymarket clone. **Fix is mobile-first single-column** — design for the phone, let desktop become a centered ~600-720px column of the same design. No wide layout left to get proportions wrong in. Reference: Dreamcash (dreamcash.xyz) for feel/simplicity only, not its trading-terminal density.
+
+**Handoff model, locked:** designer fully designs one screen (Connect/Your Score) + the trader-card atom (including a required losing-card variant — explicit test: must still look good red, since most connecting wallets are down, ours included at 19-41) + a concrete token system (type scale, color, spacing, card dimensions). Code then implements that system across every other page. This is the same "one screen, then apply everywhere" split noted as needed back in the 2026-07-23f/g design-pass discussions — now has an actual brief behind it instead of being a vague TODO.
+
+**Product rules the brief encodes that are already true of this session's shipped work** (so implementation should be a re-skin, not a new data build): score+n always together, best/worst call at equal weight, provisional sub-threshold score (shipped 2026-07-25b), per-category tiers (shipped 2026-07-25c, sports/politics the two viable ones) all already exist server-side and in `/connect`'s current markup — the brief's screens 1-3 map directly onto data this backend already serves.
+
+**Nothing to build yet** — waiting on the designer's actual Figma/tokens. Do not start a blind reimplementation from this brief's prose alone; that's the exact failure mode (9 rounds of guessing) this brief exists to avoid. Next Code action on this front is implementing the delivered token system once it exists, not before.
+
 ## 2026-07-25c (🔧 SHIPPED, compute-only — category leaderboard report endpoint, no UI, awaiting real numbers)
 
 **Read/compute only per explicit instruction — no promotion, no UI.** Added `_computeCategoryRoiLeaderboards()` (server.js, after `_buildTraderCards`): best trader PER CATEGORY (macro, politics, world/geopolitics, crypto, sports, entertainment, tech — the existing `classifyCardCategory` buckets), scored with the identical formula `_computeRoiLeaderboard` uses for the global board (time-decayed weighted ROI, shrunk toward a population mean, ROI-capped at 1000%) — copied verbatim, not reinvented, because category isn't a stored column (only `market_question` text) so this classifies + aggregates in JS off a raw durable-trade fetch instead of SQL GROUPING SETS. **Per-category threshold is n>=10 durable trades IN THAT CATEGORY** (reuses `ROI_MIN_N_FLOOR`) — a wallet with 189 total durable trades but 8 in sports does not qualify for the sports board. The shrinkage prior (population mean) is also category-scoped, not global. `leaderboard_opt_out` respected, same as the global board.
