@@ -49,6 +49,32 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-27b (✅ Phase 1 built — discrete-settlement backing mechanic. Verified against a real Postgres including concurrency. AWAITING: migration run + Marc's live curl verification before anything further.)
+
+**Model A (discrete settlement) approved and built** per PHASE1_BACKING_DESIGN.md, with all 6 conditions from the approval message honored explicitly:
+
+1. **Record → settlement, one direction, confirmed in code:** `_computeRoiLeaderboard`/`_buildTraderCards` are untouched — zero edits — and nothing in the new `flex_backings`/`flex_backing_settlements` tables is ever joined into either. Settlement reads `realized_trades` (same table the scorer reads) but a predictor's score/n/card cannot be altered by being backed.
+2. **Re-sync cron built scoped and safe:** `_flexBackingResyncAndSettle()`, cron `*/15 * * * *`, scoped only to predictors with an active backing (not a platform-wide resync). Reuses `ensureProxyStored` + `backfillRealizedTrades` **verbatim** — the exact functions fixed this week for the proxy-address bug and the external_sync_id collision bug — no reimplemented ingestion anywhere. Every run logs `started_at`/`finished_at`/`predictors_checked`/`trades_settled`/`errors` — silence itself would be the failure mode, so every run, success or partial-failure, produces a log line.
+3. **`FLEX_BACKING_SETTLEMENT_SENSITIVITY = 0.05`** — one named constant, referenced exactly once elsewhere (the settlement formula), not hardcoded anywhere else.
+4. **DB-level once-per-settlement guard**, same pattern as Phase 0's one-grant index: unique index on `flex_backing_settlements(backing_id, trade_id)`. **Tested under a real concurrent race** (below), not just reasoned about.
+5. **Play-money only.** Staking debits `flex_wallet_balance` (Phase 0's currency); no cashout path exists anywhere in this build.
+6. **Admin-gated, nothing public:** all 5 new endpoints sit behind `requireAdminSecret` (`/api/admin/flex-backing/back|unback|list|settlements|run-cron`). No homepage/UI change.
+
+**Migration: `supabase_migration_flex_backing.sql` — NOT YET RUN IN PRODUCTION. Must be run in Railway Postgres (TablePlus/Railway console) before any endpoint above will work — otherwise "relation does not exist," the exact thing Phase 0 already tripped on once this session.** Requires Phase 0's migration to already be applied (references `flex_wallet_balance`/`flex_wallet_ledger`).
+
+**Verified against a real local Postgres (same rigor as Phase 0 — full scenario + the concurrency test Marc specifically asked for), not just reasoned about:**
+- Self-dealing correctly blocked (predictor backing their own address rejected).
+- Staking debits atomically, insufficient balance correctly rejected.
+- Settlement math exact both directions: a +200% ROI call moved a 50,000-centpoint stake by exactly +500 (`round(50000 × 0.05 × (2.0/10))`); a subsequent -50% ROI call moved the resulting 50,500 stake by exactly -126.
+- **A found-and-fixed real bug:** the first version tried to backfill a ledger row's `ref_id` via `UPDATE ... ORDER BY ... LIMIT`, which is not valid Postgres syntax for a plain UPDATE — and the error was silently swallowed by a `.catch(() => {})`, so it looked like it worked until the test explicitly checked `ref_id === backing_id` and got `false`. Fixed by reordering (create the backing row first, debit with the real `ref_id` already known, no backfill needed) rather than patching the broken query. Caught in local verification before shipping, not after.
+- **Concurrency, both money-moving paths:** (a) 10 simultaneous settlement attempts on the same (backing, trade) pair — exactly 1 succeeded, exactly 1 settlement row, integrity check (`original_stake + Σsettlement_deltas == current_stake`) passed exactly; (b) 10 simultaneous stakes of 5,000 centpoints each against a 50,000-centpoint balance — all 10 succeeded with zero overdraft or lost updates, final stake exactly 50,000, final wallet exactly 0, an 11th attempt correctly rejected as insufficient.
+- Unback correctly refunds the CURRENT (post-settlement) stake and blocks a second withdrawal on an already-withdrawn backing.
+- `node --check server.js` clean. Test DB dropped, local Postgres service stopped after — zero contact with Railway/production throughout.
+
+**Cannot verify from this sandbox:** the actual network-dependent resync (`ensureProxyStored`/`backfillRealizedTrades`'s real Polymarket API calls) — no network path out of this sandbox to Polymarket or Railway. The settlement/staking logic itself is fully proven; the resync cron's *ingestion* leg is only provably correct because it reuses already-production-verified functions unmodified, not because it was independently re-tested here.
+
+**Next: give Marc the exact curls to (1) back a predictor, (2) trigger a settlement, (3) check a backer's balance moved — after he runs the migration.** Stopping here per instruction — he verifies live before anything further.
+
 ## 2026-07-27 (✅ Phase 0 CONFIRMED LIVE in production + design work goes to a human)
 
 **Phase 0 (wallet-native Flex Points balance) is verified working in production, not just against a sandbox.** Migration `supabase_migration_flex_wallet_balance.sql` run in Railway Postgres via TablePlus. Marc's wallet reconnected → grant fired.

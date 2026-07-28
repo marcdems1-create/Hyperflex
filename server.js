@@ -13561,6 +13561,327 @@ app.get('/api/flex/balance', async (req, res) => {
   }
 });
 
+// ── FLEX BACKING — Phase 1, reputation-backing Model A (discrete settlement) ─
+// Approved design: PHASE1_BACKING_DESIGN.md. A backer stakes Flex Points on a
+// predictor; every time that predictor's NEXT verified durable trade
+// resolves, the backer's stake moves up or down by a small fraction of that
+// trade's capped ROI. Reuses the scoring pipeline's own ROI_CAP clamp — no
+// separate math for "how good was this call." Record → settlement is
+// strictly one-directional: nothing here writes to realized_trades,
+// _computeRoiLeaderboard, or _buildTraderCards, and none of those read from
+// flex_backings/flex_backing_settlements. A predictor's score/n/card cannot
+// be altered or appear altered by being backed.
+//
+// Two separate balances, two separate append-only ledgers, never shared:
+// flex_wallet_balance/flex_wallet_ledger (Phase 0, the spendable balance) and
+// flex_backings.staked_centpoints/flex_backing_settlements (the at-risk
+// staked pool). Staking DEBITS the wallet ledger once, on entry. Settlement
+// moves the staked pool only — it never touches the wallet ledger, so the
+// wallet balance invariant from Phase 0 (balance == SUM(wallet ledger
+// deltas)) never has to account for in-flight backing activity. Withdrawing
+// CREDITS the wallet ledger once, on exit, for whatever the stake currently
+// is (post-settlement).
+const FLEX_BACKING_SETTLEMENT_SENSITIVITY = 0.05; // approved starting value (PHASE1_BACKING_DESIGN.md) — the ONLY place this constant is defined; reference it, never hardcode 0.05 elsewhere.
+
+// Atomic, race-safe debit for staking — unlike _flexWalletAdjust (Phase 0,
+// used only for the always-positive signup grant), this must refuse to go
+// negative under concurrent stakes from the same wallet. The conditional
+// UPDATE...WHERE balance_centpoints >= $2 is what makes two simultaneous
+// "back" calls against the same wallet serialize correctly at the row level
+// — the loser sees the already-decremented balance and fails cleanly,
+// rather than both succeeding and pushing the balance negative.
+async function _flexWalletDebitForBacking(address, amountCentpoints, refId) {
+  const addr = String(address || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) throw new Error('invalid_address');
+  if (!Number.isFinite(amountCentpoints) || amountCentpoints <= 0) throw new Error('invalid_amount');
+  if (!pool) throw new Error('no_pool');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const upd = await client.query(
+      `UPDATE flex_wallet_balance SET balance_centpoints = balance_centpoints - $2, updated_at = NOW()
+       WHERE address = $1 AND balance_centpoints >= $2
+       RETURNING balance_centpoints`,
+      [addr, amountCentpoints]
+    );
+    if (upd.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'insufficient_balance' };
+    }
+    await client.query(
+      `INSERT INTO flex_wallet_ledger (address, delta_centpoints, reason, ref_id) VALUES ($1, $2, 'back_predictor_stake', $3)`,
+      [addr, -amountCentpoints, refId]
+    );
+    await client.query('COMMIT');
+    return { ok: true, balance_centpoints: upd.rows[0].balance_centpoints };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Stake Flex Points on a predictor. Tops up the existing active backing for
+// this (backer, predictor) pair if one exists (ON CONFLICT on the partial
+// unique index), rather than creating a second row to reconcile later.
+//
+// Order matters here: the backing row is created/found FIRST (at whatever
+// its current stake is, unchanged), so its id exists before the wallet
+// debit runs — the debit's ledger row gets the real ref_id immediately,
+// never a placeholder needing a later backfill. (An earlier version tried
+// to backfill ref_id after the fact with an UPDATE ... ORDER BY ... LIMIT,
+// which is not valid Postgres syntax for a plain UPDATE and was silently
+// swallowed by a .catch — caught in local verification, not shipped.)
+async function _flexBackingBack(backerAddress, predictorUserId, amountCentpoints) {
+  const backer = String(backerAddress || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(backer)) throw new Error('invalid_backer_address');
+  if (!Number.isFinite(amountCentpoints) || amountCentpoints <= 0) throw new Error('invalid_amount');
+
+  const predictorRows = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = $1::uuid', [predictorUserId]);
+  if (!predictorRows.length) throw new Error('predictor_not_found');
+  const predictorAddress = (predictorRows[0].polymarket_address || '').toLowerCase();
+
+  // Self-dealing guard: a predictor cannot back their own address. Address
+  // comparison, not user_id comparison — catches the direct case regardless
+  // of whether the backer wallet has ever been resolved to a users row.
+  if (predictorAddress && predictorAddress === backer) throw new Error('cannot_back_self');
+
+  const backingRows = await dbQuery(
+    `INSERT INTO flex_backings (backer_address, predictor_user_id, staked_centpoints, status)
+     VALUES ($1, $2::uuid, 0, 'active')
+     ON CONFLICT (backer_address, predictor_user_id) WHERE status = 'active'
+     DO UPDATE SET updated_at = NOW()
+     RETURNING id`,
+    [backer, predictorUserId]
+  );
+  const backingId = backingRows[0].id;
+
+  const debit = await _flexWalletDebitForBacking(backer, amountCentpoints, backingId);
+  if (!debit.ok) throw new Error(debit.error);
+
+  const updated = await dbQuery(
+    `UPDATE flex_backings SET staked_centpoints = staked_centpoints + $2, updated_at = NOW() WHERE id = $1 RETURNING staked_centpoints`,
+    [backingId, amountCentpoints]
+  );
+
+  return { backing_id: backingId, staked_centpoints: Number(updated[0].staked_centpoints), wallet_balance_centpoints: debit.balance_centpoints };
+}
+
+// Withdraw an active backing. Credits back whatever the stake CURRENTLY is
+// (post-settlement) — there is no exit slippage in a discrete model, since
+// nothing moves between settlement events.
+async function _flexBackingUnback(backingId) {
+  const rows = await dbQuery(`SELECT id, backer_address, staked_centpoints, status FROM flex_backings WHERE id = $1::uuid`, [backingId]);
+  if (!rows.length) throw new Error('backing_not_found');
+  const backing = rows[0];
+  if (backing.status !== 'active') throw new Error('backing_not_active');
+
+  await dbQuery(`UPDATE flex_backings SET status = 'withdrawn', updated_at = NOW() WHERE id = $1::uuid`, [backingId]);
+  const stake = Number(backing.staked_centpoints);
+  if (stake > 0) {
+    await _flexWalletAdjust(backing.backer_address, stake, 'back_predictor_withdraw', backingId);
+  }
+  return { backing_id: backingId, refunded_centpoints: stake };
+}
+
+// Settle one predictor's newly-resolved trade against one backing. The
+// unique index on (backing_id, trade_id) is what makes this safe to call
+// more than once for the same pair — a duplicate/concurrent attempt hits a
+// unique-violation here and is treated as an expected no-op, never a double
+// payout. Stake floors at 0 (GREATEST) — belt-and-suspenders, unreachable at
+// 5% max move per call, but free insurance.
+async function _flexBackingSettleTrade(backing, trade) {
+  const cappedRoi = Math.min(Math.max(Number(trade.realized_roi), -1.0), ROI_CAP);
+  const perCallMove = FLEX_BACKING_SETTLEMENT_SENSITIVITY * (cappedRoi / ROI_CAP);
+  const deltaCentpoints = Math.round(Number(backing.staked_centpoints) * perCallMove);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO flex_backing_settlements (backing_id, trade_id, capped_roi, delta_centpoints) VALUES ($1, $2, $3, $4)`,
+      [backing.id, trade.id, cappedRoi, deltaCentpoints]
+    );
+    await client.query(
+      `UPDATE flex_backings SET staked_centpoints = GREATEST(0, staked_centpoints + $2), updated_at = NOW() WHERE id = $1`,
+      [backing.id, deltaCentpoints]
+    );
+    await client.query('COMMIT');
+    return { settled: true, delta_centpoints: deltaCentpoints };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    if (e.code === '23505') return { settled: false, already_settled: true };
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ── The re-sync + settlement cron ────────────────────────────────────────
+// Scoped ONLY to predictors who currently have an active backing — not
+// every connected wallet — so this stays cheap regardless of platform size.
+// Reuses ensureProxyStored + backfillRealizedTrades VERBATIM, the exact
+// functions fixed this week for the proxy-address bug and the
+// external_sync_id table-wide-collision bug. This function does not
+// reimplement any Polymarket ingestion — doing so would risk reintroducing
+// either bug. Logs started/finished/counts on every run per instruction: if
+// this cron silently stops, backings silently never settle, so silence
+// itself must never happen — every run logs, success or partial failure.
+async function _flexBackingResyncAndSettle() {
+  const startedAt = Date.now();
+  let predictorsChecked = 0, tradesSettled = 0, errorCount = 0;
+  console.log(`[flex-backing-cron] run started at ${new Date(startedAt).toISOString()}`);
+  try {
+    if (!pool) { console.warn('[flex-backing-cron] no pool — skipping run'); return { skipped: true, reason: 'no_pool' }; }
+
+    const predictors = await dbQuery(
+      `SELECT DISTINCT fb.predictor_user_id AS id, u.polymarket_address
+       FROM flex_backings fb
+       JOIN users u ON u.id = fb.predictor_user_id
+       WHERE fb.status = 'active' AND u.polymarket_address IS NOT NULL`
+    );
+
+    for (const p of predictors) {
+      predictorsChecked++;
+      try {
+        const eoa = p.polymarket_address.toLowerCase();
+        const proxy = await ensureProxyStored(p.id, eoa); // fixed helper — do not inline a raw derivation here
+        if (!proxy) { console.warn(`[flex-backing-cron] proxy derivation failed for predictor ${p.id}`); errorCount++; continue; }
+
+        await backfillRealizedTrades(p.id, eoa, proxy); // fixed ingestion — do not reimplement
+
+        const backings = await dbQuery(
+          `SELECT id, staked_centpoints, created_at FROM flex_backings WHERE predictor_user_id = $1::uuid AND status = 'active'`,
+          [p.id]
+        );
+
+        for (const backing of backings) {
+          const trades = await dbQuery(
+            `SELECT id, realized_roi, closed_at FROM realized_trades
+             WHERE user_id = $1::uuid AND market_durability = 'durable'
+               AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL AND closed_at > $2
+               AND NOT EXISTS (SELECT 1 FROM flex_backing_settlements s WHERE s.backing_id = $3::uuid AND s.trade_id = realized_trades.id)
+             ORDER BY closed_at ASC`,
+            [p.id, backing.created_at, backing.id]
+          );
+          for (const trade of trades) {
+            const result = await _flexBackingSettleTrade(backing, trade).catch(e => {
+              console.warn(`[flex-backing-cron] settle error backing=${backing.id} trade=${trade.id}:`, e.message);
+              errorCount++;
+              return null;
+            });
+            if (result && result.settled) {
+              tradesSettled++;
+              backing.staked_centpoints = Number(backing.staked_centpoints) + result.delta_centpoints; // keep local cursor current for the next trade in this loop
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[flex-backing-cron] predictor ${p.id} failed:`, e.message);
+        errorCount++;
+      }
+    }
+  } catch (e) {
+    console.error('[flex-backing-cron] fatal error:', e.message);
+    errorCount++;
+  }
+  const finishedAt = Date.now();
+  const summary = { started_at: startedAt, finished_at: finishedAt, duration_ms: finishedAt - startedAt, predictors_checked: predictorsChecked, trades_settled: tradesSettled, errors: errorCount };
+  console.log(`[flex-backing-cron] run finished:`, JSON.stringify(summary));
+  return summary;
+}
+
+cron.schedule('*/15 * * * *', () => {
+  _flexBackingResyncAndSettle().catch(e => console.error('[flex-backing-cron] uncaught:', e.message));
+});
+
+// ── Admin-gated endpoints (condition: nothing public, no homepage yet — this
+// is the mechanic, not the launch) ──────────────────────────────────────────
+app.post('/api/admin/flex-backing/back', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { backer_address, predictor_address, amount_centpoints } = req.body;
+    const backer = String(backer_address || '').trim().toLowerCase();
+    const predictorAddr = String(predictor_address || '').trim().toLowerCase();
+    const amount = parseInt(amount_centpoints, 10);
+    if (!/^0x[0-9a-f]{40}$/.test(backer)) return res.status(400).json({ error: 'invalid_backer_address' });
+    if (!/^0x[0-9a-f]{40}$/.test(predictorAddr)) return res.status(400).json({ error: 'invalid_predictor_address' });
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount_centpoints' });
+
+    const predictorRows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [predictorAddr]);
+    if (!predictorRows.length) return res.status(404).json({ error: 'predictor_not_connected' });
+
+    const result = await _flexBackingBack(backer, predictorRows[0].id, amount);
+    res.json(result);
+  } catch (e) {
+    console.error('[flex-backing/back]', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/flex-backing/unback', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { backing_id } = req.body;
+    if (!backing_id) return res.status(400).json({ error: 'backing_id required' });
+    const result = await _flexBackingUnback(backing_id);
+    res.json(result);
+  } catch (e) {
+    console.error('[flex-backing/unback]', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/flex-backing/list', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const addr = String(req.query.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
+    const rows = await dbQuery(
+      `SELECT fb.id, fb.predictor_user_id, u.display_name, u.polymarket_address AS predictor_address,
+              fb.staked_centpoints, fb.status, fb.created_at, fb.updated_at,
+              (SELECT COUNT(*) FROM flex_backing_settlements s WHERE s.backing_id = fb.id)::int AS settlement_count
+       FROM flex_backings fb LEFT JOIN users u ON u.id = fb.predictor_user_id
+       WHERE fb.backer_address = $1 ORDER BY fb.created_at DESC`,
+      [addr]
+    );
+    res.json({ address: addr, backings: rows.map(r => ({ ...r, staked_centpoints: Number(r.staked_centpoints) })) });
+  } catch (e) {
+    console.error('[flex-backing/list]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/flex-backing/settlements', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const backingId = req.query.backing_id;
+    if (!backingId) return res.status(400).json({ error: 'backing_id required' });
+    const rows = await dbQuery(
+      `SELECT id, trade_id, capped_roi, delta_centpoints, created_at FROM flex_backing_settlements WHERE backing_id = $1::uuid ORDER BY created_at ASC`,
+      [backingId]
+    );
+    res.json({ backing_id: backingId, settlements: rows.map(r => ({ ...r, capped_roi: Number(r.capped_roi), delta_centpoints: Number(r.delta_centpoints) })) });
+  } catch (e) {
+    console.error('[flex-backing/settlements]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Fires the resync+settlement cron on demand — for testing without waiting
+// up to 15 minutes for the schedule.
+app.post('/api/admin/flex-backing/run-cron', requireAdminSecret, async (req, res) => {
+  try {
+    const summary = await _flexBackingResyncAndSettle();
+    res.json(summary);
+  } catch (e) {
+    console.error('[flex-backing/run-cron]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/connect', async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
