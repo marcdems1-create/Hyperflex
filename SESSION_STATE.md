@@ -49,6 +49,14 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-28c (✅ SHIPPED — connect.html desktop scale-up, round 2: proportional 1.4x over round 1's exact values)
+
+Round 1 (2026-07-27c) applied Marc's exact supplied px values verbatim, confirmed live via Playwright — all matched exactly. Live in production, it still read as small next to the 108px hero headline: not a bug, a proportion call, exactly the kind of judgment the design-brief conversation flagged as something Code can't make blind. Asked Marc directly (AskUserQuestion): try a proportional scale-up guess, or hand this to the designer. He chose: try again.
+
+Applied a ~1.4x scale-up over round 1's values, same relative hierarchy preserved: verdict 34→48px, score 44→64px, n= 18→26px, stat values 32→46px/labels 15→20px/tile padding 20×24→28×32px, best/worst call 20/17/14→28/24/19px, specialty tiles 16/28/14→22/40/19px, trade-history table 15/16→20/22px, section headers 20→28px, section gap 68→96px. Verified via Playwright at 1440px — every value matches exactly — and visually: noticeably better balanced against the hero.
+
+Marked explicitly in the code comment as a speculative guess, same as every prior sizing round — this is not confirmed against the live site yet, waiting on Marc to look. Mobile untouched (only the >=1024px block touched, same file/pattern as round 1). `node --check server.js` N/A (HTML-only change). Not yet merged to main.
+
 ## 2026-07-28b (✅ SHIPPED — category classifier v3, real production 'other' down 58% -> 38.9% after v2, second real sample dump drove this round)
 
 **v2 (2026-07-27d below) worked, for real this time** — production numbers confirmed 58.0% -> 38.9% 'other' (1,453 of 4,406 durable trades reclassified: sports +437, politics +249, world +514, commodities +240 new). Still the single largest bucket though, ~2x the next biggest (politics), so pulled a fresh 50-sample dump from the live `other-category-report` endpoint to find the next real gap rather than guessing.

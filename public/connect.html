@@ -170,38 +170,43 @@
 
   .void-note{font-size:12px;color:var(--muted);line-height:1.6;max-width:760px;}
 
-  /* ── desktop scale-up on body content (>=1024px), 2026-07-27. Exact values
-     supplied directly — applied verbatim, not reinterpreted. Hero stays as
-     previously sized (untouched here, see the earlier @media block above).
-     Mobile (<1024px) untouched. Deliberately placed as the LAST rules in
-     this stylesheet: every class touched here has its base (mobile) rule
+  /* ── desktop scale-up on body content (>=1024px). Round 2, 2026-07-28:
+     the exact values from round 1 (34px verdict, 44px score, etc.) were
+     confirmed live and correctly applied via Playwright, but read as small
+     next to the 108px hero once actually seen in production — a proportion
+     call, not a bug. This round is a ~1.4x proportional scale-up over
+     round 1's values, a speculative guess same as every prior sizing
+     round, done because Marc chose "try again" over "wait for the
+     designer." Hero stays as previously sized (untouched here). Mobile
+     (<1024px) untouched. Deliberately placed as the LAST rules in this
+     stylesheet: every class touched here has its base (mobile) rule
      defined earlier in this file, and an early media query loses the
      cascade to a later unconditional rule at equal specificity — exactly
      the nav.js bug found earlier this session. Being last is what
      guarantees these actually win. ── */
   @media (min-width: 1024px) {
-    .p-verdict { font-size: 34px; }
-    .p-score { font-size: 44px; }
-    .p-n { font-size: 18px; }
+    .p-verdict { font-size: 48px; }
+    .p-score { font-size: 64px; }
+    .p-n { font-size: 26px; }
 
-    .stat-tile { padding: 20px 24px; }
-    .stat-value { font-size: 32px; }
-    .stat-label { font-size: 15px; }
+    .stat-tile { padding: 28px 32px; }
+    .stat-value { font-size: 46px; }
+    .stat-label { font-size: 20px; }
 
-    .call-q { font-size: 20px; }
-    .call-meta { font-size: 17px; }
-    .call-date { font-size: 14px; }
+    .call-q { font-size: 28px; }
+    .call-meta { font-size: 24px; }
+    .call-date { font-size: 19px; }
 
-    .specialty-cat { font-size: 16px; }
-    .specialty-wr { font-size: 28px; }
-    .specialty-n { font-size: 14px; }
+    .specialty-cat { font-size: 22px; }
+    .specialty-wr { font-size: 40px; }
+    .specialty-n { font-size: 19px; }
 
-    .hist-table th { font-size: 15px; }
-    .hist-table td { font-size: 16px; }
-    .hist-q { font-size: 16px; }
+    .hist-table th { font-size: 20px; }
+    .hist-table td { font-size: 22px; }
+    .hist-q { font-size: 22px; }
 
-    .p-section-title { font-size: 20px; }
-    .p-section { margin-top: 68px; } /* existing 36px + the requested 32px gap */
+    .p-section-title { font-size: 28px; }
+    .p-section { margin-top: 96px; }
   }
 </style>
 </head>
