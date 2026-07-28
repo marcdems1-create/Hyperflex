@@ -47,7 +47,17 @@
 
 ---
 
-## Chronological log (newest first)
+## 2026-07-27c (✅ SHIPPED — 'other' category-classifier fix + verdict-line guard + connect.html desktop body-content scale-up)
+
+**Category classifier:** `_CARD_CATEGORY_RULES` widened — `macro` now also catches currency pairs/forex (USD/KRW, USD/JPY, generic `X/Y` fx notation, "forex", "exchange rate"), and a new `commodities` category catches crude oil/WTI/Brent/natural gas/gold/silver/copper/platinum. Root cause per Marc's report: 'other' was the largest durable-trade bucket on his own wallet (26/41, -44.4%), dominated by macro/commodity/currency price-target markets none of the 7 original categories' keyword lists covered. Existing `crypto` regex already matches bare "bitcoin"/"btc"/"ethereum"/"eth" case-insensitively, so named-coin price-targets ("Will Bitcoin dip to $40,000") should already route to `crypto`, not `other` — flagged as worth double-checking with real data rather than assumed fixed, since I couldn't reproduce that specific miss from the regex alone.
+
+New `GET /api/admin/other-category-report` (requireAdminSecret) computes BEFORE (frozen snapshot of the pre-fix rules) vs AFTER (live, already-fixed `classifyCardCategory`) distribution across ALL wallets' durable trades in one call, plus up to 50 sample `market_question` strings still landing in `other` post-fix with light pattern-grouping — this is the "report other's contents, then report before/after %" Marc asked for, computed against real production data when he runs it (I have no DB access from this sandbox to run it myself).
+
+**Verdict-line guard:** `other` is now excluded at the source from `_buildTraderCards`'s specialty best/worst candidate list (the `specialtyCats` filter), so "Sharp on X, reckless on other" can never be generated regardless of how large `other` is for a given wallet — structural fix, not a patch in `computeVerdictLine` itself.
+
+**connect.html desktop (>=1024px) body-content scale-up:** exact px values supplied directly by Marc, applied verbatim — verdict line 34px, score pill 44px/n= 18px, stat tiles 32px value/15px label/20px 24px padding, best/worst call 20px/17px/14px, specialty tiles 16px/28px/14px, trade-history table 15px header/16px body (was ~11-13px, the worst offender per Marc), section headers 20px, section-to-section gap 68px (36px existing + the requested 32px). New media-query block placed as the LAST rules in the stylesheet (every touched class's base rule is defined earlier in the file — an early block would lose the cascade to those later unconditional rules, the exact nav.js bug from earlier this session). Verified via Playwright at 1440px (every value matches exactly) and 390px (every value unchanged from the pre-edit mobile baseline, confirming mobile untouched) — this is implementing exact supplied values, not another blind-guessing round, so it doesn't reverse the earlier "design goes to a human" call.
+
+`node --check server.js` clean. Not yet merged to main.
 
 ## 2026-07-27b (✅ Phase 1 built — discrete-settlement backing mechanic. Verified against a real Postgres including concurrency. AWAITING: migration run + Marc's live curl verification before anything further.)
 

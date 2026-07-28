@@ -12725,8 +12725,17 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
 // so a question mentioning both a politician and a coin (rare) lands somewhere
 // defensible rather than double-counting. Approximate by nature; auditable
 // because it's a fixed regex list, not a model call.
+// 'macro' and 'commodities' rules extended/added 2026-07-27 — 'other' was
+// the largest durable-trade bucket for real wallets (26/41 = 63% on one
+// hand-checked wallet), dominated by currency-pair and commodity/crypto
+// price-target markets ("Will USD/KRW hit 2000", "Will Crude Oil hit $100")
+// that none of the original 7 categories' keyword lists covered. See
+// GET /api/admin/other-category-report for the live before/after
+// distribution — this is a keyword-list expansion, not a new classification
+// mechanism; still zero Anthropic calls, still a fixed regex list.
 const _CARD_CATEGORY_RULES = [
-  ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell)\b/i],
+  ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell|usd\/|eur\/|gbp\/|jpy\/|krw\/|cny\/|chf\/|aud\/|cad\/|nzd\/|\/usd\b|\/eur\b|\/jpy\b|\/krw\b|\bforex\b|exchange rate|currency pair)\b/i],
+  ['commodities', /\b(crude oil|\bwti\b|\bbrent\b|natural gas|\bgold\b|\bsilver\b|\bcopper\b|\bplatinum\b|\bcommodit(y|ies)\b|per barrel|troy ounce)\b/i],
   ['politics', /\b(president|election|senate|congress|governor|primary|republican|democrat|impeach|nominee|electoral|midterm|ballot|white house|prime minister)\b/i],
   ['world', /\b(war|ceasefire|invasion|sanctions|\bnato\b|treaty|nuclear|military strike|troops|coup d'|border conflict)\b/i],
   ['crypto', /\b(bitcoin|\bbtc\b|ethereum|\beth\b|crypto|altcoin|solana|\bsol\b|defi|\bnft\b|dogecoin|\bxrp\b|stablecoin|memecoin)\b/i],
@@ -12916,8 +12925,13 @@ async function _buildTraderCards(roiRows) {
       volatilityStdev = Math.sqrt(variance);
     }
 
+    // 'other' is the classifier's catch-all, not a real specialty — the
+    // verdict line must never say "sharp on other." Excluded here, at the
+    // source, rather than patched in computeVerdictLine, so best/worst can
+    // structurally never contain it regardless of how big the 'other'
+    // bucket happens to be for a given wallet.
     const specialtyCats = [...catStats.entries()]
-      .filter(([, v]) => v.n >= 5)
+      .filter(([category, v]) => category !== 'other' && v.n >= 5)
       .map(([category, v]) => ({ category, n: v.n, winRate: v.wins / v.n }));
     let specialty = null;
     if (specialtyCats.length >= 2) {
@@ -62626,6 +62640,80 @@ app.get('/api/admin/flex-wallet-ledger', requireAdminSecret, async (req, res) =>
 // same scoring math as the global board (_computeRoiLeaderboard), just
 // scoped per category; no separate formula.
 //   curl "https://hyperflex.network/api/admin/category-leaderboard-report?secret=$ADMIN_SECRET"
+// ── GET /api/admin/other-category-report ─────────────────────────────────────
+// Read-only. Reports what's actually landing in classifyCardCategory's
+// 'other' bucket across ALL wallets, BEFORE vs AFTER the 2026-07-27 keyword
+// expansion (macro widened to cover currency pairs/forex, new 'commodities'
+// category added) — both computed live against real data in one call, not
+// guessed at. _OLD_RULES_SNAPSHOT below is a frozen copy of the pre-fix
+// rule list purely for this comparison; the live classifyCardCategory
+// already uses the new rules everywhere else.
+//   curl "https://hyperflex.network/api/admin/other-category-report?secret=$ADMIN_SECRET"
+const _OLD_RULES_SNAPSHOT = [
+  ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell)\b/i],
+  ['politics', /\b(president|election|senate|congress|governor|primary|republican|democrat|impeach|nominee|electoral|midterm|ballot|white house|prime minister)\b/i],
+  ['world', /\b(war|ceasefire|invasion|sanctions|\bnato\b|treaty|nuclear|military strike|troops|coup d'|border conflict)\b/i],
+  ['crypto', /\b(bitcoin|\bbtc\b|ethereum|\beth\b|crypto|altcoin|solana|\bsol\b|defi|\bnft\b|dogecoin|\bxrp\b|stablecoin|memecoin)\b/i],
+  ['sports', /\b(nba|nfl|nhl|mlb|ncaa|ufc|\bmma\b|boxing|soccer|football|basketball|baseball|hockey|tennis|\bgolf\b|\bf1\b|formula 1|olympic|world cup|super bowl|playoff|championship|premier league|champions league|grand slam|wimbledon|masters|\bpga\b|nascar|grand prix)\b/i],
+  ['entertainment', /\b(oscar|grammy|emmy|box office|album|movie|film|celebrity|billboard|premiere)\b/i],
+  ['tech', /\b(openai|chatgpt|\bai model\b|artificial intelligence|spacex|nvidia|\bmeta\b platforms)\b/i],
+];
+function _classifyWithRules(question, rules) {
+  const q = String(question || '');
+  for (const [cat, re] of rules) if (re.test(q)) return cat;
+  return 'other';
+}
+app.get('/api/admin/other-category-report', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const rows = await dbQuery(
+      `SELECT market_question FROM realized_trades
+       WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+       LIMIT 20000`
+    );
+    const total = rows.length;
+
+    let beforeOther = 0, afterOther = 0;
+    const stillOtherSamples = [];
+    const afterDistribution = {};
+    const beforeDistribution = {};
+    for (const r of rows) {
+      const q = r.market_question || '';
+      const beforeCat = _classifyWithRules(q, _OLD_RULES_SNAPSHOT);
+      const afterCat = classifyCardCategory(q); // live function — already has the 2026-07-27 rules
+      beforeDistribution[beforeCat] = (beforeDistribution[beforeCat] || 0) + 1;
+      afterDistribution[afterCat] = (afterDistribution[afterCat] || 0) + 1;
+      if (beforeCat === 'other') beforeOther++;
+      if (afterCat === 'other') {
+        afterOther++;
+        if (stillOtherSamples.length < 50) stillOtherSamples.push(q);
+      }
+    }
+
+    // Lightweight pattern grouping on what's STILL in 'other' after the fix —
+    // helps spot the next gap without another round-trip.
+    const patternBuckets = { 'contains $ (price target)': 0, 'contains / (possible pair)': 0, 'contains "hit"/"reach"': 0, 'ungrouped': 0 };
+    for (const q of stillOtherSamples) {
+      if (/\$/.test(q)) patternBuckets['contains $ (price target)']++;
+      else if (/\//.test(q)) patternBuckets['contains / (possible pair)']++;
+      else if (/\b(hit|reach)\b/i.test(q)) patternBuckets['contains "hit"/"reach"']++;
+      else patternBuckets['ungrouped']++;
+    }
+
+    res.json({
+      total_durable_trades_sampled: total,
+      before_fix: { other_count: beforeOther, other_pct: total ? Math.round((beforeOther / total) * 1000) / 10 : 0, distribution: beforeDistribution },
+      after_fix: { other_count: afterOther, other_pct: total ? Math.round((afterOther / total) * 1000) / 10 : 0, distribution: afterDistribution },
+      still_other_pattern_groups: patternBuckets,
+      still_other_samples: stillOtherSamples,
+      note: 'before_fix is computed from a frozen snapshot of the pre-2026-07-27 rules for comparison only — the live classifier already uses the expanded rules everywhere else on the site. still_other_samples caps at 50 distinct market_question rows still landing in \'other\' after the fix, for spotting the next gap.',
+    });
+  } catch (e) {
+    console.error('[other-category-report]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/category-leaderboard-report', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
