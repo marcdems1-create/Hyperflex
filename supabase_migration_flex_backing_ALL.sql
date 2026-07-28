@@ -18,6 +18,17 @@
 --     confirm that yourself before running this, check first:
 --       SELECT COUNT(*) FROM flex_backings;
 --     (expected: 0, or only rows you don't mind losing).
+--
+-- IMPORTANT — run this as ONE paste, not statement-by-statement: wrapped in
+-- an explicit transaction (BEGIN/COMMIT) below specifically because a prior
+-- attempt hit "relation already exists" on the CREATE TABLE statements —
+-- the client ran the DROPs and CREATEs out of the order they appear in this
+-- file. A transaction forces strict sequential, all-or-nothing execution
+-- regardless of how the SQL client splits/displays the individual
+-- statements. If any statement fails inside this block, the whole thing
+-- rolls back — nothing is left half-applied.
+
+BEGIN;
 
 -- ── Phase 0: wallet-native Flex Points balance ──────────────────────────
 CREATE TABLE IF NOT EXISTS flex_wallet_balance (
@@ -76,3 +87,5 @@ CREATE UNIQUE INDEX idx_flex_backing_settlements_once
   ON flex_backing_settlements (backing_id, trade_id);
 
 CREATE INDEX idx_flex_backing_settlements_backing ON flex_backing_settlements (backing_id, created_at);
+
+COMMIT;
