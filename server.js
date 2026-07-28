@@ -13682,34 +13682,38 @@ async function _flexWalletDebitForBacking(address, amountCentpoints, refId) {
 // this (backer, predictor) pair if one exists (ON CONFLICT on the partial
 // unique index), rather than creating a second row to reconcile later.
 //
+// Both parties are TEXT addresses end to end — same identity Phase 0's
+// flex_wallet_balance already uses. This function never touches users.id.
+// (Bug found in production: an earlier version stored predictor_user_id as
+// UUID with a FK to users(id), then joined/compared it directly against
+// users.id elsewhere — but users.id is actually TEXT in this schema, not
+// UUID (confirmed by the production error "operator does not exist: text =
+// uuid", not by re-deriving it from theory). Casting around that would
+// have papered over a real type mismatch; the fix is to never need
+// users.id in this subsystem's own bookkeeping at all.)
+//
 // Order matters here: the backing row is created/found FIRST (at whatever
 // its current stake is, unchanged), so its id exists before the wallet
 // debit runs — the debit's ledger row gets the real ref_id immediately,
-// never a placeholder needing a later backfill. (An earlier version tried
-// to backfill ref_id after the fact with an UPDATE ... ORDER BY ... LIMIT,
-// which is not valid Postgres syntax for a plain UPDATE and was silently
-// swallowed by a .catch — caught in local verification, not shipped.)
-async function _flexBackingBack(backerAddress, predictorUserId, amountCentpoints) {
+// never a placeholder needing a later backfill.
+async function _flexBackingBack(backerAddress, predictorAddress, amountCentpoints) {
   const backer = String(backerAddress || '').toLowerCase();
+  const predictor = String(predictorAddress || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(backer)) throw new Error('invalid_backer_address');
+  if (!/^0x[0-9a-f]{40}$/.test(predictor)) throw new Error('invalid_predictor_address');
   if (!Number.isFinite(amountCentpoints) || amountCentpoints <= 0) throw new Error('invalid_amount');
 
-  const predictorRows = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = $1::uuid', [predictorUserId]);
-  if (!predictorRows.length) throw new Error('predictor_not_found');
-  const predictorAddress = (predictorRows[0].polymarket_address || '').toLowerCase();
-
-  // Self-dealing guard: a predictor cannot back their own address. Address
-  // comparison, not user_id comparison — catches the direct case regardless
-  // of whether the backer wallet has ever been resolved to a users row.
-  if (predictorAddress && predictorAddress === backer) throw new Error('cannot_back_self');
+  // Self-dealing guard: a predictor cannot back their own address. Plain
+  // address comparison — no users table lookup needed for this at all.
+  if (predictor === backer) throw new Error('cannot_back_self');
 
   const backingRows = await dbQuery(
-    `INSERT INTO flex_backings (backer_address, predictor_user_id, staked_centpoints, status)
-     VALUES ($1, $2::uuid, 0, 'active')
-     ON CONFLICT (backer_address, predictor_user_id) WHERE status = 'active'
+    `INSERT INTO flex_backings (backer_address, predictor_address, staked_centpoints, status)
+     VALUES ($1, $2, 0, 'active')
+     ON CONFLICT (backer_address, predictor_address) WHERE status = 'active'
      DO UPDATE SET updated_at = NOW()
      RETURNING id`,
-    [backer, predictorUserId]
+    [backer, predictor]
   );
   const backingId = backingRows[0].id;
 
@@ -13784,6 +13788,15 @@ async function _flexBackingSettleTrade(backing, trade) {
 // either bug. Logs started/finished/counts on every run per instruction: if
 // this cron silently stops, backings silently never settle, so silence
 // itself must never happen — every run logs, success or partial failure.
+//
+// flex_backings itself is keyed purely on predictor_address (TEXT), never
+// users.id — the type-mismatch bug this fixed lived exactly in this
+// function's old JOIN against users.id. The ONLY place this cron touches
+// users.id at all is the one lookup below, needed because realized_trades
+// itself is genuinely keyed by an internal id (not by address) — that's an
+// existing, proven-correct fact about that table, not part of this bug.
+// The lookup uses the same "resolve address -> id" pattern already used
+// safely everywhere else in this codebase (e.g. the /back route below).
 async function _flexBackingResyncAndSettle() {
   const startedAt = Date.now();
   let predictorsChecked = 0, tradesSettled = 0, errorCount = 0;
@@ -13792,24 +13805,25 @@ async function _flexBackingResyncAndSettle() {
     if (!pool) { console.warn('[flex-backing-cron] no pool — skipping run'); return { skipped: true, reason: 'no_pool' }; }
 
     const predictors = await dbQuery(
-      `SELECT DISTINCT fb.predictor_user_id AS id, u.polymarket_address
-       FROM flex_backings fb
-       JOIN users u ON u.id = fb.predictor_user_id
-       WHERE fb.status = 'active' AND u.polymarket_address IS NOT NULL`
+      `SELECT DISTINCT predictor_address AS address FROM flex_backings WHERE status = 'active'`
     );
 
     for (const p of predictors) {
       predictorsChecked++;
+      const eoa = p.address.toLowerCase();
       try {
-        const eoa = p.polymarket_address.toLowerCase();
-        const proxy = await ensureProxyStored(p.id, eoa); // fixed helper — do not inline a raw derivation here
-        if (!proxy) { console.warn(`[flex-backing-cron] proxy derivation failed for predictor ${p.id}`); errorCount++; continue; }
+        const userRows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [eoa]);
+        if (!userRows.length) { console.warn(`[flex-backing-cron] no users row for predictor address ${eoa}`); errorCount++; continue; }
+        const predictorUserId = userRows[0].id;
 
-        await backfillRealizedTrades(p.id, eoa, proxy); // fixed ingestion — do not reimplement
+        const proxy = await ensureProxyStored(predictorUserId, eoa); // fixed helper — do not inline a raw derivation here
+        if (!proxy) { console.warn(`[flex-backing-cron] proxy derivation failed for predictor ${eoa}`); errorCount++; continue; }
+
+        await backfillRealizedTrades(predictorUserId, eoa, proxy); // fixed ingestion — do not reimplement
 
         const backings = await dbQuery(
-          `SELECT id, staked_centpoints, created_at FROM flex_backings WHERE predictor_user_id = $1::uuid AND status = 'active'`,
-          [p.id]
+          `SELECT id, staked_centpoints, created_at FROM flex_backings WHERE predictor_address = $1 AND status = 'active'`,
+          [eoa]
         );
 
         for (const backing of backings) {
@@ -13819,7 +13833,7 @@ async function _flexBackingResyncAndSettle() {
                AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL AND closed_at > $2
                AND NOT EXISTS (SELECT 1 FROM flex_backing_settlements s WHERE s.backing_id = $3::uuid AND s.trade_id = realized_trades.id)
              ORDER BY closed_at ASC`,
-            [p.id, backing.created_at, backing.id]
+            [predictorUserId, backing.created_at, backing.id]
           );
           for (const trade of trades) {
             const result = await _flexBackingSettleTrade(backing, trade).catch(e => {
@@ -13834,7 +13848,7 @@ async function _flexBackingResyncAndSettle() {
           }
         }
       } catch (e) {
-        console.warn(`[flex-backing-cron] predictor ${p.id} failed:`, e.message);
+        console.warn(`[flex-backing-cron] predictor ${eoa} failed:`, e.message);
         errorCount++;
       }
     }
@@ -13865,10 +13879,13 @@ app.post('/api/admin/flex-backing/back', requireAdminSecret, async (req, res) =>
     if (!/^0x[0-9a-f]{40}$/.test(predictorAddr)) return res.status(400).json({ error: 'invalid_predictor_address' });
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount_centpoints' });
 
+    // Existence check only — the predictor must have connected at least
+    // once. _flexBackingBack itself is address-keyed end to end and
+    // doesn't need this row's id for anything.
     const predictorRows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [predictorAddr]);
     if (!predictorRows.length) return res.status(404).json({ error: 'predictor_not_connected' });
 
-    const result = await _flexBackingBack(backer, predictorRows[0].id, amount);
+    const result = await _flexBackingBack(backer, predictorAddr, amount);
     res.json(result);
   } catch (e) {
     console.error('[flex-backing/back]', e.message);
@@ -13895,10 +13912,10 @@ app.get('/api/admin/flex-backing/list', requireAdminSecret, async (req, res) => 
     const addr = String(req.query.address || '').trim().toLowerCase();
     if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
     const rows = await dbQuery(
-      `SELECT fb.id, fb.predictor_user_id, u.display_name, u.polymarket_address AS predictor_address,
+      `SELECT fb.id, fb.predictor_address, u.display_name,
               fb.staked_centpoints, fb.status, fb.created_at, fb.updated_at,
               (SELECT COUNT(*) FROM flex_backing_settlements s WHERE s.backing_id = fb.id)::int AS settlement_count
-       FROM flex_backings fb LEFT JOIN users u ON u.id = fb.predictor_user_id
+       FROM flex_backings fb LEFT JOIN users u ON LOWER(u.polymarket_address) = fb.predictor_address
        WHERE fb.backer_address = $1 ORDER BY fb.created_at DESC`,
       [addr]
     );

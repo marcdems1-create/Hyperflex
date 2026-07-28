@@ -49,6 +49,23 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-28d (✅ FIXED, real production bug — Phase 1 backing was keyed on users.id (UUID) against a TEXT column, caught on first live curl. Rebuilt address-keyed end to end, re-verified concurrency.)
+
+**Marc's first live test of `/api/admin/flex-backing/back` hit `operator does not exist: text = uuid`** — nothing staked, balance unchanged. Root cause: `flex_backings.predictor_user_id` was declared `UUID NOT NULL REFERENCES users(id)`, but **`users.id` is actually TEXT in this schema** (`id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text`), not native UUID — a wrong assumption made earlier in this session (misread from an unrelated table's own UUID-typed FK, not from checking `users.id` itself directly). The settlement cron's `JOIN users u ON u.id = fb.predictor_user_id` compared a TEXT column against a UUID column with no cast — exactly the error text. This is the same two-identity-systems class of bug (EOA/address vs internal id) already fixed twice elsewhere this week (proxy derivation, `external_sync_id`), now found a third time in new code.
+
+**Fix, per instruction — not a cast, an actual rekey:** `flex_backings`/`flex_backing_settlements` no longer reference `users.id` at all. Both now key purely on `predictor_address` (TEXT), the same identity Phase 0's `flex_wallet_balance` already uses. `_flexBackingBack` compares two address strings directly for the self-dealing check (no `users` lookup needed for that at all). The settlement cron is the ONE place that still needs an internal id — because `realized_trades` is genuinely id-keyed, a separate and correct pre-existing fact, not part of this bug — and resolves `predictor_address -> id` via the same proven `SELECT id FROM users WHERE LOWER(polymarket_address) = $1` pattern already used safely elsewhere (e.g. the `/back` route's own existence check). The old cron's JOIN is gone entirely.
+
+**Migration:** `supabase_migration_flex_backing_v2.sql` — drops and recreates both tables with the corrected schema. Confirmed safe to run: every prior `/back` attempt failed before any row was written, so both tables are empty (Marc's own words: "nothing staked, balance unchanged"). **Must be run in TablePlus/Railway console before re-testing** — same requirement as every migration this week.
+
+**Re-verified against a real local Postgres** (dropped after, zero contact with production) — this time modeling `users.id` as TEXT to actually reproduce the bug, not just re-run the old passing test: the exact `_flexBackingBack` call that failed in prod now succeeds (50,000 centpoints staked, wallet debited correctly); the full cron ran end-to-end with **zero `text = uuid` errors**; settlement math still exact; **the concurrency guard was re-run and still holds** — 10 simultaneous settlement attempts on the same (backing, trade) pair, exactly 1 succeeded, exactly 1 settlement row; unback still refunds the current post-settlement stake correctly. `node --check server.js` clean.
+
+**Marc: run `supabase_migration_flex_backing_v2.sql` in TablePlus, then re-try the exact same back curl.** Not yet merged to main.
+```bash
+curl -s -X POST "https://hyperflex.network/api/admin/flex-backing/back?secret=$ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"backer_address":"0xYOUR_BACKER_WALLET","predictor_address":"0xTHE_PREDICTOR_WALLET","amount_centpoints":10000}' | jq .
+```
+
 ## 2026-07-28c (✅ SHIPPED — connect.html desktop scale-up, round 2: proportional 1.4x over round 1's exact values)
 
 Round 1 (2026-07-27c) applied Marc's exact supplied px values verbatim, confirmed live via Playwright — all matched exactly. Live in production, it still read as small next to the 108px hero headline: not a bug, a proportion call, exactly the kind of judgment the design-brief conversation flagged as something Code can't make blind. Asked Marc directly (AskUserQuestion): try a proportional scale-up guess, or hand this to the designer. He chose: try again.
