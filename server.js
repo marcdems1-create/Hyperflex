@@ -12733,13 +12733,34 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
 // GET /api/admin/other-category-report for the live before/after
 // distribution — this is a keyword-list expansion, not a new classification
 // mechanism; still zero Anthropic calls, still a fixed regex list.
+// v2 pass 2026-07-27 — the v1 forex/commodities fix barely moved 'other'
+// in production (57.9% -> 54.6%, confirmed via GET /api/admin/other-
+// category-report against real data, not assumed). The 50-sample dump
+// showed the real gap was two different things entirely:
+// (1) word-boundary/inflection bugs — \bpresident\b never matched
+//     "presidential", \belection\b never matched "elections", \binvasion\b
+//     never matched "invade" — a whole class of real titles were silently
+//     missed by singular/base-form-only keywords;
+// (2) missing geopolitical vocabulary (diplomatic meetings, military
+//     ACTION as opposed to military STRIKE, blockade, coup, regime,
+//     uranium/enrichment, recognize/recognition, referendum, chancellor,
+//     parliament) and, biggest single visible pattern, team-vs-team sports
+//     matchup titles ("San Diego Padres vs. Miami Marlins") that never
+//     mention the league name at all.
+// Team nicknames below trade a small false-positive risk for catching that
+// extremely common matchup-title pattern — deliberately excludes generic-
+// English-word nicknames (Heat, Magic, Jazz, Wild, Thunder, Giants,
+// Rangers, Titans, Kings) where the collision risk with non-sports titles
+// outweighs the benefit; those specific teams' matchups will still land in
+// 'other' until a more careful (team A + team B combined) heuristic is
+// worth building.
 const _CARD_CATEGORY_RULES = [
   ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell|usd\/|eur\/|gbp\/|jpy\/|krw\/|cny\/|chf\/|aud\/|cad\/|nzd\/|\/usd\b|\/eur\b|\/jpy\b|\/krw\b|\bforex\b|exchange rate|currency pair)\b/i],
   ['commodities', /\b(crude oil|\bwti\b|\bbrent\b|natural gas|\bgold\b|\bsilver\b|\bcopper\b|\bplatinum\b|\bcommodit(y|ies)\b|per barrel|troy ounce)\b/i],
-  ['politics', /\b(president|election|senate|congress|governor|primary|republican|democrat|impeach|nominee|electoral|midterm|ballot|white house|prime minister)\b/i],
-  ['world', /\b(war|ceasefire|invasion|sanctions|\bnato\b|treaty|nuclear|military strike|troops|coup d'|border conflict)\b/i],
+  ['politics', /\b(presidents?|presidential|elections?|senate|congress|governors?|primary|republicans?|democrat(ic|s)?|impeach|nominees?|electoral|midterms?|ballot|white house|prime minister|chancellor|parliament(ary)?|referendums?)\b/i],
+  ['world', /\b(wars?|warships?|ceasefire|invasions?|invad(e|es|ed|ing)|sanctions?|\bnato\b|treaty|treaties|nuclear|uranium|enrichment|military (strike|action)|troops|coup|regime|blockade|diplomatic|recogni(ze|zes|zed|zing|tion)|recapture|border conflict|\bhormuz\b|airspace|\bmou\b)\b/i],
   ['crypto', /\b(bitcoin|\bbtc\b|ethereum|\beth\b|crypto|altcoin|solana|\bsol\b|defi|\bnft\b|dogecoin|\bxrp\b|stablecoin|memecoin)\b/i],
-  ['sports', /\b(nba|nfl|nhl|mlb|ncaa|ufc|\bmma\b|boxing|soccer|football|basketball|baseball|hockey|tennis|\bgolf\b|\bf1\b|formula 1|olympic|world cup|super bowl|playoff|championship|premier league|champions league|grand slam|wimbledon|masters|\bpga\b|nascar|grand prix)\b/i],
+  ['sports', /\b(nba|nfl|nhl|mlb|ncaa|ufc|\bmma\b|boxing|soccer|football|basketball|baseball|hockey|tennis|\bgolf\b|\bf1\b|formula 1|olympic|world cup|super bowl|playoff|championship|premier league|champions league|grand slam|wimbledon|masters|\bpga\b|nascar|grand prix|diamondbacks|braves|orioles|red sox|\bcubs\b|white sox|\breds\b|guardians|rockies|tigers|astros|royals|angels|dodgers|marlins|brewers|\btwins\b|\bmets\b|yankees|athletics|phillies|pirates|padres|mariners|cardinals|\brays\b|blue jays|nationals|hawks|celtics|\bnets\b|hornets|\bbulls\b|cavaliers|mavericks|nuggets|pistons|warriors|rockets|pacers|clippers|lakers|grizzlies|\bbucks\b|timberwolves|pelicans|knicks|76ers|\bsuns\b|trail blazers|spurs|raptors|wizards|falcons|ravens|\bbills\b|panthers|bengals|\bbrowns\b|cowboys|broncos|\blions\b|packers|texans|colts|jaguars|chiefs|raiders|chargers|dolphins|vikings|patriots|saints|eagles|steelers|49ers|seahawks|buccaneers|commanders|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue jackets|red wings|oilers|canadiens|predators|devils|islanders|senators|flyers|penguins|sharks|kraken|maple leafs|canucks|golden knights|capitals|lightning)\b/i],
   ['entertainment', /\b(oscar|grammy|emmy|box office|album|movie|film|celebrity|billboard|premiere)\b/i],
   ['tech', /\b(openai|chatgpt|\bai model\b|artificial intelligence|spacex|nvidia|\bmeta\b platforms)\b/i],
 ];
