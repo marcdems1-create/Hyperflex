@@ -49,6 +49,22 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-27 (✅ Phase 0 CONFIRMED LIVE in production + design work goes to a human)
+
+**Phase 0 (wallet-native Flex Points balance) is verified working in production, not just against a sandbox.** Migration `supabase_migration_flex_wallet_balance.sql` run in Railway Postgres via TablePlus. Marc's wallet reconnected → grant fired.
+- `GET /api/flex/balance` → balance_centpoints 100000, balance_fp 1000, exists true
+- `GET /api/admin/flex-wallet-ledger` → `balance_matches_ledger: true`, `no_double_grant: true`
+
+So: every connecting wallet gets a ledger-backed 1,000 FP play-money balance, keyed to polymarket_address, reachable with zero legacy JWT login. The DB-level one-grant-per-address guard held in prod. This is the foundation the reputation-backing primitive stands on. **Confirmed real.**
+
+**Reminder for whoever runs the next DB-dependent build:** production DB is Railway Postgres. Migrations do NOT auto-run — they must be run manually in TablePlus/Railway console. Code writes the migration file; only a human with DB access can execute it. Phase 0 stalled for a while purely because the table didn't exist yet (code deployed, migration un-run). Run the migration BEFORE testing any endpoint that reads a new table.
+
+**DESIGN DECISION (Marc, this session): the visual redesign goes to a human designer, not Code.** After ~9 rounds, desktop/connect-screen sizing is still wrong (renders tiny/zoomed-out). Root cause is structural, not effort: Code's sandbox is hard-blocked from hyperflex.network (proxy 403), so it adjusts proportion it can never see. This is the ONE category of work that can't be verified against reality the way every bug this month was. The design brief is written and ready: mobile-first, Dreamcash-inspired, single-column (which structurally kills the wide-desktop-grid problem). Plan: designer builds ONE screen (connect/score) + the card component + concrete tokens (exact px/color/spacing) → THEN Code implements those exact values across all pages (Code is good at *applying* a defined design, cannot *originate* one blind). Do not send more blind sizing rounds to Code.
+
+**Product direction locked this session:** Hyperflex is BOTH a verification product and a game — the verified record is what makes staking on it meaningful. "Come see what the kings are doing" is the wedge (Polymarket owns "browse markets"; a ranked honest predictor board is ours alone). Reputation-backing = stake Flex Points on a predictor, earn as their verified record improves. Play-money only — real-money backing is likely an unregistered security/derivative; that's a later, structured, lawyered step, NOT this build. Backing must read FROM the score, never write TO it (record→price one-directional, or the verification moat is gone).
+
+**Next: Phase 1 DESIGN DOC (not build).** Code proposes the backing model — discrete per-call settlement vs. continuous reputation price — recommends one, answers self-dealing / inactive-predictor / early-backer-fairness / integrity, and STOPS for Marc's approval before building the mechanic.
+
 ## 2026-07-26d (✅ SHIPPED, verified against a real Postgres — Phase 0 of reputation-backing: wallet-native Flex Wallet balance. STOP point — awaiting Marc's live verification before Phase 1.)
 
 **Context: audit (2026-07-26c, below) found all three existing balance systems (`users.balance`, `community_balances`, `flex_points`) are JWT-login-gated and unreachable by a `/connect` wallet-only user** — the prerequisite blocker for reputation-backing (staking Flex Points on a "king" predictor). This entry is Phase 0 only, per explicit phased instruction: build the wallet-native balance, STOP, report, wait for live verification before Phase 1's design doc.
