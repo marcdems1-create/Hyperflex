@@ -49,6 +49,24 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-28b (✅ SHIPPED — category classifier v3, real production 'other' down 58% -> 38.9% after v2, second real sample dump drove this round)
+
+**v2 (2026-07-27d below) worked, for real this time** — production numbers confirmed 58.0% -> 38.9% 'other' (1,453 of 4,406 durable trades reclassified: sports +437, politics +249, world +514, commodities +240 new). Still the single largest bucket though, ~2x the next biggest (politics), so pulled a fresh 50-sample dump from the live `other-category-report` endpoint to find the next real gap rather than guessing.
+
+**What the second batch showed:** a large cluster of named-dignitary "will X sign/attend the US-Iran deal" markets (Sheikh Tamim, Mohammed bin Salman, Jared Kushner, Steve Witkoff, etc. — a whole market series around one hypothetical signing event), a recurring "EntityA x EntityB" bilateral-relations title convention (US x Iran, Israel x Lebanon, Israel x Hezbollah), named political figures hit repeatedly (Khamenei alone appeared 6 times in 50 samples, plus Netanyahu, Putin, Trump), another word-boundary bug (`\bimpeach\b` never matched "impeached" — same bug class as v2's president/election fixes), and a genuinely new genre: temperature/weather price-target markets (Istanbul, Moscow highs in °C).
+
+**Fixed:** added Trump/Hegseth/U.S. Senator+House-member phrasing to `politics`; added forces/peace deal/signing ceremony/memorandum of understanding/strait/withdraw(s)/targets shipping/Putin/Netanyahu/Khamenei to `world`; fixed the impeach(ed/ment) boundary bug; added a **second, deliberately case-sensitive** `world` rule matching the generic `EntityA x EntityB` capitalized-bilateral-title pattern (not lowercased, so it only fires on the actual proper-noun convention, not incidental lowercase "x"); added a new `weather` category for temperature/°C/°F price-target markets.
+
+Noted explicitly as an accepted tradeoff, not silently glossed over: `forces`/`withdraws` are broad enough to theoretically misfire on an unrelated non-geopolitical title — acceptable since a display-category mislabel costs far less than swallowing a real geopolitical question into 'other', and `world` is checked before `sports` so it doesn't fight the v2 team-name list.
+
+**Local verification against BOTH real sample batches** (the 50 from the v1 report and the 50 from the v2-triggered re-check), no regressions: batch 1 (already improved once under v2 to 8/50) now 2/50 'other'; batch 2 (the fresh dump, 50/50 'other' under v2) now 4/50. Remainders in both are genuinely idiosyncratic — a deliberately-excluded team nickname, "will aliens be confirmed to exist," a specific South American football club, a specific island name.
+
+**Marc: re-run the report once deployed** — same command, `after_fix` reflects v3 automatically:
+```bash
+curl -s "https://hyperflex.network/api/admin/other-category-report?secret=$ADMIN_SECRET" | jq '{before_fix, after_fix}'
+```
+`node --check server.js` clean. Not yet merged to main.
+
 ## 2026-07-27d (✅ SHIPPED — category classifier v2, based on REAL production data from the v1 report endpoint)
 
 **v1 (2026-07-27c below) barely worked.** Ran `GET /api/admin/other-category-report` against real production data (7,539 durable trades): v1's forex/commodities fix only moved 'other' from 57.9% to 54.6% — a 3.3-point improvement, not the "shrink to a genuine small remainder" goal. The 50 real samples still in 'other' showed the actual problem was two things v1 didn't touch:

@@ -12757,8 +12757,28 @@ app.get('/api/predictors/leaderboard', async (req, res) => {
 const _CARD_CATEGORY_RULES = [
   ['macro', /\b(fed|federal reserve|fomc|interest rate|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|recession|treasury|jobs report|jerome powell|usd\/|eur\/|gbp\/|jpy\/|krw\/|cny\/|chf\/|aud\/|cad\/|nzd\/|\/usd\b|\/eur\b|\/jpy\b|\/krw\b|\bforex\b|exchange rate|currency pair)\b/i],
   ['commodities', /\b(crude oil|\bwti\b|\bbrent\b|natural gas|\bgold\b|\bsilver\b|\bcopper\b|\bplatinum\b|\bcommodit(y|ies)\b|per barrel|troy ounce)\b/i],
-  ['politics', /\b(presidents?|presidential|elections?|senate|congress|governors?|primary|republicans?|democrat(ic|s)?|impeach|nominees?|electoral|midterms?|ballot|white house|prime minister|chancellor|parliament(ary)?|referendums?)\b/i],
-  ['world', /\b(wars?|warships?|ceasefire|invasions?|invad(e|es|ed|ing)|sanctions?|\bnato\b|treaty|treaties|nuclear|uranium|enrichment|military (strike|action)|troops|coup|regime|blockade|diplomatic|recogni(ze|zes|zed|zing|tion)|recapture|border conflict|\bhormuz\b|airspace|\bmou\b)\b/i],
+  // v3 additions (2026-07-28) traced to a second real 'other' sample dump
+  // after v2 (58% -> 38.9%, still the single largest bucket): a big cluster
+  // of named-dignitary "will X sign/attend the US-Iran deal" markets, named
+  // political figures hit repeatedly (Khamenei, Netanyahu, Putin, Trump),
+  // and another word-boundary bug (\bimpeach\b never matched "impeached",
+  // same class as president/presidential and election/elections in v2).
+  ['politics', /\b(presidents?|presidential|elections?|senate|congress|governors?|primary|republicans?|democrat(ic|s)?|impeach(ed|ment|s)?|nominees?|electoral|midterms?|ballot|white house|prime minister|chancellor|parliament(ary)?|referendums?|\btrumps?\b|\bhegseth\b|u\.?s\.?\s+(senator|house member))\b/i],
+  ['world', /\b(wars?|warships?|ceasefire|invasions?|invad(e|es|ed|ing)|sanctions?|\bnato\b|treaty|treaties|nuclear|uranium|enrichment|military (strike|action)|troops|forces|coup|regime|blockade|diplomatic|recogni(ze|zes|zed|zing|tion)|recapture|withdraws?|withdrawal|border conflict|\bhormuz\b|\bstrait\b|airspace|\bmou\b|memorandum of understanding|signing ceremony|peace deal|targets shipping|\bputin\b|netanyahu|khamenei)\b/i],
+  // Same-word category collision risk, noted rather than silently accepted:
+  // 'forces'/'withdraws' above are broad enough to theoretically catch a
+  // non-geopolitical title (e.g. sports-team "withdraws from tournament");
+  // acceptable tradeoff since a display-category mislabel costs far less
+  // than 'other' swallowing a real geopolitical question, and 'world' is
+  // checked before 'sports' so this doesn't fight the team-name list.
+  //
+  // Second 'world' rule: the recurring "EntityA x EntityB" bilateral-market
+  // title convention (US x Iran, Israel x Lebanon, Israel x Hezbollah) —
+  // deliberately case-SENSITIVE (no /i flag) so it only fires on the
+  // capitalized-proper-noun pattern actual bilateral titles use, not any
+  // lowercase "x" appearing incidentally in unrelated text.
+  ['world', /\b[A-Z][a-zA-Z.]{1,20}\s+x\s+[A-Z][a-zA-Z.]{1,20}\b/],
+  ['weather', /\b(temperature|°[cf]\b)/i],
   ['crypto', /\b(bitcoin|\bbtc\b|ethereum|\beth\b|crypto|altcoin|solana|\bsol\b|defi|\bnft\b|dogecoin|\bxrp\b|stablecoin|memecoin)\b/i],
   ['sports', /\b(nba|nfl|nhl|mlb|ncaa|ufc|\bmma\b|boxing|soccer|football|basketball|baseball|hockey|tennis|\bgolf\b|\bf1\b|formula 1|olympic|world cup|super bowl|playoff|championship|premier league|champions league|grand slam|wimbledon|masters|\bpga\b|nascar|grand prix|diamondbacks|braves|orioles|red sox|\bcubs\b|white sox|\breds\b|guardians|rockies|tigers|astros|royals|angels|dodgers|marlins|brewers|\btwins\b|\bmets\b|yankees|athletics|phillies|pirates|padres|mariners|cardinals|\brays\b|blue jays|nationals|hawks|celtics|\bnets\b|hornets|\bbulls\b|cavaliers|mavericks|nuggets|pistons|warriors|rockets|pacers|clippers|lakers|grizzlies|\bbucks\b|timberwolves|pelicans|knicks|76ers|\bsuns\b|trail blazers|spurs|raptors|wizards|falcons|ravens|\bbills\b|panthers|bengals|\bbrowns\b|cowboys|broncos|\blions\b|packers|texans|colts|jaguars|chiefs|raiders|chargers|dolphins|vikings|patriots|saints|eagles|steelers|49ers|seahawks|buccaneers|commanders|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue jackets|red wings|oilers|canadiens|predators|devils|islanders|senators|flyers|penguins|sharks|kraken|maple leafs|canucks|golden knights|capitals|lightning)\b/i],
   ['entertainment', /\b(oscar|grammy|emmy|box office|album|movie|film|celebrity|billboard|premiere)\b/i],
