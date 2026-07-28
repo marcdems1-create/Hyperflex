@@ -13799,7 +13799,12 @@ async function _flexBackingSettleTrade(backing, trade) {
 // safely everywhere else in this codebase (e.g. the /back route below).
 async function _flexBackingResyncAndSettle() {
   const startedAt = Date.now();
-  let predictorsChecked = 0, tradesSettled = 0, errorCount = 0;
+  let predictorsChecked = 0, tradesSettled = 0;
+  // Errors were previously only counted, never captured — Marc's first
+  // real run hit errors:1 with no way to see what failed. Every push here
+  // includes predictor/stage/message so the response is self-diagnosing;
+  // console.error still fires too, so server logs carry the same detail.
+  const errors = [];
   console.log(`[flex-backing-cron] run started at ${new Date(startedAt).toISOString()}`);
   try {
     if (!pool) { console.warn('[flex-backing-cron] no pool — skipping run'); return { skipped: true, reason: 'no_pool' }; }
@@ -13813,18 +13818,28 @@ async function _flexBackingResyncAndSettle() {
       const eoa = p.address.toLowerCase();
       try {
         const userRows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [eoa]);
-        if (!userRows.length) { console.warn(`[flex-backing-cron] no users row for predictor address ${eoa}`); errorCount++; continue; }
+        if (!userRows.length) {
+          const msg = `no users row for predictor address ${eoa}`;
+          console.warn(`[flex-backing-cron] ${msg}`);
+          errors.push({ predictor: eoa, stage: 'resolve_user', message: msg });
+          continue;
+        }
         const predictorUserId = userRows[0].id;
 
-        const proxy = await ensureProxyStored(predictorUserId, eoa); // fixed helper — do not inline a raw derivation here
-        if (!proxy) { console.warn(`[flex-backing-cron] proxy derivation failed for predictor ${eoa}`); errorCount++; continue; }
+        const proxy = await ensureProxyStored(predictorUserId, eoa).catch(e => { throw new Error('ensureProxyStored: ' + e.message); }); // fixed helper — do not inline a raw derivation here
+        if (!proxy) {
+          const msg = `proxy derivation failed for predictor ${eoa}`;
+          console.warn(`[flex-backing-cron] ${msg}`);
+          errors.push({ predictor: eoa, stage: 'proxy_derivation', message: msg });
+          continue;
+        }
 
-        await backfillRealizedTrades(predictorUserId, eoa, proxy); // fixed ingestion — do not reimplement
+        await backfillRealizedTrades(predictorUserId, eoa, proxy).catch(e => { throw new Error('backfillRealizedTrades: ' + e.message); }); // fixed ingestion — do not reimplement
 
         const backings = await dbQuery(
           `SELECT id, staked_centpoints, created_at FROM flex_backings WHERE predictor_address = $1 AND status = 'active'`,
           [eoa]
-        );
+        ).catch(e => { throw new Error('list_backings: ' + e.message); });
 
         for (const backing of backings) {
           const trades = await dbQuery(
@@ -13834,11 +13849,12 @@ async function _flexBackingResyncAndSettle() {
                AND NOT EXISTS (SELECT 1 FROM flex_backing_settlements s WHERE s.backing_id = $3::uuid AND s.trade_id = realized_trades.id)
              ORDER BY closed_at ASC`,
             [predictorUserId, backing.created_at, backing.id]
-          );
+          ).catch(e => { throw new Error('find_unsettled_trades backing=' + backing.id + ': ' + e.message); });
           for (const trade of trades) {
             const result = await _flexBackingSettleTrade(backing, trade).catch(e => {
-              console.warn(`[flex-backing-cron] settle error backing=${backing.id} trade=${trade.id}:`, e.message);
-              errorCount++;
+              const msg = `settle backing=${backing.id} trade=${trade.id}: ${e.message}`;
+              console.warn(`[flex-backing-cron] ${msg}`);
+              errors.push({ predictor: eoa, stage: 'settle_trade', backing_id: backing.id, trade_id: trade.id, message: msg });
               return null;
             });
             if (result && result.settled) {
@@ -13849,15 +13865,15 @@ async function _flexBackingResyncAndSettle() {
         }
       } catch (e) {
         console.warn(`[flex-backing-cron] predictor ${eoa} failed:`, e.message);
-        errorCount++;
+        errors.push({ predictor: eoa, stage: 'predictor_loop', message: e.message });
       }
     }
   } catch (e) {
     console.error('[flex-backing-cron] fatal error:', e.message);
-    errorCount++;
+    errors.push({ stage: 'fatal', message: e.message });
   }
   const finishedAt = Date.now();
-  const summary = { started_at: startedAt, finished_at: finishedAt, duration_ms: finishedAt - startedAt, predictors_checked: predictorsChecked, trades_settled: tradesSettled, errors: errorCount };
+  const summary = { started_at: startedAt, finished_at: finishedAt, duration_ms: finishedAt - startedAt, predictors_checked: predictorsChecked, trades_settled: tradesSettled, errors: errors.length, error_details: errors };
   console.log(`[flex-backing-cron] run finished:`, JSON.stringify(summary));
   return summary;
 }
@@ -13950,6 +13966,65 @@ app.post('/api/admin/flex-backing/run-cron', requireAdminSecret, async (req, res
     res.json(summary);
   } catch (e) {
     console.error('[flex-backing/run-cron]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// TEST-ONLY: manually settle one specific already-resolved trade against
+// one backing, bypassing the forward-only rule (settlement normally only
+// fires for trades that resolved AFTER the backing was placed — see
+// PHASE1_BACKING_DESIGN.md's early-backer-advantage section). Real
+// settlement only ever happens via _flexBackingResyncAndSettle finding a
+// genuinely new resolution; this exists purely so the mechanic can be
+// proven end-to-end against a predictor's EXISTING resolved history
+// without waiting for their next real trade to close. Uses the same
+// _flexBackingSettleTrade function (same DB-level once-per-settlement
+// guard applies), so this can't double-settle either — it's a different
+// trade-selection path into the same settlement function, not a separate
+// settlement implementation.
+app.post('/api/admin/flex-backing/settle-trade', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { backing_id, trade_id } = req.body;
+    if (!backing_id || !trade_id) return res.status(400).json({ error: 'backing_id and trade_id required' });
+
+    const backingRows = await dbQuery(`SELECT id, staked_centpoints, status FROM flex_backings WHERE id = $1::uuid`, [backing_id]);
+    if (!backingRows.length) return res.status(404).json({ error: 'backing_not_found' });
+    if (backingRows[0].status !== 'active') return res.status(400).json({ error: 'backing_not_active' });
+
+    const tradeRows = await dbQuery(`SELECT id, realized_roi, closed_at FROM realized_trades WHERE id = $1::uuid`, [trade_id]);
+    if (!tradeRows.length) return res.status(404).json({ error: 'trade_not_found' });
+
+    const result = await _flexBackingSettleTrade(backingRows[0], tradeRows[0]);
+    res.json({ ...result, backing_id, trade_id, note: 'test-only manual settlement — bypasses the forward-only (closed_at > backing.created_at) rule the real cron enforces.' });
+  } catch (e) {
+    console.error('[flex-backing/settle-trade]', e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Read-only convenience: find a predictor's resolved durable trade ids, for
+// picking one to pass to /settle-trade above without querying Postgres
+// directly.
+app.get('/api/admin/flex-backing/predictor-trades', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const addr = String(req.query.address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return res.status(400).json({ error: 'invalid_address' });
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+
+    const userRows = await dbQuery('SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addr]);
+    if (!userRows.length) return res.status(404).json({ error: 'predictor_not_connected' });
+
+    const rows = await dbQuery(
+      `SELECT id, market_question, realized_roi, realized_pnl, closed_at FROM realized_trades
+       WHERE user_id = $1::uuid AND market_durability = 'durable' AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+       ORDER BY closed_at DESC LIMIT $2`,
+      [userRows[0].id, limit]
+    );
+    res.json({ address: addr, trades: rows.map(r => ({ trade_id: r.id, market_question: r.market_question, realized_roi_pct: Math.round(Number(r.realized_roi) * 1000) / 10, realized_pnl: Number(r.realized_pnl), closed_at: r.closed_at })) });
+  } catch (e) {
+    console.error('[flex-backing/predictor-trades]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
