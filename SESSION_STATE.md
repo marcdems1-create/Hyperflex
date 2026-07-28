@@ -47,7 +47,15 @@
 
 ---
 
-## Chronological log (newest first)
+## 2026-07-28f (✅ FIXED before it could bite — realized_trades.id is BIGINT, not UUID; flex_backing_settlements.trade_id and the settle-trade endpoint both assumed UUID)
+
+**Caught from Marc's own diagnostic output, not from an error report.** `GET /api/admin/flex-backing/predictor-trades` (shipped in 2026-07-28e) returned real trade IDs like `"1148499"`, `"1121767"` — plain sequential integers, not UUIDs. `flex_backing_settlements.trade_id` was declared `UUID NOT NULL`, and the `/settle-trade` endpoint cast the incoming id `::uuid` — both would have thrown `invalid input syntax for type uuid` on the first real settlement attempt (against either a real cron settlement or the manual test endpoint). Same family of mistake as the `users.id` bug from 2026-07-28d: assumed a column's type from convention instead of checking it, caught this time from data Marc happened to show me rather than from a failure.
+
+**Fixed:** `supabase_migration_flex_backing_v3.sql` drops and recreates ONLY `flex_backing_settlements` with `trade_id BIGINT NOT NULL` — `flex_backings` (and any real stake already placed on it via `/back`) is untouched; the two tables are independent, settlements only references backings, not the reverse. `/settle-trade`'s cast changed `::uuid` → `::bigint`. No other code changes needed — the cron's own `NOT EXISTS` comparison and the settlement INSERT never had an explicit cast on `trade_id`, so they work correctly once the column type itself is right.
+
+**Re-verified against a real local Postgres** with `realized_trades.id` modeled as a genuine `BIGINT GENERATED ALWAYS AS IDENTITY` (not UUID) this time, reproducing the real shape exactly: the settle-trade path against a real bigint id now succeeds (no invalid-uuid error), a duplicate settle attempt for the same trade correctly no-ops, and the concurrency guard was re-checked once more with the corrected column type — 10 simultaneous settle-trade calls on the same (backing, trade) pair, exactly 1 succeeded, exactly 1 settlement row. `node --check server.js` clean.
+
+**Marc: run `supabase_migration_flex_backing_v3.sql` in TablePlus** (on top of v2, which should already be applied) before trying `/settle-trade` or waiting on a real cron settlement — otherwise this is the next "relation/type does not exist"-shaped surprise. Not yet merged to main.
 
 ## 2026-07-28e (✅ SHIPPED — cron error surfacing + manual test-settle endpoint, after first real /run-cron came back errors:1 with the error invisible)
 

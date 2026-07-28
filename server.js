@@ -13992,7 +13992,13 @@ app.post('/api/admin/flex-backing/settle-trade', requireAdminSecret, async (req,
     if (!backingRows.length) return res.status(404).json({ error: 'backing_not_found' });
     if (backingRows[0].status !== 'active') return res.status(400).json({ error: 'backing_not_active' });
 
-    const tradeRows = await dbQuery(`SELECT id, realized_roi, closed_at FROM realized_trades WHERE id = $1::uuid`, [trade_id]);
+    // realized_trades.id is BIGINT (confirmed via /predictor-trades returning
+    // plain sequential integers like "1148499", not UUIDs) — an earlier
+    // version of this cast to ::uuid, which would have thrown "invalid
+    // input syntax for type uuid" on the first real call. Same class of
+    // "assumed the type instead of checking it" mistake as users.id, caught
+    // this time before it shipped further.
+    const tradeRows = await dbQuery(`SELECT id, realized_roi, closed_at FROM realized_trades WHERE id = $1::bigint`, [trade_id]);
     if (!tradeRows.length) return res.status(404).json({ error: 'trade_not_found' });
 
     const result = await _flexBackingSettleTrade(backingRows[0], tradeRows[0]);
