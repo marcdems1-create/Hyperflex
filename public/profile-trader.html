@@ -36,6 +36,7 @@
     .display-name{font-size:22px;font-weight:800;letter-spacing:-0.4px;line-height:1.15;display:flex;align-items:center;flex-wrap:wrap}
     .handle{font-size:13px;color:var(--dim);font-family:var(--mono);margin-top:1px}
     .bio{font-size:13px;color:var(--soft);line-height:1.55;margin-top:12px;max-width:560px}
+    .trade-bio{font-size:12.5px;color:var(--soft);line-height:1.6;margin-top:12px;padding:10px 12px;background:var(--paper-3);border:1px solid var(--border);border-radius:8px}
 
     /* FLEX + class */
     .flex-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
@@ -170,6 +171,14 @@
 
       var bioHtml = d.bio ? '<div class="bio">' + esc(d.bio) + '</div>' : '';
 
+      // Auto-generated trade-history bio (from computeTradeBio server-side) —
+      // distinct from the self-written bio above. Sits directly under the
+      // FLEX score, since it's the thing that substantiates the number:
+      // built strictly from resolved realized_trades rows, losses named,
+      // not editable. Absent entirely (null) for wallets under the
+      // TRADE_BIO_MIN_N resolved-trade floor rather than rendering thin.
+      var tradeBioHtml = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
+
       var hero =
         '<div class="hero">' + banner +
           '<div class="hero-body">' +
@@ -187,6 +196,7 @@
               '</div>' +
               classBadge +
             '</div>' +
+            tradeBioHtml +
             chips +
             insider +
           '</div>' +

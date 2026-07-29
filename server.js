@@ -30140,6 +30140,124 @@ app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public'
 // lookup is handle/username only. Columns are limited to ones that actually exist on the
 // `users`/`wallet_scores` tables — recent takes are folded in since there is no
 // /api/takes?user_id= endpoint.
+// ── AUTO-GENERATED TRADE-HISTORY BIO ────────────────────────────────────
+// Distinct from users.bio above (self-written, editable in account
+// settings) — this is built strictly from realized_trades, same "we don't
+// fudge the record" discipline as the rest of the scoring surface. No
+// self-reported claims, no LLM call (deterministic template over real
+// numbers already in the ledger), regenerated fresh on every profile
+// fetch so it never drifts stale relative to the trade record. Losses are
+// named, not hidden — an all-wins bio would be the one thing that reads
+// as fabricated. Requires >=TRADE_BIO_MIN_N resolved trades; below that
+// a bio is just noise, so the field comes back null and the UI omits it.
+//
+// Deliberately NOT scoped to market_durability = 'durable' like the
+// leaderboard/ROI surfaces — this is a descriptive bio over the user's
+// full resolved history, not a ranking eligibility computation, so
+// ephemeral-market trades count too.
+const TRADE_BIO_MIN_N = 5;
+
+function _truncateBioQuestion(q) {
+  q = String(q || '').trim();
+  if (q.length <= 46) return q;
+  return q.slice(0, 45).trim() + '…';
+}
+
+function _fmtBioUsd(n) {
+  n = Math.round(Number(n) || 0);
+  return '$' + n.toLocaleString('en-US');
+}
+
+async function computeTradeBio(userId) {
+  if (!userId) return null;
+  const rows = await dbQuery(`
+    SELECT market_question, entry_cost_usd, realized_pnl, opened_at, closed_at
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL
+    ORDER BY closed_at DESC
+  `, [userId]).catch(e => { console.warn('[trade-bio] query error:', e.message); return null; });
+  if (!rows || rows.length < TRADE_BIO_MIN_N) return null;
+
+  const n = rows.length;
+  const oldest = rows[rows.length - 1].closed_at;
+  const newest = rows[0].closed_at;
+  const daySpan = Math.max(1, Math.round((new Date(newest) - new Date(oldest)) / 86400000));
+
+  // Category mix — reuse the same keyword classifier the card grid uses,
+  // so a trader's bio can never disagree with how their trades are
+  // categorized elsewhere on the site.
+  const catCounts = new Map();
+  for (const r of rows) {
+    const cat = classifyCardCategory(r.market_question);
+    catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+  }
+  const topCats = [...catCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(c => c[0]);
+  const catLabel = topCats.length === 2 ? `${topCats[0]} and ${topCats[1]}` : (topCats[0] || null);
+
+  let wins = 0, totalCost = 0, costCount = 0, totalPnl = 0;
+  let maxStakeRow = null, worstLossRow = null;
+  for (const r of rows) {
+    const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+    const cost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
+    if (pnl != null) {
+      totalPnl += pnl;
+      if (pnl > 0) wins++;
+      if (pnl < 0 && (worstLossRow == null || pnl < Number(worstLossRow.realized_pnl))) worstLossRow = r;
+    }
+    if (cost != null && cost > 0) {
+      totalCost += cost; costCount++;
+      if (maxStakeRow == null || cost > Number(maxStakeRow.entry_cost_usd)) maxStakeRow = r;
+    }
+  }
+  const winRatePct = Math.round((wins / n) * 1000) / 10;
+  const avgStake = costCount ? totalCost / costCount : null;
+  const roiPct = totalCost > 0 ? Math.round((totalPnl / totalCost) * 1000) / 10 : null;
+
+  // Current streak, walking back from the most recently resolved trade —
+  // stops at the first push (pnl === 0) or null-pnl row.
+  let streakLen = 0, streakSign = null;
+  for (const r of rows) {
+    const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+    if (pnl == null) break;
+    const sign = pnl > 0 ? 1 : (pnl < 0 ? -1 : 0);
+    if (sign === 0) break;
+    if (streakSign == null) { streakSign = sign; streakLen = 1; }
+    else if (sign === streakSign) streakLen++;
+    else break;
+  }
+
+  const parts = [];
+  parts.push(`Resolved ${n} trades over the last ${daySpan} days` + (catLabel ? `, concentrated in ${catLabel} markets.` : '.'));
+
+  if (avgStake != null) {
+    let sizing = `Average position size ${_fmtBioUsd(avgStake)}`;
+    if (maxStakeRow && Number(maxStakeRow.entry_cost_usd) > avgStake * 1.5) {
+      sizing += `, sized up to ${_fmtBioUsd(maxStakeRow.entry_cost_usd)} on ${_truncateBioQuestion(maxStakeRow.market_question)}`;
+    }
+    parts.push(sizing + '.');
+  }
+
+  let record = `${winRatePct}% win rate`;
+  if (roiPct != null) record += `, ${roiPct >= 0 ? '+' : ''}${roiPct}% realized ROI`;
+  parts.push(record + '.');
+
+  if (worstLossRow) {
+    const heldDays = worstLossRow.opened_at
+      ? Math.max(0, Math.round((new Date(worstLossRow.closed_at) - new Date(worstLossRow.opened_at)) / 86400000))
+      : null;
+    parts.push(
+      `Notable loss: ${_fmtBioUsd(Math.abs(Number(worstLossRow.realized_pnl)))} on ${_truncateBioQuestion(worstLossRow.market_question)}` +
+      (heldDays != null ? `, held ${heldDays}d before resolving against.` : '.')
+    );
+  }
+
+  if (streakLen >= 2) {
+    parts.push(`Currently on a ${streakLen}-trade ${streakSign > 0 ? 'win' : 'losing'} streak.`);
+  }
+
+  return parts.join(' ');
+}
+
 app.get('/api/user/profile/:handle', async (req, res) => {
   try {
     const { handle } = req.params;
@@ -30174,6 +30292,15 @@ app.get('/api/user/profile/:handle', async (req, res) => {
       `, [profile.id]);
     } catch (e) {
       profile.takes = [];
+    }
+
+    // Auto-generated trade-history bio — see computeTradeBio above.
+    // Failure here must never break the rest of the profile response.
+    try {
+      profile.trade_bio = await computeTradeBio(profile.id);
+    } catch (e) {
+      console.warn('[api/user/profile] trade_bio failed:', e.message);
+      profile.trade_bio = null;
     }
 
     res.json(profile);
