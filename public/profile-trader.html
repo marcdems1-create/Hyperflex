@@ -63,8 +63,16 @@
     .chart-lbl{font-family:var(--mono);font-size:21px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim)}
     svg.spark{width:100%;height:340px;display:block}
 
+    /* Open positions — the copyable layer */
+    .open-side{display:inline-block;font-family:var(--mono);font-size:19px;font-weight:700;padding:3px 12px;border-radius:6px;background:rgba(34,211,238,0.12);color:var(--cyan);margin-right:14px;vertical-align:2px}
+    .open-live{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:19px;color:var(--green);text-transform:none;letter-spacing:0}
+    .open-live::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--green)}
+    .row-link{color:var(--cyan)}
+    .row-link:hover{text-decoration:underline}
+
     /* Resolution ledger */
     .led-head{font-family:var(--mono);font-size:21px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim);padding:44px 52px 22px;border-top:1px solid var(--border)}
+    .led-head.with-live{display:flex;justify-content:space-between;align-items:baseline}
     .row{display:flex;justify-content:space-between;align-items:flex-start;gap:40px;padding:32px 52px;border-bottom:1px solid var(--border)}
     .row:last-of-type{border-bottom:none}
     .row-q{font-size:31px;font-weight:500;color:var(--ink);line-height:1.35}
@@ -225,8 +233,71 @@
           '<span>' + (c && c.n != null ? c.n + ' resolved · ' : '') + 'updated live</span>' +
         '</div>';
 
+      // Open-positions slot — filled asynchronously by loadOpenPositions so
+      // the live Polymarket fetch never blocks the card paint. Sits above
+      // the resolved ledger: what they hold NOW is the actionable part,
+      // the resolved history below it is the evidence they're worth copying.
+      var openSlot = '<div id="openSlot"></div>';
+
       document.getElementById('root').innerHTML =
-        '<div class="card">' + head + hero + quad + strip + chart + ledger + foot + '</div>';
+        '<div class="card">' + head + hero + quad + strip + chart + openSlot + ledger + foot + '</div>';
+
+      if (d.polymarket_address) loadOpenPositions(d.polymarket_address);
+    }
+
+    // Internal market page keeps the trade on our builder-fee path; falls
+    // back to the Polymarket URL when the slug can't be recovered.
+    function marketHref(p){
+      var m = /polymarket\.com\/event\/([^/?#]+)/.exec(p.market_url || '');
+      return m ? '/market/' + m[1] : (p.market_url || 'https://polymarket.com');
+    }
+
+    function loadOpenPositions(addr){
+      fetch('/api/polymarket/positions/' + encodeURIComponent(addr))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          var slot = document.getElementById('openSlot');
+          if (!slot || !d) return;
+          var all = (d.positions || d || []);
+          if (!Array.isArray(all)) return;
+          // Open only — settled rows are already represented, graded, in the
+          // resolved ledger below. Biggest first: position size is the
+          // trader's own conviction signal and the most useful sort for
+          // someone deciding what to follow.
+          var open = all.filter(function(p){ return !p.settled; })
+                        .sort(function(a,b){ return (b.cost_basis||0) - (a.cost_basis||0); })
+                        .slice(0, 8);
+          if (!open.length) {
+            slot.innerHTML = '<div class="led-head">open positions</div>' +
+              '<div class="row"><div class="row-q" style="color:var(--dim);font-weight:400">' +
+              'No open positions — nothing live to follow right now.</div></div>';
+            return;
+          }
+          slot.innerHTML =
+            '<div class="led-head with-live"><span>open positions</span>' +
+            '<span class="open-live">' + open.length + ' live</span></div>' +
+            open.map(function(p){
+              var pnl = num(p.pnl), pnlPct = num(p.pnl_pct);
+              var cls = pnl == null ? '' : (pnl > 0 ? 'pos' : (pnl < 0 ? 'neg' : ''));
+              var bits = [];
+              if (p.cost_basis) bits.push(usd(p.cost_basis) + ' in');
+              if (p.current_price != null) bits.push('now ' + price(p.current_price));
+              if (pnlPct != null) bits.push((pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%');
+              if (p.end_date) {
+                var dt = new Date(p.end_date);
+                if (!isNaN(dt)) bits.push('ends ' + dt.toLocaleDateString('en-US', { month:'short', day:'numeric' }));
+              }
+              return '<div class="row">' +
+                '<div><div class="row-q">' +
+                  '<span class="open-side">' + esc(String(p.side || '').toUpperCase()) + '</span>' +
+                  '<a class="row-link" href="' + esc(marketHref(p)) + '">' + esc(p.question || '') + '</a>' +
+                '</div>' +
+                '<div class="row-meta">' + bits.join(' · ') + '</div></div>' +
+                '<div class="row-amt ' + cls + '">' + signedUsd(pnl) + '</div>' +
+              '</div>';
+            }).join('');
+        })
+        .catch(function(e){ console.warn('[profile] open positions failed:', e); });
     }
 
     function notFound(){
