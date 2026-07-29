@@ -17304,12 +17304,23 @@ app.get('/api/member/:userId', async (req, res) => {
     // Context-aware display name — see resolveDisplayName() near L1524
     const displayName = resolveDisplayName(userData);
 
+    // Auto-generated trade-history bio — see computeTradeBio (defined near
+    // /api/user/profile/:handle). Distinct from userData.bio (self-written,
+    // editable). Failure here must never break the rest of /api/member.
+    let tradeBio = null;
+    try {
+      tradeBio = await computeTradeBio(userData.id);
+    } catch (e) {
+      console.warn('[api/member] trade_bio failed:', e.message);
+    }
+
     res.json({
       user: {
         id:           userData.id,
         display_name: displayName,
         username:     userData.username || null,
         bio:          userData.bio || null,
+        trade_bio:    tradeBio,
         avatar_url:   userData.avatar_url || null,
         banner_url:   userData.banner_url || null,
         member_since: userData.created_at,
