@@ -145,6 +145,10 @@
 
   .specialty-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
   .specialty-tile{background:#111118;border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .sim-context{font-size:14px;color:rgba(240,240,245,.8);line-height:1.6;margin:-4px 0 16px;}
+  .sim-context b{color:var(--ink);}
+  .sim-context .is-positive{color:var(--green);font-weight:700;}
+  .sim-context .is-negative{color:var(--red);font-weight:700;}
   .similar-list{display:flex;flex-direction:column;gap:10px;}
   .sim-row{display:flex;justify-content:space-between;align-items:center;gap:20px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
   .sim-main{min-width:0;}
@@ -187,6 +191,15 @@
   .open-row .os{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);flex-shrink:0;}
 
   .void-note{font-size:12px;color:var(--muted);line-height:1.6;max-width:760px;}
+
+  /* ── equity curve ── */
+  .curve-card{background:#111118;border:1px solid var(--border);border-radius:12px;padding:22px 24px 14px;margin-top:24px;}
+  .curve-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:8px;}
+  .curve-title{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .curve-now{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:800;}
+  .curve-now.is-positive{color:var(--green);} .curve-now.is-negative{color:var(--red);}
+  .curve-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px;}
+  svg.curve{width:100%;height:180px;display:block;margin-top:8px;overflow:visible;}
 
   /* ── desktop scale-up on body content (>=1024px). Round 2, 2026-07-28:
      the exact values from round 1 (34px verdict, 44px score, etc.) were
@@ -253,6 +266,13 @@
     .p-scope { font-size: 20px; }
     .p-handle { font-size: 26px; }
     .p-address { font-size: 19px; }
+
+    .curve-card { padding: 34px 38px 22px; }
+    .curve-title { font-size: 20px; }
+    .curve-now { font-size: 52px; }
+    .curve-sub { font-size: 18px; }
+    svg.curve { height: 320px; }
+    .sim-context { font-size: 24px; }
   }
 </style>
 </head>
@@ -536,6 +556,13 @@ function renderVerified(p){
     + '</div></div>';
   }
 
+  // Equity curve — built client-side from trade_history (already in this
+  // payload), so no extra round trip. Cumulative realized PnL over
+  // cumulative capital deployed, which is the same basis the headline
+  // realized-ROI number uses; a curve computed on a different basis than
+  // the number printed above it would be its own small lie.
+  html += equityCurveHtml(p);
+
   // Slot for the similar-but-better matcher — the part of this page that
   // isn't just a restatement of what Polymarket already shows you.
   // Loaded async so the wallet's own record paints immediately.
@@ -649,6 +676,64 @@ function renderVerified(p){
   loadSimilarTraders(p.username || p.polymarket_address || p.user_id);
 }
 
+// ── Equity curve ───────────────────────────────────────────────────────
+// Durable trades only, matching what the score is computed on — an
+// equity curve drawn over trades the score explicitly excludes would
+// disagree with the number printed directly above it.
+function equityCurveHtml(p){
+  var rows = (p.trade_history || [])
+    .filter(function(t){ return t.market_durability !== 'ephemeral'
+      && t.closed_at && t.entry_cost_usd > 0 && t.realized_pnl != null; })
+    .sort(function(a,b){ return new Date(a.closed_at) - new Date(b.closed_at); });
+  if (rows.length < 2) return '';
+
+  var cumPnl = 0, cumCost = 0, pts = [];
+  rows.forEach(function(t){
+    cumCost += Number(t.entry_cost_usd);
+    cumPnl  += Number(t.realized_pnl);
+    pts.push({ t: t.closed_at, roi: (cumPnl / cumCost) * 100 });
+  });
+
+  var vals = pts.map(function(x){ return x.roi; });
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  // Always keep 0 in frame — a curve that never shows breakeven hides
+  // whether the trader is above or below water, which is the whole point.
+  min = Math.min(min, 0); max = Math.max(max, 0);
+  if (max === min) max = min + 1;
+
+  var W = 900, H = 180, padY = 12;
+  var y = function(v){ return H - padY - ((v - min) / (max - min)) * (H - padY * 2); };
+  var x = function(i){ return (i / (pts.length - 1)) * W; };
+
+  var line = pts.map(function(pt,i){ return x(i).toFixed(1) + ',' + y(pt.roi).toFixed(1); }).join(' ');
+  var zeroY = y(0).toFixed(1);
+  var last = vals[vals.length - 1];
+  var up = last >= 0;
+  var stroke = up ? '#00e68a' : '#ff4d6a';
+  var fill = up ? 'rgba(0,230,138,.12)' : 'rgba(255,77,106,.10)';
+
+  var area = '0,' + zeroY + ' ' + line + ' ' + W + ',' + zeroY;
+  var first = pts[0].t ? fmtDate(pts[0].t) : '';
+  var lastD = pts[pts.length-1].t ? fmtDate(pts[pts.length-1].t) : '';
+
+  return '<div class="curve-card">'
+    + '<div class="curve-head"><span class="curve-title">Cumulative realized ROI</span>'
+    + '<span class="curve-now ' + (up ? 'is-positive' : 'is-negative') + '">'
+    + (last >= 0 ? '+' : '') + last.toFixed(1) + '%</span></div>'
+    + '<svg class="curve" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" '
+    + 'aria-label="Cumulative realized ROI across ' + pts.length + ' durable trades, ending at '
+    + last.toFixed(1) + ' percent">'
+    + '<polygon points="' + area + '" fill="' + fill + '"></polygon>'
+    + '<line x1="0" y1="' + zeroY + '" x2="' + W + '" y2="' + zeroY
+    + '" stroke="rgba(240,240,245,.28)" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></line>'
+    + '<polyline points="' + line + '" fill="none" stroke="' + stroke
+    + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>'
+    + '</svg>'
+    + '<div class="curve-sub">' + esc(first) + ' → ' + esc(lastD) + ' · ' + pts.length
+    + ' durable trades · dashed line = breakeven</div>'
+  + '</div>';
+}
+
 // ── Traders with your book, beating you at it ──────────────────────────
 // The differentiated surface: not a leaderboard of strangers, but people
 // playing the same categories this wallet plays who are outperforming on
@@ -660,10 +745,28 @@ function loadSimilarTraders(handle){
     .then(function(d){
       var slot = document.getElementById('similarSlot');
       if (!slot || !d || !d.matches || !d.matches.length) return;
+
+      // When every match headlines the same category — common, since it's
+      // the one you're worst at — stating "you X% over N trades" on each
+      // row repeats an identical clause five times. Hoist it into one
+      // context line above the list and let each row carry only what
+      // differs: who they are, and their number.
+      var cats = d.matches.map(function(m){ return m.headline && m.headline.category; });
+      var onlyCat = cats.every(function(c){ return c && c === cats[0]; }) ? cats[0] : null;
+      var ctx = '';
+      if (onlyCat) {
+        var h0 = d.matches[0].headline;
+        ctx = '<div class="sim-context">Your <b>' + esc(onlyCat) + '</b> book: '
+            + '<span class="' + (h0.your_roi_pct >= 0 ? 'is-positive' : 'is-negative') + '">'
+            + esc(fmtPct(h0.your_roi_pct)) + '</span> over ' + esc(h0.your_n)
+            + ' trades. These traders play it better:</div>';
+      }
+
       slot.innerHTML =
         '<div class="p-section"><div class="p-section-title">Trades like you — but better '
         + '<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">'
         + '— matched on the categories you actually play</span></div>'
+        + ctx
         + '<div class="similar-list">'
         + d.matches.map(function(m){
             var h = m.headline;
@@ -672,13 +775,17 @@ function loadSimilarTraders(handle){
             var nameHtml = link
               ? '<a href="'+esc(link)+'" class="sim-name">'+esc(name)+'</a>'
               : '<span class="sim-name">'+esc(name)+'</span>';
-            var compare = h
-              ? '<div class="sim-compare">In <b>'+esc(h.category)+'</b>: '
-                + 'you <span class="'+(h.your_roi_pct>=0?'is-positive':'is-negative')+'">'
-                + esc(fmtPct(h.your_roi_pct))+'</span> over '+esc(h.your_n)+' trades · '
-                + 'them <span class="'+(h.their_roi_pct>=0?'is-positive':'is-negative')+'">'
-                + esc(fmtPct(h.their_roi_pct))+'</span> over '+esc(h.their_n)+' trades</div>'
-              : '';
+            // With the shared context hoisted above, each row states only
+            // their side of the comparison.
+            var compare = !h ? ''
+              : onlyCat
+                ? '<div class="sim-compare"><span class="'+(h.their_roi_pct>=0?'is-positive':'is-negative')+'">'
+                  + esc(fmtPct(h.their_roi_pct))+'</span> over '+esc(h.their_n)+' '+esc(h.category)+' trades</div>'
+                : '<div class="sim-compare">In <b>'+esc(h.category)+'</b>: '
+                  + 'you <span class="'+(h.your_roi_pct>=0?'is-positive':'is-negative')+'">'
+                  + esc(fmtPct(h.your_roi_pct))+'</span> over '+esc(h.your_n)+' · '
+                  + 'them <span class="'+(h.their_roi_pct>=0?'is-positive':'is-negative')+'">'
+                  + esc(fmtPct(h.their_roi_pct))+'</span> over '+esc(h.their_n)+'</div>';
             return '<div class="sim-row">'
               + '<div class="sim-main">'
                 + '<div class="sim-head">'+nameHtml
