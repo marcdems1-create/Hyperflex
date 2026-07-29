@@ -49,6 +49,18 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-28h (✅ SHIPPED + RUN IN PROD — corrective delete for the future-dated fabrication bug. 3,075 rows removed, qualifying leaderboard 123→92. taerv534's 2026-07-21 hand-check partially invalidated.)
+
+**`GET /api/admin/future-dated-trades-audit` (shipped 2026-07-28g) confirmed the bug was live platform-wide, not just in Nadmi's test data:** 3,075 rows with `closed_at > NOW()` (2,419 `redeemed-loss`, 656 `redeemed-win`), 162 distinct wallets, 77 of them on the then-currently-qualifying (n≥10 durable) leaderboard — effectively the whole cohort. All three of the 2026-07-21 hand-checked wallets had at least one fake row (taerv534: 1, TB14: 4; MELOCOTON007: 0, clean).
+
+**Shipped `POST /api/admin/fix-future-dated-trades`** (commit `0cfbda0`, merged to main same commit) — deletes rows with `closed_at > NOW()` outright (no valid corrected value exists for an unresolved market), refuses and surfaces instead if any fake `trade_id` was already referenced by a real `flex_backing_settlements` row, snapshots leaderboard membership before/after.
+
+**Marc ran it in production. Result:** `deleted: 3075`, qualifying wallets `123 → 92` (31 dropped below n=10). No tainted settlements found (backing/settlement feature has had zero real settlements yet, so this was always the expected clean case). **taerv534 (2026-07-21 hand-check) dropped off entirely** — its qualifying n=10 included a fabricated row, meaning "highly selective, correctly so" was assessed on partly-fake data. TB14 and MELOCOTON007 both still qualify post-cleanup (TB14 lost 4 from its n). CLAUDE.md's Gate 1 verification note and qualifying-count (76→92) both corrected in place with a dated addendum rather than rewritten, per the "every number... has been wrong" discipline — don't silently fix stale numbers, flag the correction.
+
+**Active blockers:** none for this specific bug — ingestion fix + defensive settlement guard (`closed_at <= NOW()`) + corrective delete are all live. `future-dated-trades-audit` should read 0 rows now; worth a spot re-run next session to confirm no new future-dated rows have appeared (would indicate the ingestion fix didn't fully hold).
+
+**Still open from 2026-07-28g, unblocked now:** Marc's test backing (`9e9b7dc5...`) was wiped by the v2/ALL migration and still needs recreating via `/back` before end-to-end settlement can be verified live (back a predictor → trigger settlement → confirm balance moved). This is now the next actual next-step for Phase 1, not the data-integrity issue.
+
 ## 2026-07-28g (🚨 REAL BUG, platform-wide — realized_trades held fabricated "redeemed" rows for markets that haven't resolved. Root cause fixed, defensive settlement guard added, audit endpoint shipped. Also confirms: the v2 migration's DROP TABLE wiped the earlier test backing.)
 
 **Marc caught this from `/predictor-trades` output before testing any settlement — Nadmi's "resolved" trades included "Will Donald Trump win the 2028 US Presidential Election?" at exactly ±100% ROI with `closed_at: 2028-11-07` — a market that cannot possibly have resolved yet.** This is the same signature as the 2026-07-18 redeemed-win bug, and it's not backing-specific — this is a live gap in `backfillRealizedTrades` itself, meaning it can affect ANY wallet's `realized_trades` rows, including ones already feeding the public leaderboard.
