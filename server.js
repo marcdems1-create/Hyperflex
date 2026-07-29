@@ -30452,12 +30452,17 @@ async function computeTradeBio(userId) {
   parts.push(record + '.');
 
   if (worstLossRow) {
+    // Hold time is only asserted when we actually know it. Redeemed-path
+    // rows have opened_at NULL (see backfillRealizedTrades' redeemed INSERT)
+    // — computing a duration off that yields 0 and the copy then claims
+    // "held 0d", which reads as a same-day flip on a position we have no
+    // open timestamp for at all. Omit rather than assert.
     const heldDays = worstLossRow.opened_at
       ? Math.max(0, Math.round((new Date(worstLossRow.closed_at) - new Date(worstLossRow.opened_at)) / 86400000))
       : null;
     parts.push(
       `Notable loss: ${_fmtBioUsd(Math.abs(Number(worstLossRow.realized_pnl)))} on ${_truncateBioQuestion(worstLossRow.market_question)}` +
-      (heldDays != null ? `, held ${heldDays}d before resolving against.` : '.')
+      (heldDays != null && heldDays > 0 ? `, held ${heldDays}d before resolving against.` : '.')
     );
   }
 
@@ -30505,9 +30510,13 @@ async function computeTraderCard(userId) {
     const cost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
     if (pnl != null) { totalPnl += pnl; if (pnl > 0) wins++; else if (pnl < 0) losses++; }
     if (cost != null && cost > 0) { totalCost += cost; sizeSum += cost; sizeCount++; }
+    // Only rows with a real open timestamp contribute to average hold.
+    // Redeemed-path rows carry opened_at NULL; averaging them in as zeros
+    // dragged avg_hold_days toward 0 and made every wallet look like a
+    // day-trader regardless of how long they actually held.
     if (r.opened_at && r.closed_at) {
-      holdSum += (new Date(r.closed_at) - new Date(r.opened_at)) / 86400000;
-      holdCount++;
+      const d = (new Date(r.closed_at) - new Date(r.opened_at)) / 86400000;
+      if (isFinite(d) && d >= 0) { holdSum += d; holdCount++; }
     }
     const cat = classifyCardCategory(r.market_question);
     catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
@@ -30547,7 +30556,11 @@ async function computeTraderCard(userId) {
     realized_roi_pct: totalCost > 0 ? Math.round((totalPnl / totalCost) * 1000) / 10 : null,
     realized_pnl_usd: Math.round(totalPnl),
     total_staked_usd: Math.round(totalCost),
-    avg_hold_days:    holdCount ? Math.round(holdSum / holdCount) : null,
+    // One decimal, not rounded to int: a book of genuine same-session
+    // trades averages ~0.4d, and rounding that to "0d" reads as missing
+    // data rather than the real (and informative) answer.
+    avg_hold_days:    holdCount ? Math.round((holdSum / holdCount) * 10) / 10 : null,
+    avg_hold_known_n: holdCount,
     avg_size_usd:     sizeCount ? Math.round(sizeSum / sizeCount) : null,
     categories:       [...catCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(c => c[0]),
     roi_series:       series,
@@ -46542,7 +46555,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // path, pure-buyer users with resolved markets show "no realized" forever.
   // Each redeemed position is a single aggregated event: size shares
   // realized at $1 (winning) or $0 (losing) regardless of entry.
-  let redeemedImported = 0, redeemedCount = 0, redeemedUnverifiedSkipped = 0;
+  let redeemedImported = 0, redeemedCount = 0, redeemedUnverifiedSkipped = 0, futureDatedSkipped = 0;
   try {
     // Single paginated fetch — no winning=X URL filter trickery. Diagnostic
     // confirmed Polymarket's `?winning=` query parameter doesn't filter
@@ -46656,6 +46669,31 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       // all (shouldn't happen often once the closed-flag check above is
       // in place, but a fallback is safer than a null closed_at).
       const closedAt = _toIsoTs(pos.resolved_at || pos.redeemed_at || pos.endDate || pos.end_date) || new Date().toISOString();
+
+      // ── Future-dated closed_at guard (2026-07-29) ──────────────────────
+      // The 2026-07-28 fix reordered this chain to prefer real settlement
+      // timestamps, but left endDate in it as a fallback on the assumption
+      // that reaching it "shouldn't happen often" once the closed-flag
+      // check was in place. It still happens: wallets were found carrying
+      // closed_at values months in the future (2026-10-31 on a wallet
+      // checked 2026-07-29), because a position can arrive with neither
+      // resolved_at nor redeemed_at, leaving the market's SCHEDULED end
+      // date as the only candidate.
+      //
+      // A trade cannot close in the future. Skip the row rather than clamp
+      // it to now(): clamping would assert "this resolved today", which is
+      // just a different fabricated timestamp. Same reasoning the
+      // corrective-delete endpoint gives for removing rather than
+      // correcting these rows — we don't know the outcome because the
+      // market hasn't resolved. The position stays open on Polymarket and
+      // gets ingested for real, with a true timestamp, once it settles.
+      if (new Date(closedAt).getTime() > Date.now()) {
+        futureDatedSkipped++;
+        console.warn('[backfill] skipping future-dated resolution:', condId,
+          'closed_at=' + closedAt, '(no real settlement timestamp; endDate fallback)');
+        continue;
+      }
+
       const closeReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
       // Scoped per user — see the identical fix + comment on the sold-path
       // externalSyncId a few hundred lines up in this same function.
@@ -46731,8 +46769,8 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // trades>0, groups>0, closed=0  → user only has BUYs (no closed positions yet)
   // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
   // trades>0, closed>0, imported>0 → working
-  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} redeemed_unverified_skipped=${redeemedUnverifiedSkipped} total_imported=${imported}`);
-  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount, redeemed_unverified_skipped: redeemedUnverifiedSkipped };
+  console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} redeemed_unverified_skipped=${redeemedUnverifiedSkipped} future_dated_skipped=${futureDatedSkipped} total_imported=${imported}`);
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount, redeemed_unverified_skipped: redeemedUnverifiedSkipped, future_dated_skipped: futureDatedSkipped };
 }
 
 // ── WHALE BACKFILL CRON ─────────────────────────────────────────────────────
@@ -63419,6 +63457,48 @@ app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, r
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── Self-healing sweep for future-dated rows ────────────────────────────
+// The ingestion guard (backfillRealizedTrades, 2026-07-29) stops NEW ones
+// being written, but rows already in the table from before it — and any
+// that slip through a path not yet identified — still poison live scores.
+// The manual corrective-delete endpoint above exists, but relying on
+// someone remembering to curl it is how the 2026-07-28 delete ended up
+// leaving rows behind. This runs the same delete automatically, hourly.
+//
+// Deliberately mirrors the manual endpoint's safety check: refuses to
+// delete any row a flex_backing_settlements record already points at,
+// because that means real FP moved against the fabricated trade and it
+// needs a human reversal decision, not a silent delete underneath it.
+async function _sweepFutureDatedTrades() {
+  if (!pool) return;
+  try {
+    const badRows = await dbQuery(`SELECT id FROM realized_trades WHERE closed_at > NOW()`).catch(() => []);
+    if (!badRows.length) return;
+    const badIds = badRows.map(r => r.id);
+
+    const tainted = await dbQuery(
+      `SELECT id, trade_id FROM flex_backing_settlements WHERE trade_id = ANY($1::bigint[])`,
+      [badIds]
+    ).catch(() => []);
+    if (tainted.length) {
+      console.error('[future-dated-sweep] REFUSING to auto-delete —', tainted.length,
+        'settlement row(s) already reference fabricated trades. Needs manual reversal. trade_ids:',
+        tainted.map(t => t.trade_id).join(','));
+      return;
+    }
+
+    const del = await dbQuery(`DELETE FROM realized_trades WHERE closed_at > NOW() RETURNING id`).catch(() => []);
+    if (del.length) {
+      console.warn('[future-dated-sweep] deleted', del.length,
+        'fabricated future-dated realized_trades row(s). Underlying positions remain open on Polymarket and re-ingest correctly once they actually resolve.');
+    }
+  } catch (e) {
+    console.warn('[future-dated-sweep] error:', e.message);
+  }
+}
+setTimeout(() => { _sweepFutureDatedTrades().catch(() => {}); }, 120 * 1000);
+setInterval(() => { _sweepFutureDatedTrades().catch(() => {}); }, 60 * 60 * 1000);
 
 app.get('/api/admin/other-category-report', requireAdminSecret, async (req, res) => {
   try {

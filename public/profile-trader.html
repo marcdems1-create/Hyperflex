@@ -194,7 +194,15 @@
 
       // ── meta strip
       var stripBits = [];
-      if (c && c.avg_hold_days != null) stripBits.push('Avg hold <b>' + c.avg_hold_days + 'd</b>');
+      if (c && c.avg_hold_days != null) {
+        var hd = c.avg_hold_days;
+        // Sub-day averages are real (same-session sports books), not a
+        // missing value — show "<1d" rather than a bare "0d".
+        var hdLabel = hd < 1 ? '&lt;1d' : (hd < 10 ? hd.toFixed(1) : Math.round(hd)) + 'd';
+        stripBits.push('Avg hold <b>' + hdLabel + '</b>'
+          + (c.avg_hold_known_n != null && c.n && c.avg_hold_known_n < c.n
+              ? ' <span style="opacity:.7">(' + c.avg_hold_known_n + ' of ' + c.n + ' timed)</span>' : ''));
+      }
       if (c && c.avg_size_usd != null)  stripBits.push('Avg size <b>' + usd(c.avg_size_usd) + '</b>');
       if (c && c.categories && c.categories.length) stripBits.push('Categories <b>' + c.categories.map(esc).join(' · ') + '</b>');
       var strip = stripBits.length ? '<div class="strip">' + stripBits.join(' &nbsp;·&nbsp; ') + '</div>' : '';
