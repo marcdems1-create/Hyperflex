@@ -9,7 +9,12 @@
 <style>
   :root{
     --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff; --purple:#a855f7; --amber:#f59e0b;
-    --paper:#0e0e15; --ink:#f0f0f5; --border:#1e1e2a; --muted:rgba(240,240,245,.45);
+    /* --muted lifted .45 -> .62 (2026-07-29): at .45 every label, scope
+       line, and disclosure on the page sat near the low end of readable on
+       a #0e0e15 background, which made the whole surface read as washed
+       out regardless of type size. Contrast was doing as much damage as
+       scale. --border lifted similarly so section edges actually register. */
+    --paper:#0e0e15; --ink:#f0f0f5; --border:#26263a; --muted:rgba(240,240,245,.62);
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',-apple-system,sans-serif;}
@@ -147,7 +152,7 @@
   .sim-name{font-size:17px;font-weight:700;color:var(--ink);}
   a.sim-name:hover{color:#4d9fff;text-decoration:underline;}
   .sim-sim{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
-  .sim-compare{font-size:13.5px;color:var(--soft,#aab);margin-top:7px;line-height:1.55;}
+  .sim-compare{font-size:13.5px;color:rgba(240,240,245,.82);margin-top:7px;line-height:1.55;}
   .sim-compare b{color:var(--ink);}
   .sim-scope{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
   .sim-edge{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:800;white-space:nowrap;text-align:right;}
@@ -220,6 +225,34 @@
 
     .p-section-title { font-size: 28px; }
     .p-section { margin-top: 96px; }
+
+    /* Similar-trader matcher — added 2026-07-29. Every other block in this
+       stylesheet has a desktop entry here; without one this section renders
+       at mobile sizes next to 46px stat tiles and reads as a footnote,
+       which is backwards: it's the only section on the page that isn't a
+       restatement of what Polymarket already shows you. */
+    .sim-row { padding: 30px 34px; gap: 36px; }
+    .sim-name { font-size: 32px; }
+    .sim-sim { font-size: 19px; }
+    .sim-compare { font-size: 25px; margin-top: 14px; }
+    .sim-scope { font-size: 18px; margin-top: 12px; }
+    .sim-edge { font-size: 52px; }
+    .sim-edge small { font-size: 17px; margin-top: 6px; }
+    .similar-list { gap: 18px; }
+
+    .open-row { padding: 20px 26px; font-size: 24px; }
+    .open-row .os { font-size: 21px; }
+    .hist-count { font-size: 18px; }
+    .void-note { font-size: 19px; max-width: none; }
+    .qual-note { font-size: 20px; }
+    .raw-stats { font-size: 24px; }
+    .raw-addr { font-size: 22px; }
+    .listing-notice { font-size: 20px; padding: 22px 26px; }
+    .listing-notice label { font-size: 17px; }
+    .category-stub { font-size: 21px; padding: 26px; }
+    .p-scope { font-size: 20px; }
+    .p-handle { font-size: 26px; }
+    .p-address { font-size: 19px; }
   }
 </style>
 </head>
