@@ -13507,6 +13507,20 @@ async function _buildTraderProfile(user) {
 const SIMILAR_MIN_COSINE      = 0.30; // below this the books aren't comparable
 const SIMILAR_MIN_SHARED_CATS = 1;
 const SIMILAR_MAX_RESULTS     = 5;
+// A category needs at least this many of YOUR trades before it can be used
+// to claim someone is beating you at it. Without this the matcher happily
+// compares your 3 trades to their 39 and prints "+122% edge" — precision
+// the sample cannot support, and precisely the failure mode this file's
+// own history keeps repeating. Their side is already n>=10 gated by the
+// category boards; this is the missing gate on our side of the comparison.
+const SIMILAR_MIN_MY_CAT_N    = 5;
+// 'other' is the residual bucket the classifier assigns when nothing
+// matches — ~39% of durable trades at last measurement. Two wallets both
+// having a big 'other' book says nothing about whether they trade alike,
+// so it's excluded from the similarity vector and can never headline a
+// comparison. Excluding it means some wallets get no matches; that's the
+// honest outcome versus asserting a style match we can't actually see.
+const SIMILAR_EXCLUDED_CATS   = new Set(['other']);
 
 function _cosine(a, b) {
   let dot = 0, na = 0, nb = 0;
@@ -13544,11 +13558,21 @@ async function computeSimilarBetterTraders(userId) {
     m.roiSum += Math.min(Math.max(Number(r.realized_roi), -1.0), ROI_CAP);
   }
   const myVec = {};
-  for (const [cat, m] of mine) myVec[cat] = m.n;
+  for (const [cat, m] of mine) {
+    if (SIMILAR_EXCLUDED_CATS.has(cat)) continue;
+    myVec[cat] = m.n;
+  }
   const myRoiByCat = {};
   for (const [cat, m] of mine) myRoiByCat[cat] = { n: m.n, roi_pct: Math.round((m.roiSum / m.n) * 1000) / 10 };
   const myOverallRoi = Object.values(myRoiByCat).reduce((s, c) => s + c.roi_pct * c.n, 0) /
                        Object.values(myRoiByCat).reduce((s, c) => s + c.n, 0);
+
+  // Nothing classifiable to match on — say so rather than matching on the
+  // residual bucket and pretending it means something.
+  if (!Object.keys(myVec).length) {
+    return { your_categories: myRoiByCat, matches: [], candidate_pool: 0,
+             note: 'No categorised durable trades yet — nothing to match a style against.' };
+  }
 
   // Candidate pool = wallets already qualifying on the per-category durable
   // boards. Gives us both their category vector and a per-category score
@@ -13558,6 +13582,7 @@ async function computeSimilarBetterTraders(userId) {
 
   const cand = new Map(); // user_id -> { vec, catScore, meta }
   for (const [category, board] of Object.entries(boards)) {
+    if (SIMILAR_EXCLUDED_CATS.has(category)) continue;
     for (const row of (board.leaderboard || [])) {
       if (row.user_id === userId) continue; // never match a wallet to itself
       if (!cand.has(row.user_id)) {
@@ -13580,7 +13605,9 @@ async function computeSimilarBetterTraders(userId) {
     const sim = _cosine(myVec, c.vec);
     if (sim < SIMILAR_MIN_COSINE) continue;
 
-    const shared = Object.keys(c.vec).filter(k => myVec[k] > 0);
+    // Shared categories where MY sample is big enough to be compared at
+    // all — see SIMILAR_MIN_MY_CAT_N.
+    const shared = Object.keys(c.vec).filter(k => (myVec[k] || 0) >= SIMILAR_MIN_MY_CAT_N);
     if (shared.length < SIMILAR_MIN_SHARED_CATS) continue;
 
     // Their blended score across the categories we actually share —
