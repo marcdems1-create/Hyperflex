@@ -63458,32 +63458,98 @@ app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, r
   }
 });
 
+// Timestamp of the commit that added the m.closed===true guard to
+// _parseOutcomeSettlement (888a713). Cache rows written before this were
+// produced by the unguarded parser — see the poisoned-cache block below.
+// Declared here, above its first reader, per this file's
+// define-before-use rule (the May 27 boot-crash lesson).
+const SETTLEMENT_CACHE_FIX_TS = '2026-07-29T00:48:21Z'; // commit 888a713
+
+// GET /api/admin/record-integrity — one call that answers "how healthy is
+// the score-bearing data right now", so measuring the blast radius of a
+// correction never requires a series of ad-hoc queries again. Built after
+// the 2026-07-29 cache purge, where the actual platform-wide impact was
+// unmeasurable because the numbers only existed in the purge response and
+// a second invocation overwrote it with zeros.
+app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const [board, trades, cache, future] = await Promise.all([
+      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE close_reason IN ('redeemed-win','redeemed-loss'))::int AS redeemed_origin,
+               COUNT(*) FILTER (WHERE close_reason IN ('sold-profit','sold-loss'))::int AS sold_origin,
+               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable,
+               COUNT(*) FILTER (WHERE opened_at IS NULL)::int AS no_open_timestamp,
+               COUNT(DISTINCT user_id)::int AS wallets
+        FROM realized_trades WHERE closed_at IS NOT NULL
+      `).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS total,
+                      COUNT(*) FILTER (WHERE verified_at < $1::timestamptz)::int AS pre_fix
+               FROM market_settlement_cache`, [SETTLEMENT_CACHE_FIX_TS]).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE closed_at > NOW()`).catch(() => []),
+    ]);
+
+    res.json({
+      qualifying_wallets: board ? board.rows.length : null,
+      min_n_floor: ROI_MIN_N_FLOOR,
+      trades: trades[0] || null,
+      settlement_cache: cache[0] || null,
+      future_dated_rows: future[0] ? future[0].n : null,
+      gate_3: { threshold: 'n>=30 AND hit_rate>=58%', note: 'see /api/edge/receipts for the live edge number — unrelated to the ROI board above' },
+      note: 'qualifying_wallets is the live count on the durable-market board at the n>=' + ROI_MIN_N_FLOOR + ' floor. settlement_cache.pre_fix should be 0; anything above 0 means poisoned rows are being served again. future_dated_rows should be 0 (hourly sweep).',
+    });
+  } catch (e) {
+    console.error('[record-integrity]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── POISONED SETTLEMENT CACHE ────────────────────────────────────────────
-// Found 2026-07-29 hand-checking tetrose (a live matcher recommendation)
-// against polymarket.com. Our record: "US x Iran permanent peace deal" YES,
-// graded WIN, +$521,232, +853% ROI — a single row carrying that wallet's
-// entire positive record. Polymarket's own positions API for the same
-// wallet: the US-Iran peace-deal positions are at curPrice=0, cashPnl
-// NEGATIVE. There is no US-Iran permanent peace deal. Second confirmed
-// case on the same wallet: "WTI Crude hit (HIGH) $95 in July" graded WIN
-// +$25,096 (+478.8%), Polymarket says curPrice=0.0645, pnl −$20,181.
-// Aggregate: we show +$491K / +43.2% ROI; Polymarket's redeemed rows for
-// that wallet sum to −$515K with 264 of 311 negative.
+// Found 2026-07-29. `market_settlement_cache` was 100% poisoned: all 1,101
+// rows predated the 2026-07-28 guard, and of the 21 sampled rows gamma
+// could still reach, 21 disagreed with live gamma — the cache asserted a
+// settled outcome for markets gamma reports as OPEN. Contents were exactly
+// the documented symptom: "Will Josh Stein win the 2028 US Presidential
+// Election?" and "Will the Houston Texans win the 2027 NFL league
+// championship?" cached as decided. Measured via the audit endpoint below,
+// not inferred.
 //
 // WHY THE 2026-07-28 FIX DIDN'T CATCH IT: that fix added the
 // `m.closed === true` guard inside _parseOutcomeSettlement — correct, but
-// _verifyRedeemedSettlement checks `market_settlement_cache` FIRST and
-// returns early on a hit. Every settlement cached BEFORE that fix was
-// written by the unguarded parser, i.e. derived from price extremity on
-// markets that had not resolved. Those rows are permanent (`ON CONFLICT DO
-// NOTHING`, never invalidated), so the guard is bypassed for every
-// condition_id already in the cache. That is also why the 7/28 corrective
-// delete didn't hold: it removed the bad realized_trades rows, and the
-// poisoned cache regenerated them on the next backfill.
+// _verifyRedeemedSettlement checks this cache FIRST and returns early on a
+// hit. Every settlement cached BEFORE that fix was written by the
+// unguarded parser, i.e. derived from price extremity on markets that had
+// not resolved. Those rows are permanent (`ON CONFLICT DO NOTHING`, never
+// invalidated), so the guard is bypassed for every condition_id already
+// cached. That is also why the 7/28 corrective delete didn't hold: it
+// removed the bad realized_trades rows, and the poisoned cache
+// regenerated them on the next backfill.
+//
+// SCOPE — read this before assuming a wallet's numbers are fabricated.
+// Only the REDEEMED path grades off this cache (close_reason
+// 'redeemed-win'/'redeemed-loss'). SOLD-path rows ('sold-profit'/
+// 'sold-loss') are computed from actual sell fills and are unaffected;
+// the purge below deliberately leaves them alone.
+//
+// ⚠️ Correction on record, because the first read of this was WRONG:
+// tetrose's +$521,232 / +853% "US x Iran permanent peace deal" row was
+// initially called fabricated on the basis that Polymarket's /positions
+// API shows that wallet's US-Iran positions at curPrice=0 with negative
+// cashPnl. That comparison was invalid. The row is `sold-profit`, entry
+// 0.1001 → exit 0.9544 — a real early exit at a real market price during
+// a peace-deal optimism spike, months before the market resolved NO. A
+// legitimate +853%. Our realized_trades records closed ROUND-TRIPS;
+// Polymarket's redeemed bucket records positions HELD TO RESOLUTION.
+// Those are different sets of trades and a sign difference between them
+// is not evidence of anything. Do not repeat that comparison.
 //
 // The cache is pure derived data — purging costs a gamma re-fetch and
 // nothing else. Anything re-cached now goes through the guarded path.
-const SETTLEMENT_CACHE_FIX_TS = '2026-07-29T00:48:21Z'; // commit 888a713
+// (SETTLEMENT_CACHE_FIX_TS is declared above /api/admin/record-integrity,
+// its first reader.)
 
 // GET /api/admin/settlement-cache-audit — read-only. Splits the cache on
 // the fix timestamp and live re-verifies a bounded sample of the pre-fix
