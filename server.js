@@ -62905,6 +62905,66 @@ app.get('/api/admin/future-dated-trades-audit', requireAdminSecret, async (req, 
   }
 });
 
+// ── POST /api/admin/fix-future-dated-trades ──────────────────────────────────
+// Corrective delete for the bug the audit endpoint above surfaces. There is
+// no valid "corrected value" for a future-dated row — we don't know the real
+// outcome, because the market hasn't resolved yet. The only correct fix is to
+// remove the fabricated row; the underlying position is still open on
+// Polymarket and will be ingested correctly, for real, once it actually
+// resolves (ingestion already fixed via _parseOutcomeSettlement's m.closed
+// guard, shipped 2026-07-28).
+// Defensive check first: if any fabricated trade_id was already referenced by
+// a flex_backing_settlements row (real FP already moved against fake data),
+// refuse to delete and surface those rows — that needs a manual reversal
+// decision, not a blind delete underneath a settlement record.
+//   curl -X POST "https://hyperflex.network/api/admin/fix-future-dated-trades?secret=$ADMIN_SECRET"
+app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const badRows = await dbQuery(`SELECT id FROM realized_trades WHERE closed_at > NOW()`);
+    const badIds = badRows.map(r => r.id);
+    if (badIds.length === 0) {
+      return res.json({ deleted: 0, note: 'Nothing to fix — no future-dated rows found.' });
+    }
+
+    const tainted = await dbQuery(
+      `SELECT id, backing_id, trade_id FROM flex_backing_settlements WHERE trade_id = ANY($1::bigint[])`,
+      [badIds]
+    );
+    if (tainted.length > 0) {
+      return res.status(409).json({
+        error: 'settlements_already_reference_fabricated_trades',
+        tainted_settlements: tainted,
+        note: 'Real FP was moved against fabricated trades. Refusing to delete automatically — these settlement rows need a manual reversal decision first.',
+      });
+    }
+
+    const before = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const beforeById = before ? new Map(before.rows.map(r => [r.user_id, r])) : new Map();
+
+    const del = await dbQuery(`DELETE FROM realized_trades WHERE closed_at > NOW() RETURNING id`);
+
+    const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const afterIds = after ? new Set(after.rows.map(r => r.user_id)) : new Set();
+
+    const droppedOffLeaderboard = [...beforeById.values()]
+      .filter(r => !afterIds.has(r.user_id))
+      .map(r => ({ user_id: r.user_id, display_name: r.display_name, n_before: r.n }));
+
+    res.json({
+      deleted: del.length,
+      qualifying_wallets_before: beforeById.size,
+      qualifying_wallets_after: afterIds.size,
+      dropped_off_leaderboard: droppedOffLeaderboard,
+      note: 'Fabricated future-dated rows removed from realized_trades. Underlying positions remain open on Polymarket and will be ingested correctly once they actually resolve. Re-run GET /api/admin/future-dated-trades-audit to confirm 0 remaining rows.',
+    });
+  } catch (e) {
+    console.error('[fix-future-dated-trades]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/other-category-report', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
