@@ -13283,7 +13283,14 @@ async function _resolveTraderHandle(handle) {
   } else if (isAddress) {
     rows = await dbQuery('SELECT * FROM users WHERE LOWER(polymarket_address) = LOWER($1) LIMIT 1', [h]).catch(() => []);
   } else {
-    rows = await dbQuery('SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [h]).catch(() => []);
+    // Match handle OR username. `handle` is the canonical public identifier
+    // (/@handle, /p/handle) and many wallet-imported traders have a handle
+    // with username still NULL — username-only lookup 404'd those, which is
+    // every whale-imported profile on the site.
+    rows = await dbQuery(
+      'SELECT * FROM users WHERE LOWER(handle) = LOWER($1) OR LOWER(username) = LOWER($1) LIMIT 1',
+      [h]
+    ).catch(() => []);
   }
   return (rows && rows[0]) || null;
 }
