@@ -6,79 +6,77 @@
   <title>Trader Profile — HYPERFLEX</title>
   <meta property="og:type" content="profile">
   <meta property="og:title" content="Trader Profile — HYPERFLEX">
-  <meta property="og:description" content="Verified prediction market track record on HYPERFLEX. FLEX score, wallet class, CLV and recent takes.">
+  <meta property="og:description" content="Verified prediction market track record on HYPERFLEX. FLEX score, wallet class, CLV and resolved trade ledger.">
   <meta property="og:image" content="https://hyperflex.network/og-default.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root{
-      --paper:#0e0e15; --paper-2:#15151e; --paper-3:#1c1c28;
-      --ink:#f0f0f5; --dim:#8a8aa0; --soft:#aab; --border:#232333;
-      --cyan:#22d3ee; --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --gray:#6b7280;
+      --paper:#0b0b12; --card:#0e0e15; --card-2:#12121b;
+      --ink:#e8e8f0; --dim:#7e7e95; --soft:#a0a0b8; --border:#1e1e2a;
+      --cyan:#22d3ee; --green:#22c55e; --red:#ef4444;
       --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
-      --mono:'JetBrains Mono',monospace;
+      --mono:'JetBrains Mono',ui-monospace,monospace;
     }
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
     a{color:inherit;text-decoration:none}
     #nav-root{position:relative;z-index:200}
-    .wrap{max-width:760px;margin:0 auto;padding:0 16px 80px}
+    .wrap{max-width:720px;margin:0 auto;padding:28px 16px 80px}
 
-    /* HERO */
-    .hero{margin-top:18px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--paper-2)}
-    .banner{height:140px;background:linear-gradient(135deg,#13131f 0%,#1b1b2e 60%,#0e0e15 100%);background-size:cover;background-position:center}
-    .hero-body{padding:0 20px 20px;position:relative}
-    .avatar-row{display:flex;align-items:flex-end;gap:14px;margin-top:-38px}
-    .avatar{width:84px;height:84px;border-radius:50%;border:3px solid var(--paper-2);background:var(--paper-3);object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:var(--cyan)}
-    .verified{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--cyan);color:#04121a;font-size:11px;font-weight:900;margin-left:6px;vertical-align:middle}
-    .name-block{padding-bottom:6px;min-width:0}
-    .display-name{font-size:22px;font-weight:800;letter-spacing:-0.4px;line-height:1.15;display:flex;align-items:center;flex-wrap:wrap}
-    .handle{font-size:13px;color:var(--dim);font-family:var(--mono);margin-top:1px}
-    .bio{font-size:13px;color:var(--soft);line-height:1.55;margin-top:12px;max-width:560px}
-    .trade-bio{font-size:12.5px;color:var(--soft);line-height:1.6;margin-top:12px;padding:10px 12px;background:var(--paper-3);border:1px solid var(--border);border-radius:8px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 
-    /* FLEX + class */
-    .flex-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
-    .flex-block{display:flex;align-items:baseline;gap:10px}
-    .flex-num{font-family:var(--mono);font-size:46px;font-weight:800;color:var(--cyan);line-height:1;letter-spacing:-1px}
-    .flex-meta{display:flex;flex-direction:column;gap:3px}
-    .flex-label{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:2px}
-    .tier-badge{display:inline-block;font-size:11px;font-weight:700;color:var(--cyan);background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.28);border-radius:6px;padding:2px 8px;text-transform:uppercase;letter-spacing:1px;width:fit-content}
-    .class-badge{font-size:12px;font-weight:800;border-radius:7px;padding:5px 12px;letter-spacing:1.5px;text-transform:uppercase}
+    /* Card header strip */
+    .card-head{display:flex;align-items:baseline;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border)}
+    .who{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--ink)}
+    .who-sub{font-family:var(--mono);font-size:13px;color:var(--dim);margin-left:8px}
+    .brand{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--cyan)}
 
-    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-    .chip{font-size:11px;font-weight:600;color:var(--soft);background:var(--paper-3);border:1px solid var(--border);border-radius:20px;padding:4px 11px}
+    /* Hero score */
+    .hero{padding:26px 22px 22px}
+    .score{font-family:var(--mono);font-size:66px;font-weight:700;color:var(--cyan);line-height:1;letter-spacing:-0.02em}
+    .score.mute{color:var(--dim)}
+    .score-lbl{font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--dim);margin-left:14px}
+    .score-row{display:flex;align-items:baseline}
 
-    /* INSIDER card */
-    .insider{margin-top:16px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.28);border-radius:10px;padding:12px 14px}
-    .insider-label{font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}
-    .insider-text{font-size:13px;color:#d8c08a;line-height:1.5}
+    /* Auto-generated trade bio */
+    .trade-bio{font-size:13px;color:var(--soft);line-height:1.65;margin-top:16px;max-width:620px}
 
-    /* STATS */
-    .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:16px}
-    .stat{background:var(--paper-2);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center}
-    .stat-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-0.5px}
-    .stat-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
-    @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}}
+    /* Stat quad */
+    .quad{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .q{padding:14px 18px;border-right:1px solid var(--border)}
+    .q:last-child{border-right:none}
+    .q-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim)}
+    .q-val{font-family:var(--mono);font-size:19px;font-weight:700;margin-top:5px;letter-spacing:-0.01em}
+    .q-sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+    .pos{color:var(--green)} .neg{color:var(--red)} .cy{color:var(--cyan)}
+    @media(max-width:620px){.quad{grid-template-columns:repeat(2,1fr)}.q{border-bottom:1px solid var(--border)}}
 
-    /* FEED */
-    .feed-head{font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:2px;margin:28px 0 12px}
-    .take{background:var(--paper-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px}
-    .take-top{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
-    .side{font-size:10px;font-weight:800;font-family:var(--mono);padding:2px 7px;border-radius:5px;letter-spacing:0.5px;background:rgba(34,211,238,0.12);color:var(--cyan)}
-    .grade{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;letter-spacing:0.5px}
-    .grade.correct{background:rgba(34,197,94,0.14);color:var(--green)}
-    .grade.wrong{background:rgba(239,68,68,0.14);color:var(--red)}
-    .grade.open{background:var(--paper-3);color:var(--dim)}
-    .take-time{font-size:11px;color:var(--dim);margin-left:auto;font-family:var(--mono)}
-    .take-q{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4}
-    .take-thesis{font-size:13px;color:var(--soft);line-height:1.55;margin-top:6px}
-    .take-foot{font-size:11px;color:var(--dim);margin-top:9px;font-family:var(--mono)}
+    /* Meta strip */
+    .strip{padding:12px 22px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--dim)}
+    .strip b{color:var(--ink);font-weight:500}
+
+    /* Chart */
+    .chart-wrap{padding:18px 22px 8px}
+    .chart-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+    .chart-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim)}
+    svg.spark{width:100%;height:120px;display:block}
+
+    /* Resolution ledger */
+    .led-head{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim);padding:16px 22px 10px;border-top:1px solid var(--border)}
+    .row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:11px 22px;border-bottom:1px solid var(--border)}
+    .row:last-of-type{border-bottom:none}
+    .row-q{font-size:14px;font-weight:500;color:var(--ink);line-height:1.35}
+    .row-meta{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:4px}
+    .tag{font-weight:700}
+    .row-amt{font-family:var(--mono);font-size:14px;font-weight:600;white-space:nowrap;padding-top:1px}
+
+    .foot{display:flex;justify-content:space-between;padding:13px 22px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--dim)}
 
     .state{text-align:center;padding:70px 20px;color:var(--dim)}
-    .state h2{font-size:18px;color:var(--ink);font-weight:700;margin-bottom:8px}
-    .skeleton{color:var(--dim);text-align:center;padding:70px 20px;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+    .state h2{font-size:18px;color:var(--ink);font-weight:600;margin-bottom:8px}
+    .skeleton{color:var(--dim);text-align:center;padding:70px 20px;font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase}
   </style>
 </head>
 <body>
@@ -94,156 +92,147 @@
     function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
     function num(v){var n=parseFloat(v);return isNaN(n)?null:n;}
 
-    function fmtUsd(v){
+    function usd(v){
       var n=num(v); if(n==null) return '—';
-      var neg=n<0; n=Math.abs(n); var s;
-      if(n>=1e6) s='$'+(n/1e6).toFixed(1)+'M';
-      else if(n>=1e3) s='$'+(n/1e3).toFixed(1)+'K';
-      else s='$'+n.toFixed(0);
-      return (neg?'-':'')+s;
+      var neg=n<0; n=Math.abs(n);
+      var s = n>=1e6 ? '$'+(n/1e6).toFixed(1)+'M'
+            : n>=1e4 ? '$'+Math.round(n/1e3)+'K'
+            : '$'+Math.round(n).toLocaleString();
+      return (neg?'−':'')+s;
     }
-    function fmtPct(v){var n=num(v); return n==null?'—':n.toFixed(1)+'%';}
-    function fmtClv(v){var n=num(v); if(n==null) return '—'; return (n>=0?'+':'')+n.toFixed(1)+'¢';}
-    function fmtInt(v){var n=num(v); return n==null?'—':String(Math.round(n));}
-    function fmtAgo(ts){
-      if(!ts) return '';
-      var d=new Date(ts), diff=(Date.now()-d.getTime())/1000;
-      if(diff<60) return 'just now';
-      if(diff<3600) return Math.floor(diff/60)+'m ago';
-      if(diff<86400) return Math.floor(diff/3600)+'h ago';
-      if(diff<86400*2) return 'yesterday';
-      return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    function signedUsd(v){
+      var n=num(v); if(n==null) return '—';
+      return (n>=0?'+':'')+usd(Math.abs(n));
+    }
+    function pct(v,d){var n=num(v); return n==null?'—':n.toFixed(d==null?1:d)+'%';}
+    function signedPct(v){var n=num(v); return n==null?'—':(n>=0?'+':'')+n.toFixed(1)+'%';}
+    function cents(v){var n=num(v); return n==null?'—':(n>=0?'+':'')+n.toFixed(1)+'¢';}
+    function price(v){var n=num(v); if(n==null) return '—'; return n>=1 ? '$1.00' : (n<=0 ? '$0.00' : Math.round(n*100)+'¢');}
+
+    // CLV letter grade from average cents of closing-line value. Thresholds
+    // are display buckets over a real measured number — not a separate score.
+    function clvGrade(c){
+      var n=num(c); if(n==null) return null;
+      if(n>=20) return 'A'; if(n>=10) return 'B'; if(n>=0) return 'C'; return 'D';
     }
 
-    // wallet_class values are stored lowercase ('sharp'|'good'|'square'|'fade'|'pending').
-    var CLASS_MAP = {
-      sharp:  {label:'SHARP',  color:'#22d3ee', bg:'rgba(34,211,238,0.12)', br:'rgba(34,211,238,0.30)'},
-      good:   {label:'GOOD',   color:'#22c55e', bg:'rgba(34,197,94,0.12)',  br:'rgba(34,197,94,0.30)'},
-      square: {label:'SQUARE', color:'#9ca3af', bg:'rgba(156,163,175,0.12)',br:'rgba(156,163,175,0.30)'},
-      fade:   {label:'FADE',   color:'#ef4444', bg:'rgba(239,68,68,0.12)',  br:'rgba(239,68,68,0.30)'}
-    };
+    var CLASS_LABEL = { sharp:'SHARP', good:'GOOD', square:'SQUARE', fade:'FADE' };
+
+    function sparkline(series){
+      if(!series || series.length<2) return '';
+      var vals = series.map(function(p){return num(p.roi_pct)||0;});
+      var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals);
+      if(max===min){max=min+1;}
+      var W=680, H=120, pad=6;
+      var pts = vals.map(function(v,i){
+        var x = (i/(vals.length-1))*W;
+        var y = H-pad - ((v-min)/(max-min))*(H-pad*2);
+        return x.toFixed(1)+','+y.toFixed(1);
+      });
+      var line = pts.join(' ');
+      var area = '0,'+H+' '+line+' '+W+','+H;
+      return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Cumulative ROI over resolved trades">'+
+        '<polygon points="'+area+'" fill="rgba(34,211,238,0.10)"></polygon>'+
+        '<polyline points="'+line+'" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>'+
+      '</svg>';
+    }
 
     function render(d){
       d = d || {};
-      var name = d.display_name || d.handle || 'Trader';
-      var handle = d.handle || d.username || '';
+      var c = d.card || null;
+      var name = d.handle || d.display_name || 'trader';
       var wc = (d.wallet_class || '').toLowerCase();
-      var cls = CLASS_MAP[wc] || null;
-      var clv = num(d.clv_avg_cents);
+      var grade = clvGrade(d.clv_avg_cents);
 
-      // Banner
-      var banner = d.banner_url
-        ? '<div class="banner" style="background-image:url(\'/api/img-proxy?url=' + encodeURIComponent(d.banner_url) + '\')"></div>'
-        : '<div class="banner"></div>';
-
-      // Avatar (image or initial)
-      var avatar = d.avatar_url
-        ? '<img class="avatar" src="/api/img-proxy?url=' + encodeURIComponent(d.avatar_url) + '" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'avatar\',textContent:\'' + esc((name[0]||'?').toUpperCase()) + '\'}))">'
-        : '<div class="avatar">' + esc((name[0] || '?').toUpperCase()) + '</div>';
-
-      var verified = d.wallet_verified ? '<span class="verified" title="Wallet verified">&#10003;</span>' : '';
-
-      // FLEX score (null until qualified)
       var flexNum = (d.flex_score == null) ? '—' : String(d.flex_score);
-      var tierBadge = d.flex_tier ? '<span class="tier-badge">' + esc(d.flex_tier) + '</span>' : '';
 
-      // Wallet class badge (hidden when unrated/pending)
-      var classBadge = cls
-        ? '<span class="class-badge" style="color:' + cls.color + ';background:' + cls.bg + ';border:1px solid ' + cls.br + '">' + cls.label + '</span>'
-        : '';
+      // ── header + hero score
+      var head =
+        '<div class="card-head">' +
+          '<div><span class="who">@' + esc(name) + '</span><span class="who-sub">· trader profile</span></div>' +
+          '<span class="brand">HYPERFLEX</span>' +
+        '</div>';
 
-      // Topic chips (topic_preferences is not yet a column — render only if present)
-      var chips = '';
-      if (Array.isArray(d.topic_preferences) && d.topic_preferences.length) {
-        chips = '<div class="chips">' + d.topic_preferences.map(function(t){
-          return '<span class="chip">' + esc(t) + '</span>';
-        }).join('') + '</div>';
-      }
-
-      // INSIDER card — only for sharp wallets with strong CLV
-      var insider = '';
-      if (wc === 'sharp' && clv != null && clv > 15) {
-        insider = '<div class="insider">' +
-          '<div class="insider-label">Insider activity detected</div>' +
-          '<div class="insider-text">This wallet averages +' + clv.toFixed(1) + '¢ CLV across ' +
-          fmtInt(d.clv_sample_size) + ' trades.</div></div>';
-      }
-
-      var bioHtml = d.bio ? '<div class="bio">' + esc(d.bio) + '</div>' : '';
-
-      // Auto-generated trade-history bio (from computeTradeBio server-side) —
-      // distinct from the self-written bio above. Sits directly under the
-      // FLEX score, since it's the thing that substantiates the number:
-      // built strictly from resolved realized_trades rows, losses named,
-      // not editable. Absent entirely (null) for wallets under the
-      // TRADE_BIO_MIN_N resolved-trade floor rather than rendering thin.
-      var tradeBioHtml = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
+      var bio = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
 
       var hero =
-        '<div class="hero">' + banner +
-          '<div class="hero-body">' +
-            '<div class="avatar-row">' + avatar +
-              '<div class="name-block">' +
-                '<div class="display-name">' + esc(name) + verified + '</div>' +
-                (handle ? '<div class="handle">@' + esc(handle) + '</div>' : '') +
-              '</div>' +
-            '</div>' +
-            bioHtml +
-            '<div class="flex-row">' +
-              '<div class="flex-block">' +
-                '<div class="flex-num">' + flexNum + '</div>' +
-                '<div class="flex-meta"><span class="flex-label">FLEX Score</span>' + tierBadge + '</div>' +
-              '</div>' +
-              classBadge +
-            '</div>' +
-            tradeBioHtml +
-            chips +
-            insider +
-          '</div>' +
+        '<div class="hero">' +
+          '<div class="score-row">' +
+            '<span class="score' + (flexNum==='—'?' mute':'') + '">' + flexNum + '</span>' +
+            '<span class="score-lbl">flex score</span>' +
+          '</div>' + bio +
         '</div>';
 
-      // Stats row
-      var stats =
-        '<div class="stats">' +
-          '<div class="stat"><div class="stat-val">' + fmtPct(d.prediction_win_rate) + '</div><div class="stat-lbl">Win rate</div></div>' +
-          '<div class="stat"><div class="stat-val">' + fmtInt(d.predictions_resolved) + '</div><div class="stat-lbl">Resolved</div></div>' +
-          '<div class="stat"><div class="stat-val">' + fmtUsd(d.realized_pnl_usd) + '</div><div class="stat-lbl">Realized PnL</div></div>' +
-          '<div class="stat"><div class="stat-val">' + fmtUsd(d.total_volume_usd) + '</div><div class="stat-lbl">Volume</div></div>' +
-          '<div class="stat"><div class="stat-val">' + fmtClv(d.clv_avg_cents) + '</div><div class="stat-lbl">CLV avg</div></div>' +
+      // ── stat quad
+      var winRate = c && c.win_rate_pct != null ? c.win_rate_pct : num(d.prediction_win_rate);
+      var nCount  = c && c.n != null ? c.n : num(d.predictions_resolved);
+      var roi     = c ? c.realized_roi_pct : null;
+
+      var quad =
+        '<div class="quad">' +
+          '<div class="q"><div class="q-lbl">CLV grade</div>' +
+            '<div class="q-val">' + (grade || '—') + '</div>' +
+            '<div class="q-sub">avg ' + cents(d.clv_avg_cents) + '</div></div>' +
+          '<div class="q"><div class="q-lbl">win rate</div>' +
+            '<div class="q-val">' + pct(winRate, 0) + '</div>' +
+            '<div class="q-sub">' + (nCount != null ? 'n = ' + nCount : '—') + '</div></div>' +
+          '<div class="q"><div class="q-lbl">realized ROI</div>' +
+            '<div class="q-val ' + (roi == null ? '' : (roi >= 0 ? 'pos' : 'neg')) + '">' + signedPct(roi) + '</div>' +
+            '<div class="q-sub">' + (c && c.total_staked_usd ? usd(c.total_staked_usd) + ' staked' : 'all time') + '</div></div>' +
+          '<div class="q"><div class="q-lbl">wallet class</div>' +
+            '<div class="q-val cy">' + (CLASS_LABEL[wc] || '—') + '</div>' +
+            '<div class="q-sub">' + (d.clv_sample_size ? 'n = ' + d.clv_sample_size : 'unrated') + '</div></div>' +
         '</div>';
 
-      // Takes feed
-      var takes = Array.isArray(d.takes) ? d.takes : [];
-      var feed;
-      if (!takes.length) {
-        feed = '<div class="feed-head">Recent takes</div>' +
-          '<div class="take" style="text-align:center;color:var(--dim)">No takes yet. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div>';
-      } else {
-        feed = '<div class="feed-head">Recent takes</div>' + takes.map(function(t){
-          t = t || {};
-          var grade = t.is_correct === true ? '<span class="grade correct">CORRECT</span>'
-                    : t.is_correct === false ? '<span class="grade wrong">WRONG</span>'
-                    : '<span class="grade open">OPEN</span>';
-          var side = t.side ? '<span class="side">' + esc(String(t.side).toUpperCase()) + '</span>' : '';
-          var q = esc(t.question || '');
-          var qHtml = t.market_slug ? '<a href="/market/' + esc(t.market_slug) + '" class="take-q">' + q + '</a>' : '<div class="take-q">' + q + '</div>';
-          var thesis = t.thesis ? '<div class="take-thesis">' + esc(t.thesis) + '</div>' : '';
-          var agree = num(t.agree_count) || 0, disagree = num(t.disagree_count) || 0;
-          return '<div class="take">' +
-            '<div class="take-top">' + side + grade + '<span class="take-time">' + fmtAgo(t.created_at) + '</span></div>' +
-            qHtml + thesis +
-            '<div class="take-foot">' + agree + ' agree · ' + disagree + ' disagree</div>' +
+      // ── meta strip
+      var stripBits = [];
+      if (c && c.avg_hold_days != null) stripBits.push('Avg hold <b>' + c.avg_hold_days + 'd</b>');
+      if (c && c.avg_size_usd != null)  stripBits.push('Avg size <b>' + usd(c.avg_size_usd) + '</b>');
+      if (c && c.categories && c.categories.length) stripBits.push('Categories <b>' + c.categories.map(esc).join(' · ') + '</b>');
+      var strip = stripBits.length ? '<div class="strip">' + stripBits.join(' &nbsp;·&nbsp; ') + '</div>' : '';
+
+      // ── chart
+      var chart = '';
+      if (c && c.roi_series && c.roi_series.length > 1) {
+        chart = '<div class="chart-wrap">' +
+          '<div class="chart-head"><span class="chart-lbl">cumulative ROI</span>' +
+          '<span class="chart-lbl">' + c.roi_series.length + ' resolved</span></div>' +
+          sparkline(c.roi_series) + '</div>';
+      }
+
+      // ── resolution ledger
+      var ledger = '';
+      if (c && c.resolutions && c.resolutions.length) {
+        ledger = '<div class="led-head">recent resolutions</div>' + c.resolutions.map(function(r){
+          var isWin = r.outcome === 'win', isLoss = r.outcome === 'loss';
+          var tagCls = isWin ? 'pos' : (isLoss ? 'neg' : '');
+          var tag = isWin ? 'WIN' : (isLoss ? 'LOSS' : 'PUSH');
+          var bits = ['<span class="tag ' + tagCls + '">' + tag + '</span>'];
+          if (r.staked_usd != null) bits.push(usd(r.staked_usd) + ' staked');
+          if (r.entry_price != null) bits.push(price(r.entry_price) + ' → ' + price(r.exit_price));
+          if (r.held_days != null) bits.push(r.held_days + 'd held');
+          return '<div class="row">' +
+            '<div><div class="row-q">' + esc(r.question || '') + '</div>' +
+            '<div class="row-meta">' + bits.join(' · ') + '</div></div>' +
+            '<div class="row-amt ' + tagCls + '">' + signedUsd(r.pnl_usd) + '</div>' +
           '</div>';
         }).join('');
       }
 
-      document.getElementById('root').innerHTML = hero + stats + feed;
+      var foot =
+        '<div class="foot">' +
+          '<span>hyperflex.network/p/' + esc(name) + '</span>' +
+          '<span>' + (c && c.n != null ? c.n + ' resolved · ' : '') + 'updated live</span>' +
+        '</div>';
+
+      document.getElementById('root').innerHTML =
+        '<div class="card">' + head + hero + quad + strip + chart + ledger + foot + '</div>';
     }
 
     function notFound(){
       document.getElementById('root').innerHTML =
         '<div class="state"><h2>Trader not found</h2>' +
-        '<div>No profile matches this handle. <a href="/feed" style="color:var(--cyan)">Browse the feed →</a></div></div>';
+        '<div>No profile matches this handle. <a href="/predictors" style="color:var(--cyan)">Browse the leaderboard →</a></div></div>';
     }
 
     const raw = window.location.pathname.split('/').pop();
@@ -255,7 +244,7 @@
       .then(function(d){
         if (!d) return;
         if (d.error) { notFound(); return; }
-        document.title = (d.display_name || d.handle || 'Trader') + ' — HYPERFLEX';
+        document.title = (d.handle || d.display_name || 'Trader') + ' — HYPERFLEX';
         try {
           render(d);
         } catch (err) {

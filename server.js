@@ -30269,6 +30269,93 @@ async function computeTradeBio(userId) {
   return parts.join(' ');
 }
 
+// ── TRADER CARD PAYLOAD ─────────────────────────────────────────────────
+// Everything the /p/:handle card renders, computed in one pass over
+// realized_trades: headline aggregates, a cumulative-ROI series for the
+// sparkline, and the resolution ledger (per-trade receipts). Same
+// discipline as the rest of the scoring surface — every number here is
+// arithmetic over stored trade rows, nothing modelled, nothing inferred.
+//
+// Deliberately NOT emitting a per-trade letter grade even though the
+// design mock shows one: we have no per-trade CLV, and deriving an
+// authoritative-looking A/B badge from ROI alone would be exactly the
+// kind of fabricated-precision number this project keeps getting burned
+// by. Ships without it until there's a real per-trade signal behind it.
+const TRADER_CARD_MAX_RESOLUTIONS = 8;
+
+async function computeTraderCard(userId) {
+  if (!userId) return null;
+  const rows = await dbQuery(`
+    SELECT market_question, side, shares, entry_price, exit_price,
+           entry_cost_usd, exit_value_usd, realized_pnl, realized_roi,
+           opened_at, closed_at, market_durability
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL
+    ORDER BY closed_at ASC
+  `, [userId]).catch(e => { console.warn('[trader-card] query error:', e.message); return null; });
+  if (!rows || !rows.length) return null;
+
+  let wins = 0, losses = 0, totalCost = 0, totalPnl = 0;
+  let holdSum = 0, holdCount = 0, sizeSum = 0, sizeCount = 0;
+  const catCounts = new Map();
+  const series = [];
+  let cumCost = 0, cumPnl = 0;
+
+  for (const r of rows) {
+    const pnl  = r.realized_pnl   != null ? Number(r.realized_pnl)   : null;
+    const cost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
+    if (pnl != null) { totalPnl += pnl; if (pnl > 0) wins++; else if (pnl < 0) losses++; }
+    if (cost != null && cost > 0) { totalCost += cost; sizeSum += cost; sizeCount++; }
+    if (r.opened_at && r.closed_at) {
+      holdSum += (new Date(r.closed_at) - new Date(r.opened_at)) / 86400000;
+      holdCount++;
+    }
+    const cat = classifyCardCategory(r.market_question);
+    catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+
+    // Cumulative ROI point — running pnl over running deployed capital, so
+    // the curve reads as "return on everything staked so far", matching how
+    // the headline realized-ROI number is computed rather than diverging.
+    if (cost != null && cost > 0 && pnl != null) {
+      cumCost += cost; cumPnl += pnl;
+      series.push({ t: r.closed_at, roi_pct: Math.round((cumPnl / cumCost) * 1000) / 10 });
+    }
+  }
+
+  const n = rows.length;
+  const decided = wins + losses;
+  const resolutions = rows.slice(-TRADER_CARD_MAX_RESOLUTIONS).reverse().map(r => {
+    const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
+    return {
+      question:    r.market_question,
+      side:        r.side || null,
+      outcome:     pnl == null ? null : (pnl > 0 ? 'win' : (pnl < 0 ? 'loss' : 'push')),
+      staked_usd:  r.entry_cost_usd != null ? Math.round(Number(r.entry_cost_usd)) : null,
+      entry_price: r.entry_price != null ? Number(r.entry_price) : null,
+      exit_price:  r.exit_price  != null ? Number(r.exit_price)  : null,
+      pnl_usd:     pnl != null ? Math.round(pnl) : null,
+      held_days:   (r.opened_at && r.closed_at)
+        ? Math.max(0, Math.round((new Date(r.closed_at) - new Date(r.opened_at)) / 86400000))
+        : null,
+      durable:     r.market_durability === 'durable',
+    };
+  });
+
+  return {
+    n,
+    wins, losses,
+    win_rate_pct:     decided ? Math.round((wins / decided) * 1000) / 10 : null,
+    realized_roi_pct: totalCost > 0 ? Math.round((totalPnl / totalCost) * 1000) / 10 : null,
+    realized_pnl_usd: Math.round(totalPnl),
+    total_staked_usd: Math.round(totalCost),
+    avg_hold_days:    holdCount ? Math.round(holdSum / holdCount) : null,
+    avg_size_usd:     sizeCount ? Math.round(sizeSum / sizeCount) : null,
+    categories:       [...catCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(c => c[0]),
+    roi_series:       series,
+    resolutions,
+  };
+}
+
 app.get('/api/user/profile/:handle', async (req, res) => {
   try {
     const { handle } = req.params;
@@ -30312,6 +30399,14 @@ app.get('/api/user/profile/:handle', async (req, res) => {
     } catch (e) {
       console.warn('[api/user/profile] trade_bio failed:', e.message);
       profile.trade_bio = null;
+    }
+
+    // Trader-card payload (aggregates + ROI series + resolution ledger).
+    try {
+      profile.card = await computeTraderCard(profile.id);
+    } catch (e) {
+      console.warn('[api/user/profile] card failed:', e.message);
+      profile.card = null;
     }
 
     res.json(profile);
