@@ -49,6 +49,41 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-29 (✅ SHIPPED — trader card rebuild, auto-generated trade bio, "trades like you but better" matcher, 2 real data-integrity bugs fixed)
+
+**Shipped (all pushed to origin/main, verified on origin):**
+- `56e90b2` — `computeTradeBio()`: auto-generated trade-history bio from `realized_trades` (resolved count, top categories, avg/max size, win rate, ROI, worst loss named, streak). Deterministic template, zero Anthropic calls. Returns null under 5 resolved trades. Exposed as `trade_bio` on `/api/user/profile/:handle`; distinct from self-written `users.bio`.
+- `555f99c` — same bio ported to `/api/member/:userId` + rendered on `member.html` (`/@handle`) under the FLEX score. Also reverted an address-lookup change (Marc: raw-address browsing belongs on Polymarket, not duplicated here).
+- `04f1008` — `computeTraderCard()` + full rebuild of `profile-trader.html` (`/p/:handle`) to match Marc's design mock: hero score, stat quad (CLV grade / win rate / realized ROI / wallet class), meta strip, inline SVG cumulative-ROI chart, resolution ledger with per-trade staked / entry→exit / hold / PnL.
+- `23411cc`, `91cf9e2`, `5c911e9` — three successive type/width scale-up passes on the card (score 66→200px, width 720→1600px) plus muted-text contrast lift. Sizing remains a judgment call layered on judgment calls; flagged to Marc that further iteration probably needs a designer, not another guess.
+- `4e56190` — open positions section on the trader card, fetched client-side from existing `/api/polymarket/positions/:address` (5-min cached, non-blocking). Titles link to internal `/market/:slug` to keep trades on the builder-fee path.
+- `94dbe6d` + `df2201f` — **`computeSimilarBetterTraders()` + `GET /api/similar-traders/:handle`.** Per-category durable-trade vector, cosine similarity vs wallets already qualifying on the category boards, filtered to those outperforming on *shared* categories, headlining the widest gap. Candidate pool is qualifying boards only → cannot surface an unverified wallet (Gate 1); every row carries score + n.
+- `33863e9` — **pre-existing bug found while testing the above:** `_resolveTraderHandle` matched `LOWER(username)` only, so every wallet-imported profile (handle set, username NULL) 404'd — affected the existing `/api/trader-record` too, not just the new endpoint.
+- `ec2a401` — **two data-integrity fixes (see below).**
+- `a356551`, `49c0bff` — `/connect`: `Headline` → `Your record`, desktop scale entries for the sections that had none (incl. the new matcher, which was rendering mobile-sized next to 46px tiles), `--muted` .45→.62, plus a **cumulative realized-ROI equity curve** built client-side from `trade_history` and de-duplication of the matcher's repeated "you X% over N trades" clause into a single hoisted context line.
+
+**⚠️ ROOT CAUSE FOUND — future-dated `closed_at` was NOT fully fixed on 2026-07-28.** The 7/28 fix reordered the redeemed-path timestamp chain to prefer real settlement times but **left `endDate` in it as a fallback**, with an in-code comment assuming that path "shouldn't happen often." It does. A position arriving with neither `resolved_at` nor `redeemed_at` falls through to the market's *scheduled* end date — surfandturf was carrying `closed_at = 2026-10-31` when checked on 2026-07-29, three months out. `ec2a401` now **skips** the row at ingestion (not clamp-to-now: clamping asserts "resolved today", which is just a different fabricated timestamp — same reasoning the corrective-delete endpoint gives). Added `future_dated_skipped` to the backfill log line, plus an **hourly self-healing sweep** running the same corrective delete, because depending on someone remembering to curl the manual endpoint is exactly how the 7/28 delete left rows behind. Sweep keeps the manual endpoint's safety check: refuses to auto-delete any row a `flex_backing_settlements` record points at.
+
+**⚠️ Fake `0d` hold times fixed.** Redeemed-path rows carry `opened_at` NULL (known, documented), so duration computed as 0 and the bio asserted "held 0d before resolving against" on positions with no open timestamp at all. Now omits the clause when unknown, excludes those rows from `avg_hold_days` rather than averaging in zeros, reports `avg_hold_known_n` so the UI can show "n of m timed", and renders genuine sub-day books as "<1d".
+
+**⚠️ Two fake-precision bugs in the matcher, caught by live-testing my own commit (94dbe6d → fixed in df2201f):**
+1. No minimum n on **our** side of the comparison — their side is n≥10 gated by the category boards, ours wasn't. surfandturf's *3* "other" trades got compared to a 39-trade record and the card printed **"+122% edge."** Added `SIMILAR_MIN_MY_CAT_N = 5`.
+2. `'other'` — the classifier's residual bucket, ~39% of durable trades — was being treated as a trading style. Two wallets both having a big `other` book says nothing about whether they trade alike. Excluded from the similarity vector and from headlining. Net: fewer matches, thin books correctly get none.
+
+**Active blockers:**
+- (none new) — Gate 3 still below bar, unchanged this session. Nothing published.
+
+**Open questions / unverified:**
+- **The 2026-07-21 hand-check discipline has NOT been applied to any number added this session.** The bio text, the card aggregates, the equity curve, and every `edge_pct` in the matcher are all internally consistent and none have been checked against polymarket.com. Per this project's own record ("every number hand-checked against the outside world has been wrong"), that is the outstanding risk on all of it.
+- Matcher `edge_pct` values are large (+59% to +76% on Marc's wallet). Plausible given he's at −27.9% and matches are qualifying traders, but unverified — worth a hand-check before this is shown to anyone but Marc.
+- Sizing/visual quality on `/connect` and `/p/:handle` still not settled after 3 rounds; Marc's last read was "not visually appealing."
+
+**Notes for next session:**
+- Hand-check one matcher result end-to-end against polymarket.com (pick the `Warren-Buffett` n=133 row — biggest sample, least likely to be noise).
+- Confirm the hourly future-dated sweep actually logged a deletion in Railway logs; if it found 0 rows, the earlier ones were already cleaned and only the ingestion guard mattered.
+- `member.html` (`/@handle`) still has the old cluttered hero — Marc picked it as canonical, then we built the clean card on `/p/:handle` instead. Two competing profile surfaces still live; unresolved.
+- `copy_trade_subscriptions` is still notification-only. The card now *shows* open positions to copy but there is no copy mechanism behind it.
+
 ## 2026-07-28i (✅ SHIPPED + MERGED to main — full scope audit + cleanup: creator SaaS turned off, dead code removed, abandoned smart-contract project deleted)
 
 **Relabeled from 2026-07-28f to 2026-07-28i at merge time — that label collided with a separate concurrent session's f/g/h entries below (BIGINT trade_id fix, future-dated-trades bug, corrective delete). Same work, just renumbered so both sessions' entries survive the merge without clobbering each other. See that session's f/g/h entries directly below for their thread — unrelated to this one.**
