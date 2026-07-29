@@ -13842,10 +13842,18 @@ async function _flexBackingResyncAndSettle() {
         ).catch(e => { throw new Error('list_backings: ' + e.message); });
 
         for (const backing of backings) {
+          // AND closed_at <= NOW() — a real, defensive guard, not
+          // redundant with the ingestion-side fix above: a market's
+          // resolution can only ever be settled against if it has ACTUALLY
+          // resolved, no matter what an upstream ingestion bug (fixed
+          // 2026-07-28, but this guard doesn't depend on that fix holding
+          // forever) or a future one might otherwise write into
+          // realized_trades. No real backer money moves on a market that
+          // hasn't closed yet, full stop.
           const trades = await dbQuery(
             `SELECT id, realized_roi, closed_at FROM realized_trades
              WHERE user_id = $1::uuid AND market_durability = 'durable'
-               AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL AND closed_at > $2
+               AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL AND closed_at > $2 AND closed_at <= NOW()
                AND NOT EXISTS (SELECT 1 FROM flex_backing_settlements s WHERE s.backing_id = $3::uuid AND s.trade_id = realized_trades.id)
              ORDER BY closed_at ASC`,
             [predictorUserId, backing.created_at, backing.id]
@@ -14000,6 +14008,16 @@ app.post('/api/admin/flex-backing/settle-trade', requireAdminSecret, async (req,
     // this time before it shipped further.
     const tradeRows = await dbQuery(`SELECT id, realized_roi, closed_at FROM realized_trades WHERE id = $1::bigint`, [trade_id]);
     if (!tradeRows.length) return res.status(404).json({ error: 'trade_not_found' });
+
+    // Same guard as the real cron: a market must have ACTUALLY resolved —
+    // closed_at in the past — before any settlement, test-only or not, can
+    // move real backer Flex Points against it. This is what caught the
+    // 2026-07-28 finding (realized_trades holding "redeemed" rows for a
+    // 2028-dated election, closed_at years in the future) before any FP
+    // moved on a fake outcome.
+    if (new Date(tradeRows[0].closed_at).getTime() > Date.now()) {
+      return res.status(400).json({ error: 'trade_not_actually_resolved', closed_at: tradeRows[0].closed_at, note: 'This trade\'s closed_at is in the future — the market has not resolved yet, regardless of what realized_trades currently says. Refusing to settle.' });
+    }
 
     const result = await _flexBackingSettleTrade(backingRows[0], tradeRows[0]);
     res.json({ ...result, backing_id, trade_id, note: 'test-only manual settlement — bypasses the forward-only (closed_at > backing.created_at) rule the real cron enforces.' });
@@ -46171,7 +46189,15 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       const realizedRoi = entryCost > 0 ? +(realizedPnl / entryCost).toFixed(6) : null;
       const question = String(pos.title || pos.question || pos.market || '').slice(0, 500);
       const tokenId = pos.asset || pos.token_id || null;
-      const closedAt = _toIsoTs(pos.endDate || pos.end_date || pos.resolved_at || pos.redeemed_at) || new Date().toISOString();
+      // Real resolution/redemption timestamps FIRST — endDate is the
+      // market's originally SCHEDULED close, not when it actually resolved
+      // (a market can resolve early, or its schedule can slip). Preferring
+      // endDate was how a verified-real settlement could still end up with
+      // a closed_at years in the future for a long-horizon market. Now only
+      // falls back to endDate if no real settlement timestamp is present at
+      // all (shouldn't happen often once the closed-flag check above is
+      // in place, but a fallback is safer than a null closed_at).
+      const closedAt = _toIsoTs(pos.resolved_at || pos.redeemed_at || pos.endDate || pos.end_date) || new Date().toISOString();
       const closeReason = outcomeWon ? 'redeemed-win' : 'redeemed-loss';
       // Scoped per user — see the identical fix + comment on the sold-path
       // externalSyncId a few hundred lines up in this same function.
@@ -61272,6 +61298,20 @@ async function _fetchGammaKeysetChecked(url) {
 // /api/admin/edge-audit: 32/32 non-YES/NO-side signals graded wrong).
 function _parseOutcomeSettlement(m) {
   if (!m || m.outcomePrices == null) return null;
+  // A market can trade at a decisive price (95%+ favorite, or a near-zero
+  // longshot) while still ACTIVELY OPEN — price extremity alone is not a
+  // resolution signal. Bug found 2026-07-28: this function verified
+  // "redeemed" positions on a 2028-dated presidential-election market
+  // (still years from resolving) purely because its live price happened to
+  // be decisive, producing realized_trades rows with closed_at in the
+  // future and fabricated ±100% ROI — the exact "redeemed for elections
+  // years in the future" symptom this function's own comment already
+  // named as the thing to prevent, just not fully guarded against. Must
+  // also require gamma's own closed flag — the same field already used
+  // as the ground-truth "has this market actually resolved" signal
+  // elsewhere in this file (?closed=false filters, m.closed === true
+  // checks in the screener/search paths).
+  if (m.closed !== true) return null;
   try {
     const prices = (typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices).map(p => parseFloat(p));
     const price0 = prices[0];
@@ -62802,6 +62842,69 @@ function _classifyWithRules(question, rules) {
   for (const [cat, re] of rules) if (re.test(q)) return cat;
   return 'other';
 }
+// ── GET /api/admin/future-dated-trades-audit ─────────────────────────────────
+// Read-only, platform-wide. closed_at > NOW() is IMPOSSIBLE for a genuinely
+// resolved trade — a clean, unambiguous signal for the bug found 2026-07-28
+// (a market's live price being decisive was wrongly treated as proof it had
+// resolved, letting realized_trades hold "redeemed" rows for markets years
+// from actually closing). This audits how many rows already carry that
+// signature RIGHT NOW, platform-wide — this matters beyond the backing
+// feature: if any of these rows belong to a currently-qualifying (n>=10
+// durable) wallet, they've been feeding the live public leaderboard's score.
+// Ingestion itself is fixed (won't write new future-dated rows going
+// forward); this is about whether existing rows need a corrective pass,
+// same shape as the 2026-07-18 redeemed-win backlog drain.
+//   curl "https://hyperflex.network/api/admin/future-dated-trades-audit?secret=$ADMIN_SECRET"
+app.get('/api/admin/future-dated-trades-audit', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const rows = await dbQuery(
+      `SELECT rt.id, rt.user_id::text AS user_id, u.display_name, u.polymarket_address,
+              rt.market_question, rt.realized_roi, rt.closed_at, rt.close_reason, rt.market_durability
+       FROM realized_trades rt LEFT JOIN users u ON u.id = rt.user_id::text
+       WHERE rt.closed_at > NOW()
+       ORDER BY rt.closed_at DESC`
+    );
+    const total = rows.length;
+    const distinctUsers = new Set(rows.map(r => r.user_id));
+    const byCloseReason = {};
+    const byDurability = {};
+    for (const r of rows) {
+      byCloseReason[r.close_reason || 'null'] = (byCloseReason[r.close_reason || 'null'] || 0) + 1;
+      byDurability[r.market_durability || 'null'] = (byDurability[r.market_durability || 'null'] || 0) + 1;
+    }
+
+    // Cross-check against the CURRENT qualifying (n>=10 durable) leaderboard
+    // — this is the number that actually matters: is any of this affecting
+    // a wallet's live public score right now.
+    let qualifyingAffected = [];
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    if (computed) {
+      const qualifyingIds = new Set(computed.rows.map(r => r.user_id));
+      const affectedByUser = new Map();
+      for (const r of rows) {
+        if (!qualifyingIds.has(r.user_id)) continue;
+        if (!affectedByUser.has(r.user_id)) affectedByUser.set(r.user_id, { user_id: r.user_id, display_name: r.display_name, count: 0 });
+        affectedByUser.get(r.user_id).count++;
+      }
+      qualifyingAffected = [...affectedByUser.values()].sort((a, b) => b.count - a.count);
+    }
+
+    res.json({
+      total_future_dated_rows: total,
+      distinct_wallets_affected: distinctUsers.size,
+      by_close_reason: byCloseReason,
+      by_market_durability: byDurability,
+      qualifying_leaderboard_wallets_affected: qualifyingAffected,
+      sample: rows.slice(0, 20).map(r => ({ id: r.id, display_name: r.display_name, polymarket_address: r.polymarket_address, market_question: r.market_question, realized_roi_pct: r.realized_roi != null ? Math.round(Number(r.realized_roi) * 1000) / 10 : null, closed_at: r.closed_at, close_reason: r.close_reason })),
+      note: 'Ingestion is fixed as of 2026-07-28 (backfillRealizedTrades will not write new future-dated rows). This audit is read-only — no rows deleted or corrected here. If qualifying_leaderboard_wallets_affected is non-empty, those wallets\' live public scores currently include fabricated trades and need the same kind of corrective regrade the 2026-07-18 redeemed-win bug got.',
+    });
+  } catch (e) {
+    console.error('[future-dated-trades-audit]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/other-category-report', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });

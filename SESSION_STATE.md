@@ -47,6 +47,26 @@
 
 ---
 
+## Chronological log (newest first)
+
+## 2026-07-28g (🚨 REAL BUG, platform-wide — realized_trades held fabricated "redeemed" rows for markets that haven't resolved. Root cause fixed, defensive settlement guard added, audit endpoint shipped. Also confirms: the v2 migration's DROP TABLE wiped the earlier test backing.)
+
+**Marc caught this from `/predictor-trades` output before testing any settlement — Nadmi's "resolved" trades included "Will Donald Trump win the 2028 US Presidential Election?" at exactly ±100% ROI with `closed_at: 2028-11-07` — a market that cannot possibly have resolved yet.** This is the same signature as the 2026-07-18 redeemed-win bug, and it's not backing-specific — this is a live gap in `backfillRealizedTrades` itself, meaning it can affect ANY wallet's `realized_trades` rows, including ones already feeding the public leaderboard.
+
+**Root cause (traced, not guessed):** `_parseOutcomeSettlement(m)` — the function that verifies a "redeemed" position's real outcome via gamma before trusting it — only checked whether the market's live price was decisive (`>0.95` or `<0.05`). **It never checked gamma's own `closed` flag.** A market can trade at an extreme price while still fully open (an overwhelming favorite, or a near-zero longshot, years before its actual resolution) — price extremity is not proof of resolution. This exact symptom was named in this function's OWN comment when it was built ("positions redeemed for elections years in the future... impossible") but the guard against it was incomplete.
+
+Compounding it: `closed_at` for redeemed positions was computed as `pos.endDate || pos.resolved_at || pos.redeemed_at` — trying the market's originally SCHEDULED end date before the real resolution timestamp. Even for a genuinely-resolved market, this could produce a wrong (though usually not impossible) closed_at; for a wrongly-verified one, it produced a closed_at years in the future.
+
+**Fixed:**
+1. `_parseOutcomeSettlement` now requires `m.closed === true` (gamma's own resolution flag, the same field already used as ground truth elsewhere in this file — `?closed=false` filters, `m.closed === true` checks in the screener paths) in addition to the decisive-price check. A market must be BOTH decisively priced AND actually closed to verify.
+2. `closed_at` source order flipped to prefer `pos.resolved_at || pos.redeemed_at` over `pos.endDate` — real resolution timestamps first, scheduled end date only as a last-resort fallback.
+3. **Defensive settlement-path guard, independent of the ingestion fix holding:** both the cron's trade-discovery query and the manual `/settle-trade` endpoint now require `closed_at <= NOW()` before any settlement can fire, full stop — no backer Flex Points move against a market that hasn't actually resolved, regardless of what upstream ingestion says.
+4. New `GET /api/admin/future-dated-trades-audit` (read-only, platform-wide): counts existing `realized_trades` rows with `closed_at > NOW()` (impossible for a real resolved trade — a clean, unambiguous signature), cross-referenced against the CURRENT qualifying (n≥10 durable) leaderboard so we can see directly whether any already-public score is affected. **Not yet run against production** — this is the next thing to check before trusting the leaderboard is clean of this specific pattern.
+
+**Point 3, confirmed plainly: yes, the earlier test backing (`9e9b7dc5...`) is gone.** Both `supabase_migration_flex_backing_v2.sql` and the consolidated `..._ALL.sql` unconditionally `DROP TABLE IF EXISTS flex_backings` — at the time those were written, no successful stake was believed to exist yet, but by the time the corrected (transaction-wrapped) `_ALL.sql` actually ran, a real backing already existed from testing in between. Running that migration wiped it. This is a real, if low-stakes (play money, one test backing) consequence of the drop-and-recreate approach — noted for the record, not glossed over. Marc needs to re-run `/back` to recreate a backing before further settlement testing.
+
+`node --check server.js` clean. Not yet merged to main. **Recommend running the future-dated-trades-audit BEFORE any more settlement testing** — if it shows qualifying wallets affected, that's a higher-priority fix than the backing mechanic itself.
+
 ## 2026-07-28f (✅ FIXED before it could bite — realized_trades.id is BIGINT, not UUID; flex_backing_settlements.trade_id and the settle-trade endpoint both assumed UUID)
 
 **Caught from Marc's own diagnostic output, not from an error report.** `GET /api/admin/flex-backing/predictor-trades` (shipped in 2026-07-28e) returned real trade IDs like `"1148499"`, `"1121767"` — plain sequential integers, not UUIDs. `flex_backing_settlements.trade_id` was declared `UUID NOT NULL`, and the `/settle-trade` endpoint cast the incoming id `::uuid` — both would have thrown `invalid input syntax for type uuid` on the first real settlement attempt (against either a real cron settlement or the manual test endpoint). Same family of mistake as the `users.id` bug from 2026-07-28d: assumed a column's type from convention instead of checking it, caught this time from data Marc happened to show me rather than from a failure.
