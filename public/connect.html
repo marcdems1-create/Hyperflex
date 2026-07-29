@@ -140,6 +140,19 @@
 
   .specialty-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
   .specialty-tile{background:#111118;border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .similar-list{display:flex;flex-direction:column;gap:10px;}
+  .sim-row{display:flex;justify-content:space-between;align-items:center;gap:20px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+  .sim-main{min-width:0;}
+  .sim-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+  .sim-name{font-size:17px;font-weight:700;color:var(--ink);}
+  a.sim-name:hover{color:#4d9fff;text-decoration:underline;}
+  .sim-sim{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .sim-compare{font-size:13.5px;color:var(--soft,#aab);margin-top:7px;line-height:1.55;}
+  .sim-compare b{color:var(--ink);}
+  .sim-scope{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
+  .sim-edge{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:800;white-space:nowrap;text-align:right;}
+  .sim-edge small{display:block;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:3px;}
+  @media(max-width:640px){.sim-row{flex-direction:column;align-items:flex-start;gap:10px;}.sim-edge{text-align:left;}}
   .specialty-cat{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);margin-bottom:6px;}
   .specialty-wr{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;}
   .specialty-wr.is-positive{color:#00e68a;}
@@ -481,7 +494,7 @@ function renderVerified(p){
   html += '</div>';
 
   if (eligible) {
-    html += '<div class="p-section"><div class="p-section-title">Headline</div><div class="stat-row">'
+    html += '<div class="p-section"><div class="p-section-title">Your record</div><div class="stat-row">'
       + '<div class="stat-tile"><div class="stat-label">Realized ROI</div><div class="stat-value '+(p.headline.realized_roi_pct>=0?'is-positive':'is-negative')+'">'+esc(fmtPct(p.headline.realized_roi_pct))+'</div></div>'
       + '<div class="stat-tile"><div class="stat-label">Win Rate</div><div class="stat-value">'+esc(p.headline.win_rate_pct!=null?p.headline.win_rate_pct.toFixed(1)+'%':'—')+'</div></div>'
       + '<div class="stat-tile"><div class="stat-label">Resolved Trades</div><div class="stat-value">'+esc(p.headline.n)+'</div></div>'
@@ -489,6 +502,11 @@ function renderVerified(p){
       + '<div class="stat-tile"><div class="stat-label">Avg Return / Trade</div><div class="stat-value '+(p.headline.avg_return_pct>=0?'is-positive':'is-negative')+'">'+esc(fmtPct(p.headline.avg_return_pct))+'</div></div>'
     + '</div></div>';
   }
+
+  // Slot for the similar-but-better matcher — the part of this page that
+  // isn't just a restatement of what Polymarket already shows you.
+  // Loaded async so the wallet's own record paints immediately.
+  html += '<div id="similarSlot"></div>';
 
   html += '<div class="p-section"><div class="p-section-title">Best call &amp; worst call</div><div class="call-pair">'
     + callCardHtml(p.best_call, 'best')
@@ -594,6 +612,53 @@ function renderVerified(p){
     });
   });
   renderHistory();
+
+  loadSimilarTraders(p.username || p.polymarket_address || p.user_id);
+}
+
+// ── Traders with your book, beating you at it ──────────────────────────
+// The differentiated surface: not a leaderboard of strangers, but people
+// playing the same categories this wallet plays who are outperforming on
+// exactly those categories. Every row carries their score and n.
+function loadSimilarTraders(handle){
+  if (!handle) return;
+  fetch('/api/similar-traders/' + encodeURIComponent(handle))
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var slot = document.getElementById('similarSlot');
+      if (!slot || !d || !d.matches || !d.matches.length) return;
+      slot.innerHTML =
+        '<div class="p-section"><div class="p-section-title">Trades like you — but better '
+        + '<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">'
+        + '— matched on the categories you actually play</span></div>'
+        + '<div class="similar-list">'
+        + d.matches.map(function(m){
+            var h = m.headline;
+            var name = m.username || m.display_name || 'Trader';
+            var link = m.username ? '/p/' + encodeURIComponent(m.username) : null;
+            var nameHtml = link
+              ? '<a href="'+esc(link)+'" class="sim-name">'+esc(name)+'</a>'
+              : '<span class="sim-name">'+esc(name)+'</span>';
+            var compare = h
+              ? '<div class="sim-compare">In <b>'+esc(h.category)+'</b>: '
+                + 'you <span class="'+(h.your_roi_pct>=0?'is-positive':'is-negative')+'">'
+                + esc(fmtPct(h.your_roi_pct))+'</span> over '+esc(h.your_n)+' trades · '
+                + 'them <span class="'+(h.their_roi_pct>=0?'is-positive':'is-negative')+'">'
+                + esc(fmtPct(h.their_roi_pct))+'</span> over '+esc(h.their_n)+' trades</div>'
+              : '';
+            return '<div class="sim-row">'
+              + '<div class="sim-main">'
+                + '<div class="sim-head">'+nameHtml
+                + '<span class="sim-sim">'+esc(m.similarity_pct.toFixed(0))+'% similar book</span></div>'
+                + compare
+                + '<div class="sim-scope">'+esc(m.shared_categories.join(' · '))+' · '+esc(m.scope_label)+'</div>'
+              + '</div>'
+              + '<div class="sim-edge is-positive">+'+esc(m.edge_pct.toFixed(1))+'%<small>vs you</small></div>'
+            + '</div>';
+          }).join('')
+        + '</div></div>';
+    })
+    .catch(function(e){ console.warn('[similar-traders]', e); });
 }
 </script>
 </body>

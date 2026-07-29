@@ -13483,6 +13483,171 @@ async function _buildTraderProfile(user) {
   };
 }
 
+// ── "TRADES LIKE YOU, BUT BETTER" MATCHER ───────────────────────────────
+// The one thing Polymarket structurally cannot show a trader: not "here
+// are top traders" (a leaderboard — commodity, copyable in a weekend),
+// but "here is someone playing the SAME markets you play, who is beating
+// you at them." Similarity is the filter; outperformance is the sort.
+//
+// Vector = per-category durable-trade counts, L2-normalised, compared by
+// cosine similarity. A trader who splits their book 60/40 macro/politics
+// matches another 60/40 macro/politics book regardless of absolute
+// volume, which is the property we want — we're matching STYLE, not size.
+//
+// Only wallets already qualifying on the durable-market boards are
+// eligible as matches, so this can never surface an unverified wallet
+// (Gate 1). Every match carries score + n, per the no-naked-win rule.
+const SIMILAR_MIN_COSINE      = 0.30; // below this the books aren't comparable
+const SIMILAR_MIN_SHARED_CATS = 1;
+const SIMILAR_MAX_RESULTS     = 5;
+
+function _cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = a[k] || 0, y = b[k] || 0;
+    dot += x * y; na += x * x; nb += y * y;
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+async function computeSimilarBetterTraders(userId) {
+  if (!pool || !userId) return null;
+
+  // The connecting wallet's own durable book, by category. Deliberately
+  // NOT gated on the n>=10 ranking floor — the whole point is that an
+  // unranked wallet still gets told who to learn from (rule 4: a
+  // non-qualifying wallet must never hit a dead end).
+  const myRows = await dbQuery(`
+    SELECT market_question, realized_pnl, realized_roi
+    FROM realized_trades
+    WHERE user_id::text = $1 AND market_durability = 'durable'
+      AND closed_at IS NOT NULL AND realized_roi IS NOT NULL
+  `, [userId]).catch(e => { console.warn('[similar] my-trades query error:', e.message); return null; });
+  if (!myRows || !myRows.length) return null;
+
+  const mine = new Map(); // category -> { n, wins, roiSum }
+  for (const r of myRows) {
+    const cat = classifyCardCategory(r.market_question);
+    if (!mine.has(cat)) mine.set(cat, { n: 0, wins: 0, roiSum: 0 });
+    const m = mine.get(cat);
+    m.n++;
+    if (Number(r.realized_pnl) > 0) m.wins++;
+    m.roiSum += Math.min(Math.max(Number(r.realized_roi), -1.0), ROI_CAP);
+  }
+  const myVec = {};
+  for (const [cat, m] of mine) myVec[cat] = m.n;
+  const myRoiByCat = {};
+  for (const [cat, m] of mine) myRoiByCat[cat] = { n: m.n, roi_pct: Math.round((m.roiSum / m.n) * 1000) / 10 };
+  const myOverallRoi = Object.values(myRoiByCat).reduce((s, c) => s + c.roi_pct * c.n, 0) /
+                       Object.values(myRoiByCat).reduce((s, c) => s + c.n, 0);
+
+  // Candidate pool = wallets already qualifying on the per-category durable
+  // boards. Gives us both their category vector and a per-category score
+  // in one pass, and inherits the boards' opt-out + eligibility discipline.
+  const boards = await _computeCategoryRoiLeaderboards();
+  if (!boards) return null;
+
+  const cand = new Map(); // user_id -> { vec, catScore, meta }
+  for (const [category, board] of Object.entries(boards)) {
+    for (const row of (board.leaderboard || [])) {
+      if (row.user_id === userId) continue; // never match a wallet to itself
+      if (!cand.has(row.user_id)) {
+        cand.set(row.user_id, {
+          vec: {}, catScore: {}, catN: {},
+          display_name: row.display_name, username: row.username,
+          polymarket_address: row.polymarket_address,
+        });
+      }
+      const c = cand.get(row.user_id);
+      c.vec[category]      = row.n;
+      c.catScore[category] = row.score_pct;
+      c.catN[category]     = row.n;
+    }
+  }
+  if (!cand.size) return null;
+
+  const matches = [];
+  for (const [candId, c] of cand) {
+    const sim = _cosine(myVec, c.vec);
+    if (sim < SIMILAR_MIN_COSINE) continue;
+
+    const shared = Object.keys(c.vec).filter(k => myVec[k] > 0);
+    if (shared.length < SIMILAR_MIN_SHARED_CATS) continue;
+
+    // Their blended score across the categories we actually share —
+    // comparing a macro specialist's macro record to mine is meaningful;
+    // comparing their sports record to my macro record is not.
+    let num = 0, den = 0;
+    for (const k of shared) { num += c.catScore[k] * c.catN[k]; den += c.catN[k]; }
+    if (!den) continue;
+    const sharedScore = num / den;
+
+    // My own record across those same shared categories, for the same-axis
+    // comparison. If they aren't beating me where we overlap, they're not
+    // a useful match no matter how similar the book looks.
+    let myNum = 0, myDen = 0;
+    for (const k of shared) { myNum += myRoiByCat[k].roi_pct * myRoiByCat[k].n; myDen += myRoiByCat[k].n; }
+    const mySharedScore = myDen ? myNum / myDen : myOverallRoi;
+    if (sharedScore <= mySharedScore) continue;
+
+    // Headline the single category where the gap is widest — that's the
+    // concrete, checkable reason this trader is worth following.
+    let bestCat = null, bestGap = -Infinity;
+    for (const k of shared) {
+      const gap = c.catScore[k] - myRoiByCat[k].roi_pct;
+      if (gap > bestGap) { bestGap = gap; bestCat = k; }
+    }
+
+    matches.push({
+      user_id: candId,
+      display_name: c.display_name,
+      username: c.username,
+      polymarket_address: c.polymarket_address,
+      similarity_pct: Math.round(sim * 1000) / 10,
+      shared_categories: shared,
+      their_score_pct: Math.round(sharedScore * 10) / 10,
+      your_score_pct: Math.round(mySharedScore * 10) / 10,
+      edge_pct: Math.round((sharedScore - mySharedScore) * 10) / 10,
+      headline_category: bestCat,
+      headline: bestCat ? {
+        category: bestCat,
+        your_roi_pct: myRoiByCat[bestCat].roi_pct,
+        your_n: myRoiByCat[bestCat].n,
+        their_roi_pct: c.catScore[bestCat],
+        their_n: c.catN[bestCat],
+      } : null,
+      scope_label: 'Ranked on durable markets — n=' + shared.reduce((s, k) => s + c.catN[k], 0),
+    });
+  }
+
+  // Sort by how much better they are where you overlap, tie-broken by how
+  // closely the books actually match.
+  matches.sort((a, b) => (b.edge_pct - a.edge_pct) || (b.similarity_pct - a.similarity_pct));
+  return {
+    your_categories: myRoiByCat,
+    matches: matches.slice(0, SIMILAR_MAX_RESULTS),
+    candidate_pool: cand.size,
+  };
+}
+
+// GET /api/similar-traders/:handle — traders with a comparable book who
+// are outperforming on the categories they share with this wallet.
+app.get('/api/similar-traders/:handle', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const user = await _resolveTraderHandle(req.params.handle);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    const out = await computeSimilarBetterTraders(user.id);
+    if (out == null) return res.json({ matches: [], note: 'no comparable durable-market record yet' });
+    res.json(out);
+  } catch (e) {
+    console.error('[similar-traders]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/trader-record/:handle', async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
