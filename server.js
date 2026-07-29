@@ -63458,6 +63458,185 @@ app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, r
   }
 });
 
+// ── POISONED SETTLEMENT CACHE ────────────────────────────────────────────
+// Found 2026-07-29 hand-checking tetrose (a live matcher recommendation)
+// against polymarket.com. Our record: "US x Iran permanent peace deal" YES,
+// graded WIN, +$521,232, +853% ROI — a single row carrying that wallet's
+// entire positive record. Polymarket's own positions API for the same
+// wallet: the US-Iran peace-deal positions are at curPrice=0, cashPnl
+// NEGATIVE. There is no US-Iran permanent peace deal. Second confirmed
+// case on the same wallet: "WTI Crude hit (HIGH) $95 in July" graded WIN
+// +$25,096 (+478.8%), Polymarket says curPrice=0.0645, pnl −$20,181.
+// Aggregate: we show +$491K / +43.2% ROI; Polymarket's redeemed rows for
+// that wallet sum to −$515K with 264 of 311 negative.
+//
+// WHY THE 2026-07-28 FIX DIDN'T CATCH IT: that fix added the
+// `m.closed === true` guard inside _parseOutcomeSettlement — correct, but
+// _verifyRedeemedSettlement checks `market_settlement_cache` FIRST and
+// returns early on a hit. Every settlement cached BEFORE that fix was
+// written by the unguarded parser, i.e. derived from price extremity on
+// markets that had not resolved. Those rows are permanent (`ON CONFLICT DO
+// NOTHING`, never invalidated), so the guard is bypassed for every
+// condition_id already in the cache. That is also why the 7/28 corrective
+// delete didn't hold: it removed the bad realized_trades rows, and the
+// poisoned cache regenerated them on the next backfill.
+//
+// The cache is pure derived data — purging costs a gamma re-fetch and
+// nothing else. Anything re-cached now goes through the guarded path.
+const SETTLEMENT_CACHE_FIX_TS = '2026-07-29T00:48:21Z'; // commit 888a713
+
+// GET /api/admin/settlement-cache-audit — read-only. Splits the cache on
+// the fix timestamp and live re-verifies a bounded sample of the pre-fix
+// rows through the CURRENT guarded path, so the disagreement rate is
+// measured rather than assumed.
+app.get('/api/admin/settlement-cache-audit', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const sampleN = Math.min(60, parseInt(req.query.sample, 10) || 25);
+
+    const counts = await dbQuery(`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE verified_at < $1::timestamptz)::int AS pre_fix,
+             COUNT(*) FILTER (WHERE verified_at >= $1::timestamptz)::int AS post_fix,
+             COUNT(*) FILTER (WHERE verified_at IS NULL)::int AS no_timestamp
+      FROM market_settlement_cache
+    `, [SETTLEMENT_CACHE_FIX_TS]);
+
+    const suspects = await dbQuery(`
+      SELECT condition_id, price, winner_name, verified_at
+      FROM market_settlement_cache
+      WHERE verified_at < $1::timestamptz OR verified_at IS NULL
+      ORDER BY random() LIMIT $2
+    `, [SETTLEMENT_CACHE_FIX_TS, sampleN]);
+
+    // Live re-verify each sampled condition_id straight from gamma, using
+    // the current guard. Deliberately bypasses both cache layers.
+    const checked = [];
+    await _mapLimit(suspects, 6, async (row) => {
+      const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids='
+                + encodeURIComponent(row.condition_id) + '&limit=1';
+      const { ok, markets } = await _fetchGammaKeysetChecked(url);
+      const m = markets && markets[0];
+      const live = m ? _parseOutcomeSettlement(m) : null;
+      checked.push({
+        condition_id: row.condition_id,
+        question: m ? String(m.question || '').slice(0, 90) : null,
+        gamma_reachable: !!ok && !!m,
+        gamma_closed: m ? m.closed === true : null,
+        cached_price: row.price != null ? Number(row.price) : null,
+        cached_winner: row.winner_name,
+        live_price: live ? live.price : null,
+        live_winner: live ? live.winnerName : null,
+        verified_at: row.verified_at,
+        // The failure mode: cache asserts a settlement for a market gamma
+        // says is still open. Any such row has graded real trades off a
+        // resolution that never happened.
+        disagrees: !!m && m.closed !== true,
+      });
+    });
+
+    const disagreeing = checked.filter(c => c.disagrees);
+    const unreachable = checked.filter(c => !c.gamma_reachable);
+
+    res.json({
+      counts: counts[0] || null,
+      fix_timestamp: SETTLEMENT_CACHE_FIX_TS,
+      sampled: checked.length,
+      disagreeing_count: disagreeing.length,
+      disagreeing_rate_pct: checked.length ? Math.round((disagreeing.length / checked.length) * 1000) / 10 : null,
+      gamma_unreachable_count: unreachable.length,
+      disagreeing_samples: disagreeing.slice(0, 15),
+      sample: checked.slice(0, 25),
+      note: 'disagrees=true means the cache asserts a settlement for a market gamma reports as still open — every realized_trades row graded off that condition_id is fabricated. gamma_unreachable rows are indeterminate (aged out of retention), not proven clean. Read-only; nothing deleted here.',
+    });
+  } catch (e) {
+    console.error('[settlement-cache-audit]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/purge-poisoned-settlement-cache — deletes pre-fix cache
+// rows, and (unless ?cache_only=1) the redeemed-origin realized_trades rows
+// graded off them so they re-ingest through the guarded path.
+//
+// Same safety check as the future-dated corrective delete: refuses if a
+// flex_backing_settlements row already references an affected trade, since
+// that means real FP moved against fabricated data and needs a human
+// reversal decision rather than a silent delete underneath it.
+app.post('/api/admin/purge-poisoned-settlement-cache', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const cacheOnly = req.query.cache_only === '1';
+
+    const poisoned = await dbQuery(`
+      SELECT condition_id FROM market_settlement_cache
+      WHERE verified_at < $1::timestamptz OR verified_at IS NULL
+    `, [SETTLEMENT_CACHE_FIX_TS]);
+    const condIds = poisoned.map(r => r.condition_id);
+    if (!condIds.length) return res.json({ cache_deleted: 0, trades_deleted: 0, note: 'No pre-fix cache rows.' });
+
+    let tradesDeleted = 0, affectedWallets = [];
+    if (!cacheOnly) {
+      const badTrades = await dbQuery(`
+        SELECT id FROM realized_trades
+        WHERE LOWER(condition_id) = ANY($1::text[]) AND close_reason IN ('redeemed-win','redeemed-loss')
+      `, [condIds]);
+      const badIds = badTrades.map(r => r.id);
+
+      if (badIds.length) {
+        const tainted = await dbQuery(
+          `SELECT id, trade_id FROM flex_backing_settlements WHERE trade_id = ANY($1::bigint[])`,
+          [badIds]
+        ).catch(() => []);
+        if (tainted.length) {
+          return res.status(409).json({
+            error: 'settlements_already_reference_affected_trades',
+            tainted_settlements: tainted,
+            note: 'Real FP moved against trades graded off poisoned cache. Refusing to delete automatically — needs manual reversal first. Re-run with ?cache_only=1 to purge just the cache.',
+          });
+        }
+
+        const before = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+        const beforeById = before ? new Map(before.rows.map(r => [r.user_id, r])) : new Map();
+
+        const del = await dbQuery(
+          `DELETE FROM realized_trades WHERE id = ANY($1::bigint[]) RETURNING user_id::text AS user_id`,
+          [badIds]
+        );
+        tradesDeleted = del.length;
+
+        const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+        const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
+        affectedWallets = [...beforeById.values()]
+          .filter(r => !afterIds.has(r.user_id))
+          .map(r => ({ user_id: r.user_id, display_name: r.display_name, n_before: r.n, score_before: r.score_pct }));
+      }
+    }
+
+    const cacheDel = await dbQuery(`
+      DELETE FROM market_settlement_cache
+      WHERE verified_at < $1::timestamptz OR verified_at IS NULL
+      RETURNING condition_id
+    `, [SETTLEMENT_CACHE_FIX_TS]);
+
+    // In-process cache must be cleared too or the poisoned values keep
+    // being served from memory for the life of this process.
+    if (typeof _redeemDecisiveSettlementCache !== 'undefined' && _redeemDecisiveSettlementCache.clear) {
+      _redeemDecisiveSettlementCache.clear();
+    }
+
+    res.json({
+      cache_deleted: cacheDel.length,
+      trades_deleted: tradesDeleted,
+      dropped_off_leaderboard: affectedWallets,
+      note: 'Poisoned cache purged and in-process cache cleared. Affected trades will re-ingest through the guarded path on the next backfill — legitimately-resolved markets come back with real outcomes, unresolved ones stay out. Re-run GET /api/admin/settlement-cache-audit to confirm pre_fix=0.',
+    });
+  } catch (e) {
+    console.error('[purge-poisoned-settlement-cache]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Self-healing sweep for future-dated rows ────────────────────────────
 // The ingestion guard (backfillRealizedTrades, 2026-07-29) stops NEW ones
 // being written, but rows already in the table from before it — and any
