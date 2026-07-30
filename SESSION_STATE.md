@@ -73,7 +73,15 @@
 **Active blockers:**
 - (none new) — Gate 3 still below bar, unchanged this session. Nothing published.
 
+**🔴 LATE-SESSION: hand-check done, found the real root cause — AND produced one wrong published claim (corrected).**
+- **`market_settlement_cache` was 100% poisoned.** All 1,101 rows predated the 7/28 guard; **21 of 21 gamma-reachable sampled rows disagreed with live gamma**, holding "Josh Stein win the 2028 US Presidential Election" and "Houston Texans win the 2027 NFL championship" as *settled*. Measured via new audit endpoint, not inferred.
+- **Root cause of why 7/28 didn't hold:** `_verifyRedeemedSettlement` reads the cache **first** and returns early, so the `m.closed === true` guard was bypassed for every already-cached condition_id. Also why the 7/28 corrective delete didn't stick — poisoned cache regenerated the rows on next backfill.
+- **Purged in prod.** `POST /api/admin/purge-poisoned-settlement-cache` ran successfully (cache now `total: 0`). ⚠️ **Real impact unmeasured** — the counts existed only in the purge response and a second invocation overwrote them with zeros. `GET /api/admin/record-integrity` (`86f703d`) added so this is never unmeasurable again.
+- **❌ MY WRONG CLAIM, corrected in `86f703d`:** I asserted tetrose's +$521,232 / +853% "US x Iran permanent peace deal" row was fabricated and that we were recommending a losing wallet. **False.** It's `sold-profit`, entry 0.1001 → exit 0.9544 — a real early exit at a real price during an optimism spike, months before the market resolved NO. Legitimate. I had compared `realized_trades` (closed round-trips) against Polymarket's `/positions` redeemed bucket (positions held to resolution) — different sets of trades, sign difference proves nothing. Method warning now in CLAUDE.md.
+- **Two CLAUDE.md assumptions confirmed FALSE against the live API:** `redeemable=true` does not mean won (`redeemable=true, curPrice=0`, negative pnl observed); the `winning` param is ignored when `redeemed=true` (byte-identical payloads). Both now flagged in CLAUDE.md.
+
 **Open questions / unverified:**
+- Post-purge qualifying-wallet count still unread — run `GET /api/admin/record-integrity` (endpoint is in `86f703d`, needs push+deploy).
 - **The 2026-07-21 hand-check discipline has NOT been applied to any number added this session.** The bio text, the card aggregates, the equity curve, and every `edge_pct` in the matcher are all internally consistent and none have been checked against polymarket.com. Per this project's own record ("every number hand-checked against the outside world has been wrong"), that is the outstanding risk on all of it.
 - Matcher `edge_pct` values are large (+59% to +76% on Marc's wallet). Plausible given he's at −27.9% and matches are qualifying traders, but unverified — worth a hand-check before this is shown to anyone but Marc.
 - Sizing/visual quality on `/connect` and `/p/:handle` still not settled after 3 rounds; Marc's last read was "not visually appealing."
