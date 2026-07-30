@@ -30717,9 +30717,15 @@ app.get('/api/user/profile/:handle', async (req, res) => {
         ws.realized_pnl_usd, ws.total_volume_usd, ws.sharpness_score
       FROM users u
       LEFT JOIN wallet_scores ws ON ws.user_id = u.id
-      WHERE u.handle = $1 OR u.username = $1
+      WHERE LOWER(u.handle) = LOWER($1) OR LOWER(u.username) = LOWER($1)
       LIMIT 1
     `, [handle]);
+    // Case-insensitive on purpose: handles are stored lowercase, but the
+    // display name (and therefore hand-typed / shared URLs like /p/Nadmi)
+    // is mixed-case. The case-sensitive `= $1` here 404'd every capitalised
+    // handle while /api/trader-record — which already uses LOWER() via
+    // _resolveTraderHandle — resolved the same trader fine. Two resolution
+    // paths that disagreed on casing; this brings them in line.
 
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     const profile = rows[0];
