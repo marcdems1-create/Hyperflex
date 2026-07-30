@@ -47251,7 +47251,21 @@ app.post('/api/admin/whale-backfill/run', async (req, res) => {
 // even when close_reason is by-luck correct). The previous version's
 // `close_reason <> $5` guard was an anti-thrash measure that's no longer
 // needed since the truth signal isn't bouncing between calls.
+// ⛔ RETIRED 2026-07-29. This graded redeemed positions purely off
+// `cashPnl > 0` from Polymarket's /positions redeemed bucket, with NO gamma
+// resolution check — the exact discredited method CLAUDE.md warns against
+// (cashPnl reports false wins; redeemable=true does not mean the position
+// won; the redeemed bucket includes not-yet-resolved positions). It was the
+// landmine that could re-fabricate `redeemed-*` grades on OPEN markets
+// (verify-promoted-redeemed found the politics king carrying redeemed-loss
+// on the still-open OpenAI-IPO and Romania-PM markets). No gamma m.closed
+// guard existed here at all. Body neutered to a no-op; the route below
+// returns 410. Correct redeemed grading lives only in backfillRealizedTrades
+// via _verifyRedeemedSettlement (gamma-guarded, m.closed===true required).
 async function regradeRedeemedTrades(userId, proxy) {
+  return { regraded: 0, fetched: 0, retired: true,
+    note: 'regradeRedeemedTrades retired 2026-07-29 — graded off cashPnl with no gamma check. Use backfillRealizedTrades (gamma-guarded) instead.' };
+  // eslint-disable-next-line no-unreachable
   if (!pool || !userId || !proxy) return { regraded: 0, fetched: 0 };
   const proxyLower = proxy.toLowerCase();
   let regraded = 0, fetched = 0, sample = null;
@@ -47344,6 +47358,15 @@ async function regradeRedeemedTrades(userId, proxy) {
 // Use user_id for a single profile (e.g. the one in the screenshot);
 // use all_whales=true to sweep the whole top-50 leaderboard.
 app.post('/api/admin/regrade-redeems', async (req, res) => {
+  // ⛔ RETIRED 2026-07-29 — see regradeRedeemedTrades. Graded redeemed
+  // positions off cashPnl with no gamma resolution check; could re-fabricate
+  // redeemed-* grades on markets that haven't resolved. Disabled rather than
+  // guarded because the whole cashPnl-from-/positions method is discredited.
+  return res.status(410).json({
+    error: 'retired',
+    note: 'regrade-redeems graded off cashPnl with no gamma check and is permanently disabled. Redeemed grading now happens only in backfillRealizedTrades via gamma-verified settlement (m.closed===true). See SESSION_STATE 2026-07-29.',
+  });
+  // eslint-disable-next-line no-unreachable
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   if (!pool) return res.status(503).json({ error: 'DB not configured' });
   const { user_id, all_whales } = req.body || {};
@@ -64199,6 +64222,71 @@ app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, r
     });
   } catch (e) {
     console.error('[verify-promoted-redeemed]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/audit-redeemed-open — platform-wide, read-only. Sizes the
+// blast radius of the fabricated-resolution finding before any corrective
+// delete: how many redeemed-path realized_trades sit on markets gamma still
+// reports as closed:false (graded a resolution that hasn't happened). This
+// is the residue the 2026-07-29 cache purge missed — it deleted by cache
+// membership, but these rows' conditions weren't in the cache, so a
+// gamma-keyed pass is the correct measure. Bounded: dedupes conditions,
+// checks a bounded sample (?sample=, default 400) against live gamma, and
+// extrapolates. Nothing deleted.
+app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const sampleN = Math.min(1500, Math.max(50, parseInt(req.query.sample, 10) || 400));
+
+    const totals = await dbQuery(`
+      SELECT COUNT(*)::int AS redeemed_rows,
+             COUNT(DISTINCT condition_id)::int AS redeemed_conditions
+      FROM realized_trades
+      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+    `).catch(() => []);
+
+    // Distinct conditions, sampled at random so the open-rate extrapolates.
+    const conds = await dbQuery(`
+      SELECT DISTINCT condition_id FROM realized_trades
+      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+      ORDER BY random() LIMIT $1
+    `, [sampleN]).catch(() => []);
+
+    let open = 0, closed = 0, unreachable = 0;
+    const openSamples = [];
+    await _mapLimit(conds, 6, async (row) => {
+      const cond = String(row.condition_id || '').toLowerCase();
+      const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
+      const { ok, markets } = await _fetchGammaKeysetChecked(url);
+      const m = markets && markets[0];
+      if (!ok || !m) { unreachable++; return; }
+      if (m.closed !== true) {
+        open++;
+        if (openSamples.length < 20) openSamples.push({ condition_id: cond, question: String(m.question || '').slice(0, 80) });
+      } else closed++;
+    });
+
+    const checked = open + closed + unreachable;
+    const reachable = open + closed;
+    const openRatePct = reachable ? Math.round((open / reachable) * 1000) / 10 : null;
+    const totalConds = totals[0] ? totals[0].redeemed_conditions : null;
+    res.json({
+      redeemed_rows_total: totals[0] ? totals[0].redeemed_rows : null,
+      redeemed_conditions_total: totalConds,
+      sampled_conditions: checked,
+      open_on_gamma: open,
+      closed_on_gamma: closed,
+      gamma_unreachable: unreachable,
+      open_rate_pct_of_reachable: openRatePct,
+      estimated_fabricated_conditions: (openRatePct != null && totalConds != null)
+        ? Math.round(totalConds * (open / reachable)) : null,
+      open_samples: openSamples,
+      note: 'open_on_gamma = redeemed row on a market gamma reports as closed:false = graded a resolution that has not happened (fabricated). gamma_unreachable aged out of retention (indeterminate). estimated_fabricated_conditions extrapolates the reachable open-rate across all redeemed conditions. Read-only; nothing deleted. Corrective delete should key on live gamma closed:false, NOT cache membership (that is what the 7/29 purge got wrong).',
+    });
+  } catch (e) {
+    console.error('[audit-redeemed-open]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
