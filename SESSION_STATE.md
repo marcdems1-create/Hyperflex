@@ -49,6 +49,34 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-29b (⛔ MAJOR — verified the board "beyond reasonable doubt"; found the entire redeemed path fabricated; purged it, board 95→80)
+
+**Marc: "make sure beyond reasonable doubt the grading promotes the right traders."** Built a reconciliation harness, ran it on the homepage-promoted set, hand-checked every flag against gamma/polymarket.com. Verdict: **sold path (98% of volume) reconciles clean; the entire redeemed path was fabricated and is now purged.**
+
+**Shipped (all on origin/main):**
+- `c47d839` — CATEGORY_KING_MIN_N=20 (a king's own in-category n must clear 20, not the n≥10 board floor; crypto king had been crowned on n=10/100%) + `GET /api/admin/verify-promoted` (sold-path reconciliation vs on-chain /activity fills).
+- `7af68e2`, `8abf3e1` — fixed THREE verifier false-positive modes found by hand-checking rather than trusting the harness: (1) 3000-event fetch cap made real older trades look fabricated (Nadmi has 5,501 events); (2) held-to-resolution wins look like pnl mismatches because redemption isn't a trade event; (3) redeemed-path positions can't be reconciled via TRADE events at all. Verifier is now SOLD-PATH ONLY, honest about coverage.
+- `005f77a` — `GET /api/admin/verify-promoted-redeemed`: checks redeemed grades against LIVE gamma, bypassing the (poisoned) settlement cache. **Flagged politics king ultralisk: 17/60 redeemed rows on markets gamma says are OPEN, 0 verified. Hand-confirmed 3 against gamma directly (OpenAI IPO, Romania PM — closed:false).**
+- `7f8110d`, `2b59a7c` — RETIRED `regradeRedeemedTrades` + `/api/admin/regrade-redeems` (410): graded off cashPnl with no gamma check, the landmine that could re-fabricate. Added `GET /api/admin/audit-redeemed-open` (platform-wide, read-only).
+- `d6d51b3` — `POST /api/admin/purge-fabricated-redeemed` (dry-run default, snapshot to `realized_trades_quarantine`, settlement-safety check).
+
+**Root cause (traced through code, not guessed):** redeemed rows on open markets = pre-7/28-fix residue. The unguarded parser graded open markets as resolved off price extremity; the 7/29 cache purge missed them because it deleted by CACHE MEMBERSHIP and these conditions weren't in the cache. The guarded insert path + purged cache can't recreate them; only the manual cashPnl regrade endpoint could, now retired.
+
+**The measurement:** `audit-redeemed-open` sampled 400/534 redeemed conditions — 59 gamma-reachable, **59/59 OPEN, 0 legitimately resolved.** 341 aged out (indeterminate). The redeemed path never correctly graded a still-visible resolved market. ~596 rows / 534 conditions, ~13% of durable trades.
+
+**Executed the purge (Marc's call, after dry-run):** 596 deleted, 596 snapshotted (reversible), 0 settlement-protected. **Qualifying wallets 95 → 80, 15 dropped off** incl. politics king ultralisk (`5dad8307`). Homepage now: overall #1 Nadmi (n 118→115, verified-clean sold-path), world king Nadmi (n 46); sports/macro/crypto kings gone — but that's the n=20 floor raise (they were n=18/11/10), not the delete.
+
+**Framing (Marc):** deletes fabricated GRADES, not traders. Dropped wallets persist with real sold-path trades as "building," re-qualify automatically. Reversible via quarantine table; legit trades re-ingest via gamma-guarded backfill.
+
+**Active blockers / open:**
+- ⏳ Post-purge confirmation still owed: re-run `audit-redeemed-open` (expect ~0 open) + `verify-promoted-redeemed` (expect clean). Marc to run (needs ADMIN_SECRET).
+- The n=20 category-king floor now leaves only 1 category king (world) on the homepage — most categories lack a wallet with 20+ in-category durable trades. Tuning decision: lower the floor, or accept sparse category kings. Not a bug.
+- 341 redeemed conditions were aged-out/indeterminate at purge time — deleted anyway (produced by the discredited method, 0% of checkable ones legit). If any was genuinely legit, it re-ingests correctly via backfill or is recoverable from `realized_trades_quarantine`.
+
+**Discipline note:** the harness itself was wrong in 3+ modes; every "fabricated!" alarm got hand-checked before action. The ONE that survived hand-checking (redeemed-on-open) was real. Do not trust a checker's output without verifying the checker.
+
+
+
 ## 2026-07-30e (✅ SHIPPED — copy-bot no longer auto-fires anything, for anyone. Marc's product call: "copy trading simply sends the signal... [auto-trading] once we build the app." Real auto-execution deferred entirely; signal channels widened to bell + web push + email.)
 
 **Marc's direction after the 2026-07-30d patch:** "only the most consistent get to be auto traded, copy trading simply sends the signal and prompts email notification or phone notification once we build the app." Read as: the durable-verified gate from the prior patch is the right eligibility concept for auto-trading, but auto-trading itself isn't something this web flow should do at all right now — it's a future, app-based feature. Today, copy-bot's job is signal delivery only.
