@@ -12975,7 +12975,7 @@ async function _buildTraderCards(roiRows) {
   // ISN'T uuid.
   const tradeRows = await dbQuery(`
     SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
-           entry_cost_usd, realized_pnl, realized_roi, closed_at
+           entry_cost_usd, realized_pnl, realized_roi, closed_at, close_reason
     FROM realized_trades
     WHERE user_id = ANY($1::uuid[]) AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
       AND market_durability = 'durable'
@@ -12996,6 +12996,7 @@ async function _buildTraderCards(roiRows) {
 
     let wins = 0, losses = 0;
     let recentWins = 0, recentN = 0;
+    let soldCount = 0; // early exits (sold-*) vs held-to-resolution (redeemed-*)
     const catStats = new Map(); // category -> { n, wins }
     const roiSamples = [];
     let maxTrade = null;
@@ -13004,6 +13005,7 @@ async function _buildTraderCards(roiRows) {
       const pnl = Number(t.realized_pnl);
       const isWin = pnl > 0;
       if (isWin) wins++; else if (pnl < 0) losses++;
+      if (String(t.close_reason || '').startsWith('sold')) soldCount++;
 
       const closedMs = new Date(t.closed_at).getTime();
       const daysAgo = (now - closedMs) / 86400000;
@@ -13048,6 +13050,18 @@ async function _buildTraderCards(roiRows) {
 
     const allTimeWinRate = n > 0 ? wins / n : 0;
     const recentWinRate = recentN >= 3 ? recentWins / recentN : null;
+
+    // Compact style flag so a promoted card never shows a win rate naked
+    // (CLAUDE.md rule 3). Full disclosure lives on the profile
+    // (computeTraderRiskProfile); this is the one-phrase version for cards.
+    // Only the unambiguous, high-signal cases fire — a card with a mixed
+    // book gets no flag rather than a vague one.
+    const soldPct = n > 0 ? Math.round((soldCount / n) * 100) : null;
+    let styleFlag = null;
+    if (soldPct != null && n >= 10) {
+      if (soldPct >= 80) styleFlag = { key: 'early_exit', text: 'Exits early — trades swings, rarely holds to resolution' };
+      else if (soldPct <= 20) styleFlag = { key: 'holds', text: 'Holds to resolution — calls outcomes, not swings' };
+    }
 
     const stats = {
       n, scorePct: row.score_pct, roiPct: row.raw_weighted_roi_pct, trend: row.trend,
@@ -13096,6 +13110,8 @@ async function _buildTraderCards(roiRows) {
         worst: { category: specialty.worst.category, win_rate_pct: Math.round(specialty.worst.winRate * 1000) / 10, n: specialty.worst.n },
       } : null,
       win_rate_pct: Math.round(allTimeWinRate * 1000) / 10,
+      sold_early_pct: soldPct,
+      style_flag: styleFlag,
       scope_label: durableScopeLabel(n),
     };
   });
