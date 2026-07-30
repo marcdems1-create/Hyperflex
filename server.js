@@ -63483,7 +63483,17 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
                COUNT(*) FILTER (WHERE close_reason IN ('sold-profit','sold-loss'))::int AS sold_origin,
                COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable,
                COUNT(*) FILTER (WHERE opened_at IS NULL)::int AS no_open_timestamp,
-               COUNT(DISTINCT user_id)::int AS wallets
+               COUNT(DISTINCT user_id)::int AS wallets,
+               -- The cross-tab that actually bounds settlement-cache exposure.
+               -- Scores are computed on DURABLE trades only, so "redeemed rows
+               -- are 1.6% of all trades" understates risk if redeemed rows skew
+               -- durable — which is plausible, since long-horizon markets get
+               -- held to resolution rather than sold early. This is the
+               -- denominator that matters for any future cache incident.
+               COUNT(*) FILTER (WHERE market_durability = 'durable'
+                 AND close_reason IN ('redeemed-win','redeemed-loss'))::int AS durable_redeemed,
+               COUNT(*) FILTER (WHERE market_durability = 'durable'
+                 AND close_reason IN ('sold-profit','sold-loss'))::int AS durable_sold
         FROM realized_trades WHERE closed_at IS NOT NULL
       `).catch(() => []),
       dbQuery(`SELECT COUNT(*)::int AS total,
@@ -63499,7 +63509,13 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
       settlement_cache: cache[0] || null,
       future_dated_rows: future[0] ? future[0].n : null,
       gate_3: { threshold: 'n>=30 AND hit_rate>=58%', note: 'see /api/edge/receipts for the live edge number — unrelated to the ROI board above' },
-      note: 'qualifying_wallets is the live count on the durable-market board at the n>=' + ROI_MIN_N_FLOOR + ' floor. settlement_cache.pre_fix should be 0; anything above 0 means poisoned rows are being served again. future_dated_rows should be 0 (hourly sweep).',
+      // Share of the SCORED (durable) subset that is redeemed-origin, i.e.
+      // graded off settlement data rather than real sell fills. This is the
+      // real exposure figure for any settlement-cache problem.
+      durable_redeemed_share_pct: (trades[0] && trades[0].durable)
+        ? Math.round((trades[0].durable_redeemed / trades[0].durable) * 1000) / 10
+        : null,
+      note: 'qualifying_wallets is the live count on the durable-market board at the n>=' + ROI_MIN_N_FLOOR + ' floor. settlement_cache.pre_fix should be 0; anything above 0 means poisoned rows are being served again. future_dated_rows should be 0 (hourly sweep). durable_redeemed_share_pct is the fraction of SCORED trades graded off settlement data rather than real sell fills — the exposure denominator that matters, not the all-trades percentage.',
     });
   } catch (e) {
     console.error('[record-integrity]', e.message);
