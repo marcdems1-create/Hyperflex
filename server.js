@@ -13051,16 +13051,19 @@ async function _buildTraderCards(roiRows) {
     const allTimeWinRate = n > 0 ? wins / n : 0;
     const recentWinRate = recentN >= 3 ? recentWins / recentN : null;
 
-    // Compact style flag so a promoted card never shows a win rate naked
-    // (CLAUDE.md rule 3). Full disclosure lives on the profile
-    // (computeTraderRiskProfile); this is the one-phrase version for cards.
-    // Only the unambiguous, high-signal cases fire — a card with a mixed
-    // book gets no flag rather than a vague one.
+    // Compact style flag. Early exit is NOT flagged: ~98% of all durable
+    // trades platform-wide are closed early (sold_origin 37,495 vs
+    // redeemed_origin 611 on 2026-07-29), so "exits early" describes almost
+    // everyone and warning on it is noise that implies a defect where
+    // there's just the normal way people trade. The DISTINCTIVE, worth-
+    // surfacing case is the rare opposite: a wallet that holds to
+    // resolution, whose win rate therefore reflects calling outcomes rather
+    // than trading swings. Only that fires, and it's a neutral note, not a
+    // warning.
     const soldPct = n > 0 ? Math.round((soldCount / n) * 100) : null;
     let styleFlag = null;
-    if (soldPct != null && n >= 10) {
-      if (soldPct >= 80) styleFlag = { key: 'early_exit', text: 'Exits early — trades swings, rarely holds to resolution' };
-      else if (soldPct <= 20) styleFlag = { key: 'holds', text: 'Holds to resolution — calls outcomes, not swings' };
+    if (soldPct != null && n >= 10 && soldPct <= 25) {
+      styleFlag = { key: 'holds', text: 'Holds to resolution — win rate reflects calling outcomes, not trading swings' };
     }
 
     const stats = {
@@ -30687,11 +30690,13 @@ async function computeTraderCard(userId) {
 // never appears naked (CLAUDE.md rule 3). Every signal here is arithmetic
 // over realized_trades, deterministic, no model call.
 //
-// The signal that motivated this: the current #1 (Nadmi, score 65, 89%
-// win rate) turns out to be 97% early-exit scalping — sells into a price
-// bump long before the market resolves — on ~$10K of capital, with one
-// trade carrying 19% of all profit. "89% win rate" is true and radically
-// misleading about what you'd be copying. This block says so plainly.
+// Framing note (corrected 2026-07-29): the flags are real per-trader risks
+// — concentration, tiny capital, very short holds. Exit style is NOT among
+// them: ~98% of durable trades platform-wide are closed early, so it's the
+// baseline behaviour, not a fault, and is reported only as neutral context
+// (the resolution-style split + the style sentence). The rare and
+// genuinely informative case is a wallet that HOLDS to resolution, whose
+// win rate therefore reflects calling outcomes; that's surfaced positively.
 function computeTraderRiskProfile(rows) {
   const durable = rows.filter(r => (r.market_durability || 'durable') !== 'ephemeral' && r.realized_pnl != null);
   const n = durable.length;
@@ -30723,17 +30728,15 @@ function computeTraderRiskProfile(rows) {
   // Flags — each is a specific, checkable risk, phrased for the person
   // deciding whether to follow. Only fire when the threshold is clearly
   // crossed; a clean record should surface few or none.
+  //
+  // NOT flagged: early exit. ~98% of all durable trades platform-wide are
+  // closed early (sold 37,495 vs redeemed 611, 2026-07-29), so selling
+  // before resolution is the norm, not a per-trader risk. Warning on it
+  // labels almost everyone defective for trading the normal way. The
+  // resolution-style split is still reported below as neutral context, and
+  // the rarer, genuinely informative case — holding to resolution — is
+  // surfaced positively rather than its opposite being surfaced as a fault.
   const flags = [];
-  if (soldPct >= 80) flags.push({
-    key: 'early_exit', severity: 'high',
-    label: 'Exits early, rarely holds to resolution',
-    detail: soldPct + '% of closed trades were sold before the market resolved. This record measures trading in and out of positions, not calling final outcomes — a different skill than "predicts what happens."',
-  });
-  if (redeemed === 0 && n >= 10) flags.push({
-    key: 'never_resolved', severity: 'medium',
-    label: 'No positions held to resolution',
-    detail: 'Every graded trade was closed early. There is no evidence here of being right about an outcome, only of exiting at a profit.',
-  });
   if (topShare >= 25) flags.push({
     key: 'concentrated', severity: 'medium',
     label: 'Record leans on one trade',
@@ -30750,11 +30753,15 @@ function computeTraderRiskProfile(rows) {
     detail: 'Average time in a position is ' + (avgHold < 1 ? 'under a day' : avgHold + ' days') + '. This is active trading, not patient position-taking — copying it means watching the market closely, not setting and forgetting.',
   });
 
-  // Plain one-line summary of how the returns are actually made.
+  // Plain one-line summary of how the returns are made. Holding to
+  // resolution is the highlighted trait because it's rare and means the
+  // win rate reflects calling outcomes; early exit is stated flatly, not
+  // as a warning, because it's what ~everyone does.
+  const heldPct = redeemed / n;
   let style;
-  if (soldPct >= 80) style = 'Trades in and out — takes profit on price moves, rarely waits for resolution.';
-  else if (redeemed / n >= 0.6) style = 'Holds to resolution — the record reflects calling outcomes, not trading swings.';
-  else style = 'Mixed — some positions held to resolution, some sold early on price moves.';
+  if (heldPct >= 0.6) style = 'Holds to resolution — win rate reflects calling outcomes, not trading swings. Uncommon; most traders exit before markets resolve.';
+  else if (heldPct >= 0.25) style = 'Mixed — holds some positions to resolution, exits others early on price moves.';
+  else style = 'Trades in and out — takes profit on price moves and rarely waits for resolution, like most active Polymarket traders.';
 
   return {
     n,
