@@ -161,12 +161,24 @@
   .sim-scope{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
   .sim-edge{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:800;white-space:nowrap;text-align:right;}
   .sim-edge small{display:block;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:3px;}
-  @media(max-width:640px){.sim-row{flex-direction:column;align-items:flex-start;gap:10px;}.sim-edge{text-align:left;}}
+  .sim-edge-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;}
+  /* Thin-confidence matches (min shared-category n 5-14): the edge number is
+     still shown, but never as the loud hero a strong/moderate match gets —
+     smaller, muted, with the sample size called out right beside it rather
+     than buried in scope_label text below the fold. */
+  .sim-edge.is-thin{font-size:16px;font-weight:700;color:var(--muted);}
+  .sim-edge.is-thin small{color:var(--muted);}
+  .sim-sample-tag{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.03em;color:var(--muted);background:rgba(240,240,245,.06);border:1px solid var(--border);border-radius:5px;padding:2px 7px;white-space:nowrap;}
+  @media(max-width:640px){.sim-row{flex-direction:column;align-items:flex-start;gap:10px;}.sim-edge{text-align:left;}.sim-edge-wrap{align-items:flex-start;}}
   .specialty-cat{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);margin-bottom:6px;}
   .specialty-wr{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;}
   .specialty-wr.is-positive{color:#00e68a;}
   .specialty-wr.is-negative{color:#ff4d6a;}
   .specialty-n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+  /* A 1-4 trade "specialty" is real activity but not evidence of skill —
+     mute the tile so it doesn't read with the same authority as a n>=5 one. */
+  .specialty-tile.is-small-sample{opacity:.5;}
+  .specialty-small-tag{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
 
   .form-row{display:flex;align-items:center;gap:16px;background:#111118;border:1px solid var(--border);border-radius:10px;padding:18px 20px;}
   .form-trend{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--muted);}
@@ -251,6 +263,8 @@
     .sim-scope { font-size: 18px; margin-top: 12px; }
     .sim-edge { font-size: 52px; }
     .sim-edge small { font-size: 17px; margin-top: 6px; }
+    .sim-edge.is-thin { font-size: 26px; }
+    .sim-sample-tag { font-size: 15px; padding: 3px 10px; }
     .similar-list { gap: 18px; }
 
     .open-row { padding: 20px 26px; font-size: 24px; }
@@ -577,10 +591,12 @@ function renderVerified(p){
     html += '<div class="p-section"><div class="p-section-title">Specialty breakdown</div><div class="specialty-grid">'
       + p.specialty_full.map(function(s){
           var wrCls = s.win_rate_pct >= 50 ? 'is-positive' : 'is-negative';
-          return '<div class="specialty-tile">'
+          var tileCls = 'specialty-tile' + (s.small_sample ? ' is-small-sample' : '');
+          return '<div class="'+tileCls+'">'
             + '<div class="specialty-cat">'+esc(s.category)+'</div>'
             + '<div class="specialty-wr '+wrCls+'">'+esc(s.win_rate_pct.toFixed(1))+'%</div>'
             + '<div class="specialty-n">n='+esc(s.n)+(s.avg_roi_pct!=null?' · avg '+esc(fmtPct(s.avg_roi_pct)):'')+'</div>'
+            + (s.small_sample ? '<div class="specialty-small-tag">small sample</div>' : '')
           + '</div>';
         }).join('')
     + '</div></div>';
@@ -786,6 +802,15 @@ function loadSimilarTraders(handle){
                   + esc(fmtPct(h.your_roi_pct))+'</span> over '+esc(h.your_n)+' · '
                   + 'them <span class="'+(h.their_roi_pct>=0?'is-positive':'is-negative')+'">'
                   + esc(fmtPct(h.their_roi_pct))+'</span> over '+esc(h.their_n)+'</div>';
+            // Thin confidence (min shared-category n 5-14): edge number still
+            // shows, but muted rather than the loud strong/moderate hero, with
+            // the sample size called out right next to it instead of only
+            // living in scope_label text below the fold.
+            var isThin = m.confidence === 'thin';
+            var edgeCls = 'sim-edge' + (isThin ? ' is-thin' : ' is-positive');
+            var sampleTag = isThin
+              ? '<span class="sim-sample-tag">small sample · n='+esc(m.confidence_n)+'</span>'
+              : '';
             return '<div class="sim-row">'
               + '<div class="sim-main">'
                 + '<div class="sim-head">'+nameHtml
@@ -793,7 +818,10 @@ function loadSimilarTraders(handle){
                 + compare
                 + '<div class="sim-scope">'+esc(m.shared_categories.join(' · '))+' · '+esc(m.scope_label)+'</div>'
               + '</div>'
-              + '<div class="sim-edge is-positive">+'+esc(m.edge_pct.toFixed(1))+'%<small>vs you</small></div>'
+              + '<div class="sim-edge-wrap">'
+                + '<div class="'+edgeCls+'">+'+esc(m.edge_pct.toFixed(1))+'%<small>vs you</small></div>'
+                + sampleTag
+              + '</div>'
             + '</div>';
           }).join('')
         + '</div></div>';
