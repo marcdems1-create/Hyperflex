@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30e (✅ SHIPPED — copy-bot no longer auto-fires anything, for anyone. Marc's product call: "copy trading simply sends the signal... [auto-trading] once we build the app." Real auto-execution deferred entirely; signal channels widened to bell + web push + email.)
+
+**Marc's direction after the 2026-07-30d patch:** "only the most consistent get to be auto traded, copy trading simply sends the signal and prompts email notification or phone notification once we build the app." Read as: the durable-verified gate from the prior patch is the right eligibility concept for auto-trading, but auto-trading itself isn't something this web flow should do at all right now — it's a future, app-based feature. Today, copy-bot's job is signal delivery only.
+
+**Shipped:**
+1. **Removed the auto-execute-in-background branch from `copy-bot.js` entirely.** `_handleOpportunity` used to call `_executeTrade(data)` immediately alongside showing the banner, for any subscription that passed the (now much stronger) filter chain. That call is gone — every opportunity now ALWAYS requires an explicit "Copy →" tap, for every subscriber, verified or not, auto-mode or notify-only. Top-of-file doc comment rewritten to match (was: "attempt auto-execution in background"; now: "the user taps Copy themselves — nothing fires automatically").
+2. **Widened the signal channels.** `copy_bot`/`copy_bot_exit` added to `_WEB_PUSH_TYPES` (existing browser/PWA push mechanism, wasn't wired for this event type before — closest thing to "phone notification" that's actually buildable today, no app exists yet). Added a real email via the existing `sendResendEmail()` helper (same Resend/nodemailer path already used for other transactional mail), fire-and-forget, on the same trigger point as the existing bell notification. Needed `u.email` joined into the `cbSubs` query to get a recipient.
+3. **Notification copy rewritten** — the old text claimed "Auto-executing if your tab is open," which would now be false; replaced with "Signal: $X on SIDE. Tap Copy in the banner (or place it yourself) — nothing fires automatically."
+4. **Gate 4 in CLAUDE.md updated** to record this as the resolution of the "keep, gate, or fold in" question the 2026-07-30c audit left open: kept, gated hard (verified board + daily cap + cooldown from 2026-07-30d), and now additionally stripped of live auto-fire entirely — the durable-verified eligibility concept is preserved as the design for a FUTURE app-based auto-trade feature, not exercised by any code path today.
+
+**Left as-is:** the server-side `pending_execution`/`notify_only`/SSE-banner distinction (still differentiates who gets the richer interactive banner vs. bell-only), the verified-gate/daily-cap/cooldown filters from 2026-07-30d (still relevant — they're the eligibility bar for whenever real auto-trading does ship), the manual "Copy →" tap path in `execute()` (unaffected — still a real user-initiated signature through the unmodified CLOB signing code).
+
+`node --check server.js` clean. Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
+
 ## 2026-07-30d (✅ SHIPPED — patched the pre-existing copy-bot.js auto-execute system found in the 2026-07-30c audit: verified-board gate, daily spend cap, cooldown. Marc's call: keep the feature, close the gaps.)
 
 **Audited first (report-only, no changes), then patched on Marc's "no its all good but patch it up.":**

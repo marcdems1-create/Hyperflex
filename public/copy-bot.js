@@ -3,13 +3,19 @@
  *
  * Connects to /api/copy-bot/stream (SSE) for any page that includes this file.
  * When a copy opportunity fires:
- *   1. Show a persistent toast/banner with whale context + "Execute" / "Skip"
- *   2. If user has wallet + CLOB keys, attempt auto-execution in background
- *   3. If wallet locked / tab backgrounded / no keys → stay in banner for manual click
- *   4. Report result to server (POST /api/copy-bot/trades/:id/executed or /skipped)
+ *   1. Show a persistent toast/banner with whale context + a "Copy →" button
+ *   2. The user taps Copy themselves — nothing fires automatically. Copy
+ *      trading sends the signal (banner + bell + web push + email); real
+ *      unattended auto-trading is a later, app-based feature reserved for
+ *      the most-consistent (durable-verified) traders, per Gate 4 in
+ *      CLAUDE.md. 2026-07-30: removed the auto-execute-in-background
+ *      branch this file used to have on receiving an opportunity — it's
+ *      the same manual tap-to-copy model as every other surface now.
+ *   3. Report result to server (POST /api/copy-bot/trades/:id/executed or /skipped)
  *
- * Execution reuses the market.html order-signing pattern: fetch tick/neg_risk/fee,
- * build EIP-712 order, sign via HFXWallet, submit to CLOB with builder headers.
+ * Execution (on manual tap) reuses the market.html order-signing pattern:
+ * fetch tick/neg_risk/fee, build EIP-712 order, sign via HFXWallet, submit
+ * to CLOB with builder headers.
  *
  * Usage:
  *   <script src="/nav.js"></script>
@@ -139,13 +145,11 @@
 
     _showBanner(data, { canExecute: canExecute, reason: preflightReason, balance: balance, dryRun: isDryRun });
 
-    // Auto-execute only if NOT a dry run
-    if (!isDryRun && canExecute && _acquireLock(data.trade_id)) {
-      _executeTrade(data).catch(function(err) {
-        _warn('auto-exec failed:', err.message);
-        _releaseLock(data.trade_id);
-      });
-    }
+    // 2026-07-30: no auto-execute here anymore. Copy trading sends the
+    // signal (this banner, the bell, web push, email) — the user taps
+    // "Copy →" themselves to actually place it. Unattended auto-trading is
+    // a later, app-based feature for the most-consistent (durable-
+    // verified) traders only, per Gate 4 in CLAUDE.md, not this web flow.
   }
 
   // ── Exit handler ──

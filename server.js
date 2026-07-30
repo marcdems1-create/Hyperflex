@@ -2886,7 +2886,7 @@ async function sendUserWebPush(userId, title, body, url) {
 }
 
 // HIGH-VALUE PUSH TYPE LIST — these get a web push in addition to the in-app bell
-const _WEB_PUSH_TYPES = new Set(['take_correct', 'take_incorrect', 'challenge_won', 'challenge', 'challenge_accepted', 'reaction']);
+const _WEB_PUSH_TYPES = new Set(['take_correct', 'take_incorrect', 'challenge_won', 'challenge', 'challenge_accepted', 'reaction', 'copy_bot', 'copy_bot_exit']);
 
 async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null, refs = null) {
   try {
@@ -37405,8 +37405,11 @@ async function fetchWhalePositions() {
           const wArr = [...openWallets];
           const ph = wArr.map((_, i) => `$${i + 1}`).join(',');
           const cbSubs = await dbQuery(
-            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only, max_per_trade, min_whale_size, max_daily_spend
-             FROM copy_bot_subscriptions WHERE whale_address IN (${ph}) AND active = true`, wArr
+            `SELECT s.id, s.user_id, s.whale_address, s.whale_name, s.allocation, s.notify_only,
+                    s.max_per_trade, s.min_whale_size, s.max_daily_spend, u.email
+             FROM copy_bot_subscriptions s
+             LEFT JOIN users u ON u.id = s.user_id
+             WHERE s.whale_address IN (${ph}) AND s.active = true`, wArr
           ).catch(() => []);
           if (!cbSubs.length) return;
 
@@ -37541,9 +37544,14 @@ async function fetchWhalePositions() {
               // Notification body includes the filter reason so users understand why it was downgraded
               const noteBody = filterSkipReason
                 ? `⚠ Filtered: ${filterSkipReason}. Notify-only.`
-                : `Copying at $${allocUsd}. ${sub.notify_only ? 'Notify-only mode.' : 'Auto-executing if your tab is open.'}`;
+                : `Signal: $${allocUsd} on ${(evt.side || '').toUpperCase()}. Tap Copy in the banner (or place it yourself) \u2014 nothing fires automatically.`;
 
-              // Always notify (bell icon)
+              // Always notify (bell icon + web push, and email below).
+              // 2026-07-30 patch: copy-bot no longer auto-fires anything
+              // (see copy-bot.js) \u2014 it sends the signal, the user places it
+              // themselves. Real unattended auto-trading is a later,
+              // app-based feature reserved for the most-consistent
+              // (durable-verified) traders, per Gate 4 \u2014 not this web flow.
               pushNotification(
                 sub.user_id,
                 'copy_bot',
@@ -37552,6 +37560,21 @@ async function fetchWhalePositions() {
                 null,
                 evt.slug ? 'market:' + evt.slug : null
               );
+
+              // Email \u2014 the second signal channel Marc asked for (phone/app
+              // push comes later, once there's an actual app). Fire-and-
+              // forget, never blocks the trigger loop; silently no-ops if
+              // the user has no email on file or mail isn't configured.
+              if (sub.email) {
+                const marketUrl = evt.slug ? `https://hyperflex.network/market/${evt.slug}` : 'https://hyperflex.network/whales';
+                const escHtml = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                sendResendEmail({
+                  to: sub.email,
+                  subject: `${wName} opened a ${(evt.side || '').toUpperCase()} position`,
+                  text: `${wName} opened ${evt.size_display} ${(evt.side || '').toUpperCase()} on "${evt.question}".\n\n${noteBody}\n\n${marketUrl}`,
+                  html: `<p><b>${escHtml(wName)}</b> opened ${escHtml(evt.size_display)} ${escHtml((evt.side || '').toUpperCase())} on "${escHtml(evt.question || '')}".</p><p>${escHtml(noteBody)}</p><p><a href="${marketUrl}">${marketUrl}</a></p>`,
+                }).catch(e => console.warn('[copy-bot email]', e.message));
+              }
 
               // Log the copy trade with full execution data
               const tradeRows = await dbQuery(
