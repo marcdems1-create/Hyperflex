@@ -100,6 +100,14 @@
       html += '<div class="tcard-scope">' + esc(card.scope_label) + '</div>';
     }
 
+    // Compact style/risk flag — so a promoted card never shows a win rate
+    // with no context on how it was earned (rule 3: no naked win). Full
+    // disclosure is on the profile; this is the one-line version.
+    if (card.style_flag && card.style_flag.text) {
+      var sfCls = 'tcard-styleflag' + (card.style_flag.key === 'early_exit' ? ' is-warn' : '');
+      html += '<div class="' + sfCls + '">' + esc(card.style_flag.text) + '</div>';
+    }
+
     if (variant !== 'compact' && ev) {
       html += '<div class="tcard-evidence">'
         + '<div class="tcard-evidence-line">' + ev.line + '</div>'

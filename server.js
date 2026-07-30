@@ -12487,6 +12487,11 @@ const ROI_CAP = 10.0; // 1000% — winsorize ceiling on a single trade's realize
 const ROI_HALF_LIFE_DAYS = 90;
 const ROI_SHRINK_K = 20;
 const ROI_MIN_N_FLOOR = 10;
+// Higher bar to be CROWNED a category king (public promotion), vs the
+// n>=10 floor to merely appear on a board. A category king is showcased on
+// the homepage, so its record must be thick enough that no single lucky
+// run carries it — see the /api/kings gate. Only affects promotion.
+const CATEGORY_KING_MIN_N = 20;
 const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
 
 function _roiWindowClause(window) {
@@ -12975,7 +12980,7 @@ async function _buildTraderCards(roiRows) {
   // ISN'T uuid.
   const tradeRows = await dbQuery(`
     SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
-           entry_cost_usd, realized_pnl, realized_roi, closed_at
+           entry_cost_usd, realized_pnl, realized_roi, closed_at, close_reason
     FROM realized_trades
     WHERE user_id = ANY($1::uuid[]) AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
       AND market_durability = 'durable'
@@ -12996,6 +13001,7 @@ async function _buildTraderCards(roiRows) {
 
     let wins = 0, losses = 0;
     let recentWins = 0, recentN = 0;
+    let soldCount = 0; // early exits (sold-*) vs held-to-resolution (redeemed-*)
     const catStats = new Map(); // category -> { n, wins }
     const roiSamples = [];
     let maxTrade = null;
@@ -13004,6 +13010,7 @@ async function _buildTraderCards(roiRows) {
       const pnl = Number(t.realized_pnl);
       const isWin = pnl > 0;
       if (isWin) wins++; else if (pnl < 0) losses++;
+      if (String(t.close_reason || '').startsWith('sold')) soldCount++;
 
       const closedMs = new Date(t.closed_at).getTime();
       const daysAgo = (now - closedMs) / 86400000;
@@ -13048,6 +13055,21 @@ async function _buildTraderCards(roiRows) {
 
     const allTimeWinRate = n > 0 ? wins / n : 0;
     const recentWinRate = recentN >= 3 ? recentWins / recentN : null;
+
+    // Compact style flag. Early exit is NOT flagged: ~98% of all durable
+    // trades platform-wide are closed early (sold_origin 37,495 vs
+    // redeemed_origin 611 on 2026-07-29), so "exits early" describes almost
+    // everyone and warning on it is noise that implies a defect where
+    // there's just the normal way people trade. The DISTINCTIVE, worth-
+    // surfacing case is the rare opposite: a wallet that holds to
+    // resolution, whose win rate therefore reflects calling outcomes rather
+    // than trading swings. Only that fires, and it's a neutral note, not a
+    // warning.
+    const soldPct = n > 0 ? Math.round((soldCount / n) * 100) : null;
+    let styleFlag = null;
+    if (soldPct != null && n >= 10 && soldPct <= 25) {
+      styleFlag = { key: 'holds', text: 'Holds to resolution — win rate reflects calling outcomes, not trading swings' };
+    }
 
     const stats = {
       n, scorePct: row.score_pct, roiPct: row.raw_weighted_roi_pct, trend: row.trend,
@@ -13096,6 +13118,8 @@ async function _buildTraderCards(roiRows) {
         worst: { category: specialty.worst.category, win_rate_pct: Math.round(specialty.worst.winRate * 1000) / 10, n: specialty.worst.n },
       } : null,
       win_rate_pct: Math.round(allTimeWinRate * 1000) / 10,
+      sold_early_pct: soldPct,
+      style_flag: styleFlag,
       scope_label: durableScopeLabel(n),
     };
   });
@@ -13275,11 +13299,36 @@ app.get('/api/kings', async (req, res) => {
       // category, so an "Other King" is meaningless (same reason it's excluded
       // from the similar-trader matcher).
       const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
+      // The king's OWN n in the category must clear a higher bar than the
+      // global n>=10 ranking floor. Crowning "crypto king" off 10 trades at
+      // 100% win rate (YOURSOUL, 2026-07-29) is a lucky-sliver promotion:
+      // the whole moat is that a showcased trader's record is real, and 10
+      // cherry-picked trades is exactly what the CLAUDE.md gaming-risk note
+      // warns about. This gates promotion only — the category leaderboard
+      // computation and the n>=10 board membership are untouched. Tunable
+      // via ?king_min_n= for auditing.
+      const kingMinN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.king_min_n, 10) || CATEGORY_KING_MIN_N);
       const viable = Object.entries(byCategory)
-        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth && c.leaderboard[0])
+        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth
+          && c.leaderboard[0] && c.leaderboard[0].n >= kingMinN)
         .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
+
+      // Enrich each category king with the wallet-level style flag so a
+      // category tile can't show a win rate naked either (rule 3), same as
+      // the overall king above. One _buildTraderCards call over all the #1
+      // user_ids; exit style is a wallet trait, not category-specific, so
+      // the wallet-wide computation is the right one. Non-fatal — a card
+      // without the flag is still fine, just less informative.
+      const kingRows = viable.map(([, c]) => c.leaderboard[0]);
+      let flagByUser = new Map();
+      try {
+        const kingCards = await _buildTraderCards(kingRows);
+        if (kingCards) for (const kc of kingCards) if (kc.style_flag) flagByUser.set(kc.user_id, { style_flag: kc.style_flag, sold_early_pct: kc.sold_early_pct });
+      } catch (e) { console.warn('[kings] style-flag enrich failed:', e.message); }
+
       for (const [cat, c] of viable) {
         const r = c.leaderboard[0];
+        const enrich = flagByUser.get(r.user_id) || {};
         categories.push({
           category: cat,
           label: labelFor(cat),
@@ -13288,6 +13337,7 @@ app.get('/api/kings', async (req, res) => {
             user_id: r.user_id, display_name: r.display_name, username: r.username,
             polymarket_address: r.polymarket_address, n: r.n, wins: r.wins, losses: r.losses,
             win_rate_pct: r.win_rate_pct, score_pct: r.score_pct, scope_label: r.scope_label,
+            style_flag: enrich.style_flag || null, sold_early_pct: enrich.sold_early_pct != null ? enrich.sold_early_pct : null,
           },
         });
       }
@@ -30655,11 +30705,13 @@ async function computeTraderCard(userId) {
 // never appears naked (CLAUDE.md rule 3). Every signal here is arithmetic
 // over realized_trades, deterministic, no model call.
 //
-// The signal that motivated this: the current #1 (Nadmi, score 65, 89%
-// win rate) turns out to be 97% early-exit scalping — sells into a price
-// bump long before the market resolves — on ~$10K of capital, with one
-// trade carrying 19% of all profit. "89% win rate" is true and radically
-// misleading about what you'd be copying. This block says so plainly.
+// Framing note (corrected 2026-07-29): the flags are real per-trader risks
+// — concentration, tiny capital, very short holds. Exit style is NOT among
+// them: ~98% of durable trades platform-wide are closed early, so it's the
+// baseline behaviour, not a fault, and is reported only as neutral context
+// (the resolution-style split + the style sentence). The rare and
+// genuinely informative case is a wallet that HOLDS to resolution, whose
+// win rate therefore reflects calling outcomes; that's surfaced positively.
 function computeTraderRiskProfile(rows) {
   const durable = rows.filter(r => (r.market_durability || 'durable') !== 'ephemeral' && r.realized_pnl != null);
   const n = durable.length;
@@ -30691,17 +30743,15 @@ function computeTraderRiskProfile(rows) {
   // Flags — each is a specific, checkable risk, phrased for the person
   // deciding whether to follow. Only fire when the threshold is clearly
   // crossed; a clean record should surface few or none.
+  //
+  // NOT flagged: early exit. ~98% of all durable trades platform-wide are
+  // closed early (sold 37,495 vs redeemed 611, 2026-07-29), so selling
+  // before resolution is the norm, not a per-trader risk. Warning on it
+  // labels almost everyone defective for trading the normal way. The
+  // resolution-style split is still reported below as neutral context, and
+  // the rarer, genuinely informative case — holding to resolution — is
+  // surfaced positively rather than its opposite being surfaced as a fault.
   const flags = [];
-  if (soldPct >= 80) flags.push({
-    key: 'early_exit', severity: 'high',
-    label: 'Exits early, rarely holds to resolution',
-    detail: soldPct + '% of closed trades were sold before the market resolved. This record measures trading in and out of positions, not calling final outcomes — a different skill than "predicts what happens."',
-  });
-  if (redeemed === 0 && n >= 10) flags.push({
-    key: 'never_resolved', severity: 'medium',
-    label: 'No positions held to resolution',
-    detail: 'Every graded trade was closed early. There is no evidence here of being right about an outcome, only of exiting at a profit.',
-  });
   if (topShare >= 25) flags.push({
     key: 'concentrated', severity: 'medium',
     label: 'Record leans on one trade',
@@ -30718,11 +30768,15 @@ function computeTraderRiskProfile(rows) {
     detail: 'Average time in a position is ' + (avgHold < 1 ? 'under a day' : avgHold + ' days') + '. This is active trading, not patient position-taking — copying it means watching the market closely, not setting and forgetting.',
   });
 
-  // Plain one-line summary of how the returns are actually made.
+  // Plain one-line summary of how the returns are made. Holding to
+  // resolution is the highlighted trait because it's rare and means the
+  // win rate reflects calling outcomes; early exit is stated flatly, not
+  // as a warning, because it's what ~everyone does.
+  const heldPct = redeemed / n;
   let style;
-  if (soldPct >= 80) style = 'Trades in and out — takes profit on price moves, rarely waits for resolution.';
-  else if (redeemed / n >= 0.6) style = 'Holds to resolution — the record reflects calling outcomes, not trading swings.';
-  else style = 'Mixed — some positions held to resolution, some sold early on price moves.';
+  if (heldPct >= 0.6) style = 'Holds to resolution — win rate reflects calling outcomes, not trading swings. Uncommon; most traders exit before markets resolve.';
+  else if (heldPct >= 0.25) style = 'Mixed — holds some positions to resolution, exits others early on price moves.';
+  else style = 'Trades in and out — takes profit on price moves and rarely waits for resolution, like most active Polymarket traders.';
 
   return {
     n,
@@ -47197,7 +47251,21 @@ app.post('/api/admin/whale-backfill/run', async (req, res) => {
 // even when close_reason is by-luck correct). The previous version's
 // `close_reason <> $5` guard was an anti-thrash measure that's no longer
 // needed since the truth signal isn't bouncing between calls.
+// ⛔ RETIRED 2026-07-29. This graded redeemed positions purely off
+// `cashPnl > 0` from Polymarket's /positions redeemed bucket, with NO gamma
+// resolution check — the exact discredited method CLAUDE.md warns against
+// (cashPnl reports false wins; redeemable=true does not mean the position
+// won; the redeemed bucket includes not-yet-resolved positions). It was the
+// landmine that could re-fabricate `redeemed-*` grades on OPEN markets
+// (verify-promoted-redeemed found the politics king carrying redeemed-loss
+// on the still-open OpenAI-IPO and Romania-PM markets). No gamma m.closed
+// guard existed here at all. Body neutered to a no-op; the route below
+// returns 410. Correct redeemed grading lives only in backfillRealizedTrades
+// via _verifyRedeemedSettlement (gamma-guarded, m.closed===true required).
 async function regradeRedeemedTrades(userId, proxy) {
+  return { regraded: 0, fetched: 0, retired: true,
+    note: 'regradeRedeemedTrades retired 2026-07-29 — graded off cashPnl with no gamma check. Use backfillRealizedTrades (gamma-guarded) instead.' };
+  // eslint-disable-next-line no-unreachable
   if (!pool || !userId || !proxy) return { regraded: 0, fetched: 0 };
   const proxyLower = proxy.toLowerCase();
   let regraded = 0, fetched = 0, sample = null;
@@ -47290,6 +47358,15 @@ async function regradeRedeemedTrades(userId, proxy) {
 // Use user_id for a single profile (e.g. the one in the screenshot);
 // use all_whales=true to sweep the whole top-50 leaderboard.
 app.post('/api/admin/regrade-redeems', async (req, res) => {
+  // ⛔ RETIRED 2026-07-29 — see regradeRedeemedTrades. Graded redeemed
+  // positions off cashPnl with no gamma resolution check; could re-fabricate
+  // redeemed-* grades on markets that haven't resolved. Disabled rather than
+  // guarded because the whole cashPnl-from-/positions method is discredited.
+  return res.status(410).json({
+    error: 'retired',
+    note: 'regrade-redeems graded off cashPnl with no gamma check and is permanently disabled. Redeemed grading now happens only in backfillRealizedTrades via gamma-verified settlement (m.closed===true). See SESSION_STATE 2026-07-29.',
+  });
+  // eslint-disable-next-line no-unreachable
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   if (!pool) return res.status(503).json({ error: 'DB not configured' });
   const { user_id, all_whales } = req.body || {};
@@ -63819,6 +63896,500 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[record-integrity]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PROMOTED-TRADER RECONCILIATION ───────────────────────────────────────
+// "Beyond reasonable doubt the board promotes the right traders" (Marc,
+// 2026-07-29). Reconciles every homepage-promoted wallet's stored record
+// against its REAL on-chain fills from Polymarket /activity — the source
+// of truth for sold-path trades. Read-only.
+//
+// Two independent checks per wallet, chosen to be robust to naming and to
+// the FIFO-partitioning our backfill does (so we're not just re-running
+// backfill's own logic and reproducing its bugs):
+//   1. FABRICATION (hard, naming-independent): every conditionId we have a
+//      realized_trades row for MUST appear in the wallet's on-chain trade
+//      activity. A row whose conditionId is absent on-chain is a trade the
+//      wallet never made — the worst failure, and exactly the class the
+//      poisoned-cache + future-dated bugs produced.
+//   2. PNL-SIGN (aggregate per conditionId, sold-path only): summed
+//      realized_pnl for a condition should agree in sign with (sell_usdc −
+//      buy_usdc) from the actual fills. Redeemed-path conditions are
+//      skipped here (their payout isn't a TRADE event) beyond confirming
+//      buys exist — resolution correctness is the settlement-cache audit's
+//      job, not this one.
+//
+// Deliberately NOT compared against /positions redeemed bucket — that
+// round-trip-vs-held-to-resolution mismatch is what produced the wrong
+// tetrose "fabricated" claim earlier today (see CLAUDE.md method note).
+//
+// Coverage honesty: /activity caps at 500/page; we paginate by offset up
+// to ACTIVITY_MAX_EVENTS. If a wallet exceeds that, its report is marked
+// coverage_capped=true and — critically — fabrication is NOT asserted for
+// it, because a trade older than the fetch window looks identical to a
+// fabricated one. (First pass capped at 3000 and produced 6/8 false
+// FABRICATED verdicts: Nadmi alone has 5,501 events and its "fabricated"
+// conditions were all real, just older than the window. Caught because
+// fabricated_count correlated 1:1 with coverage_capped.) Raised to a
+// window that covers real wallets; anything past it is honestly reported
+// UNVERIFIABLE_CAPPED, never FABRICATED.
+const ACTIVITY_MAX_EVENTS = 12000;
+
+async function _fetchAllActivity(address) {
+  const out = [];
+  const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+  for (let offset = 0; offset < ACTIVITY_MAX_EVENTS; offset += 500) {
+    const url = 'https://data-api.polymarket.com/activity?user=' + address
+      + '&limit=500&type=TRADE&offset=' + offset;
+    const r = await fetch(url, H).catch(() => null);
+    if (!r || !r.ok) break;
+    const page = await r.json().catch(() => null);
+    if (!Array.isArray(page) || !page.length) break;
+    out.push(...page);
+    if (page.length < 500) break;
+  }
+  return { events: out, capped: out.length >= ACTIVITY_MAX_EVENTS };
+}
+
+async function _reconcileWallet(userId, address) {
+  if (!address) return { user_id: userId, error: 'no polymarket_address' };
+
+  const ourRows = await dbQuery(`
+    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
+  `, [userId]).catch(() => []);
+
+  const { events, capped } = await _fetchAllActivity(address.toLowerCase());
+
+  // On-chain fills grouped by conditionId: what the wallet ACTUALLY did.
+  // Track shares too (usdc/price) so we can tell a position that was TRADED
+  // OUT (buyShares≈sellShares) from one HELD TO RESOLUTION and redeemed
+  // (sellShares≪buyShares) — the redemption payout is not a TRADE event, so
+  // only traded-out positions are reconcilable from this feed.
+  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
+  const onchainConds = new Set();
+  for (const e of events) {
+    const cond = String(e.conditionId || '').toLowerCase();
+    if (!cond) continue;
+    onchainConds.add(cond);
+    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
+    const g = onchainByCond.get(cond);
+    const usdc = Number(e.usdcSize) || 0;
+    const px = Number(e.price) || 0;
+    const sh = px > 0 ? usdc / px : 0;
+    if (String(e.side).toUpperCase() === 'BUY') { g.buyUsdc += usdc; g.buyShares += sh; }
+    else { g.sellUsdc += usdc; g.sellShares += sh; }
+    g.nEvents++;
+  }
+
+  // Our rows grouped by conditionId, so the pnl-sign check aggregates all
+  // round-trips on a market rather than mis-partitioning a single one.
+  const ourByCond = new Map();
+  for (const r of ourRows) {
+    const cond = String(r.condition_id || '').toLowerCase();
+    if (!ourByCond.has(cond)) ourByCond.set(cond, { pnl: 0, rows: 0, anyRedeemed: false });
+    const g = ourByCond.get(cond);
+    g.pnl += Number(r.realized_pnl) || 0;
+    g.rows++;
+    if (String(r.close_reason || '').startsWith('redeemed')) g.anyRedeemed = true;
+  }
+
+  // ⚠️ SCOPE: this reconciler is valid for SOLD-PATH positions only. A
+  // held-to-resolution position is acquired by a BUY (a TRADE event) but
+  // exits via REDEMPTION, which is NOT in the TRADE feed — so its outcome
+  // and often its very presence can't be judged here. Redeemed-path rows
+  // are therefore NOT checked for fabrication or pnl and are counted
+  // separately as redeemed_unchecked. (This is why an earlier pass called
+  // the holds-to-resolution politics king 60/60 "fabricated" — all its
+  // positions are redeemed; verified real via the /positions bucket. A
+  // proper redeemed-path reconciler against /positions + gamma is a
+  // separate build.)
+  const fabricated = [];   // SOLD-path conditionId with zero on-chain TRADE presence
+  const pnlMismatch = [];  // SOLD-path, fully traded out, sign disagreement vs fills
+  let redeemedUnchecked = 0;
+  for (const [cond, g] of ourByCond) {
+    if (g.anyRedeemed) { redeemedUnchecked++; continue; } // out of scope for a TRADE-only check
+    // FABRICATION (sold-path): a position we say was SOLD must have TRADE
+    // fills. Absence = fabricated — but only assertable with full coverage.
+    if (!onchainConds.has(cond)) { if (!capped) fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
+    const oc = onchainByCond.get(cond);
+    // PNL-sign only when the position was genuinely TRADED OUT: shares
+    // bought ≈ shares sold (within 10%). If shares remain, the exit was a
+    // redemption whose payout isn't in this feed, so fill_net understates
+    // the real result and a sign comparison is invalid.
+    if (oc.buyShares <= 0 || oc.sellShares < oc.buyShares * 0.9) continue;
+    const fillNet = oc.sellUsdc - oc.buyUsdc;
+    const ourSign = Math.sign(g.pnl), fillSign = Math.sign(fillNet);
+    if (ourSign !== 0 && fillSign !== 0 && ourSign !== fillSign
+        && Math.abs(g.pnl) > 50 && Math.abs(fillNet) > 50) {
+      pnlMismatch.push({ condition_id: cond, our_pnl: Math.round(g.pnl), onchain_fill_net_usdc: Math.round(fillNet), rows: g.rows });
+    }
+  }
+
+  const soldChecked = ourByCond.size - redeemedUnchecked;
+  let verdict;
+  if (pnlMismatch.length) verdict = 'PNL_MISMATCH';
+  else if (!capped && fabricated.length) verdict = 'FABRICATED_TRADES';
+  else if (capped) verdict = 'UNVERIFIABLE_CAPPED';
+  else verdict = 'clean'; // sold-path clean; see redeemed_unchecked for scope
+
+  return {
+    user_id: userId,
+    address,
+    our_durable_conditions: ourByCond.size,
+    our_durable_rows: ourRows.length,
+    onchain_trade_events: events.length,
+    onchain_conditions: onchainConds.size,
+    coverage_capped: capped,
+    sold_path_conditions_checked: soldChecked,
+    redeemed_unchecked: redeemedUnchecked,
+    fabricated_count: fabricated.length,
+    pnl_sign_mismatch_count: pnlMismatch.length,
+    fabricated: fabricated.slice(0, 20),
+    pnl_mismatch: pnlMismatch.slice(0, 20),
+    verdict,
+  };
+}
+
+// GET /api/admin/verify-promoted — reconcile the homepage-promoted set.
+app.get('/api/admin/verify-promoted', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    // The promoted set = overall #1 + top movers (board slice) + category
+    // kings. Exactly the wallets the public can see, per Marc's scope.
+    const moversN = Math.min(12, Math.max(1, parseInt(req.query.movers, 10) || 6));
+    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const promoted = new Map(); // user_id -> { address, why[] }
+    const add = (uid, addr, why) => {
+      if (!uid) return;
+      if (!promoted.has(uid)) promoted.set(uid, { address: addr, why: [] });
+      promoted.get(uid).why.push(why);
+      if (!promoted.get(uid).address && addr) promoted.get(uid).address = addr;
+    };
+    if (board && board.rows) {
+      board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, r.polymarket_address, i === 0 ? 'overall_1' : 'mover'));
+    }
+    const cats = await _computeCategoryRoiLeaderboards();
+    if (cats) for (const [cat, c] of Object.entries(cats)) {
+      if (cat === 'other') continue;
+      const k = c.leaderboard && c.leaderboard[0];
+      if (k && k.n >= CATEGORY_KING_MIN_N) add(k.user_id, k.polymarket_address, cat + '_king');
+    }
+
+    // Addresses may be missing on the board rows — backfill from users.
+    const needAddr = [...promoted.entries()].filter(([, v]) => !v.address).map(([uid]) => uid);
+    if (needAddr.length) {
+      const rows = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = ANY($1)', [needAddr]).catch(() => []);
+      for (const r of rows) if (promoted.has(r.id)) promoted.get(r.id).address = r.polymarket_address;
+    }
+
+    const results = await _mapLimit([...promoted.entries()], 3, async ([uid, v]) => {
+      const rec = await _reconcileWallet(uid, v.address).catch(e => ({ user_id: uid, error: e.message }));
+      rec.promoted_as = v.why;
+      return rec;
+    });
+
+    const flagged = results.filter(r => r.verdict && r.verdict !== 'clean');
+    res.json({
+      promoted_wallets: results.length,
+      clean: results.filter(r => r.verdict === 'clean').length,
+      flagged: flagged.length,
+      flagged_wallets: flagged,
+      all: results,
+      note: 'SCOPE: SOLD-PATH ONLY. Verifies positions traded out via the /activity TRADE feed. Held-to-resolution (redeemed) positions exit via redemption, which is NOT a trade event, so they are counted as redeemed_unchecked and need a separate /positions+gamma reconciler — that path (the one the poisoned-cache bug corrupted) is NOT proven by this endpoint. FABRICATED_TRADES = a SOLD-path conditionId absent from on-chain trades (full coverage only). PNL_MISMATCH = sold-path, fully-traded-out, pnl sign disagrees with fills. UNVERIFIABLE_CAPPED = exceeds ' + ACTIVITY_MAX_EVENTS + ' events. "clean" means sold-path clean; check redeemed_unchecked for what was out of scope.',
+    });
+  } catch (e) {
+    console.error('[verify-promoted]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── REDEEMED-PATH RECONCILIATION (the one that matters) ──────────────────
+// The sold-path verifier can't touch held-to-resolution positions, and
+// redeemed-path is exactly what the poisoned settlement cache corrupted
+// (2028 elections graded settled). This reconciles our graded win/loss for
+// each redeemed row against gamma's ACTUAL resolution — the real source of
+// truth — bypassing market_settlement_cache entirely (verifying against
+// the thing that got poisoned would be circular). Not compared to the
+// /positions redeemed bucket either (that round-trip-vs-held mismatch is
+// the tetrose method error).
+//
+// Per redeemed condition:
+//   • gamma unreachable / not found → UNVERIFIABLE (aged out of retention).
+//   • gamma reachable but m.closed !== true → FABRICATED_RESOLUTION: we
+//     graded a market that hasn't resolved. THE poisoned-cache symptom.
+//   • closed, decisive winner known → compare: did our credited side
+//     actually win? Disagreement → INVERTED_GRADE (we called a loss a win
+//     or vice versa).
+//   • closed but no decisive winner parseable → UNVERIFIABLE.
+async function _reconcileWalletRedeemed(userId) {
+  const rows = await dbQuery(`
+    SELECT condition_id, side, close_reason, realized_pnl, market_question
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
+      AND close_reason IN ('redeemed-win','redeemed-loss')
+  `, [userId]).catch(() => []);
+  if (!rows.length) return { user_id: userId, redeemed_rows: 0, verdict: 'no_redeemed_rows' };
+
+  const byCond = new Map();
+  for (const r of rows) {
+    const cond = String(r.condition_id || '').toLowerCase();
+    if (!cond) continue;
+    if (!byCond.has(cond)) byCond.set(cond, []);
+    byCond.get(cond).push(r);
+  }
+
+  const fabricatedResolution = []; // graded settled; gamma says still open
+  const invertedGrade = [];        // our win/loss disagrees with gamma winner
+  let unverifiable = 0, verified = 0;
+
+  await _mapLimit([...byCond.keys()], 6, async (cond) => {
+    const group = byCond.get(cond);
+    const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
+    const { ok, markets } = await _fetchGammaKeysetChecked(url);
+    const m = markets && markets[0];
+    if (!ok || !m) { unverifiable += group.length; return; }              // aged out — can't check
+    const q = String(m.question || '').slice(0, 80);
+    if (m.closed !== true) {                                              // graded a resolution that hasn't happened
+      for (const r of group) fabricatedResolution.push({ condition_id: cond, question: q, our: r.close_reason });
+      return;
+    }
+    const settle = _parseOutcomeSettlement(m);
+    if (!settle || !settle.winnerName) { unverifiable += group.length; return; }
+    const winner = settle.winnerName.toLowerCase().trim();
+    for (const r of group) {
+      const ourSide = String(r.side || '').toLowerCase().trim();
+      const actualWon = ourSide === winner;
+      const ourWon = r.close_reason === 'redeemed-win' || Number(r.realized_pnl) > 0;
+      if (actualWon !== ourWon) {
+        invertedGrade.push({ condition_id: cond, question: q, our_side: r.side, we_graded: ourWon ? 'win' : 'loss', gamma_winner: settle.winnerName });
+      } else verified++;
+    }
+  });
+
+  const bad = fabricatedResolution.length + invertedGrade.length;
+  return {
+    user_id: userId,
+    redeemed_rows: rows.length,
+    redeemed_conditions: byCond.size,
+    verified,
+    unverifiable,
+    fabricated_resolution_count: fabricatedResolution.length,
+    inverted_grade_count: invertedGrade.length,
+    fabricated_resolution: fabricatedResolution.slice(0, 25),
+    inverted_grade: invertedGrade.slice(0, 25),
+    verdict: bad === 0
+      ? (unverifiable > 0 ? 'clean_partial' : 'clean')
+      : (fabricatedResolution.length ? 'FABRICATED_RESOLUTION' : 'INVERTED_GRADE'),
+  };
+}
+
+// GET /api/admin/verify-promoted-redeemed — resolution check on the
+// promoted set's held-to-resolution positions, against live gamma.
+app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const moversN = Math.min(12, Math.max(1, parseInt(req.query.movers, 10) || 6));
+    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const promoted = new Map();
+    const add = (uid, why) => { if (!uid) return; if (!promoted.has(uid)) promoted.set(uid, []); promoted.get(uid).push(why); };
+    if (board && board.rows) board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, i === 0 ? 'overall_1' : 'mover'));
+    const cats = await _computeCategoryRoiLeaderboards();
+    if (cats) for (const [cat, c] of Object.entries(cats)) {
+      if (cat === 'other') continue;
+      const k = c.leaderboard && c.leaderboard[0];
+      if (k && k.n >= CATEGORY_KING_MIN_N) add(k.user_id, cat + '_king');
+    }
+
+    const results = await _mapLimit([...promoted.keys()], 2, async (uid) => {
+      const rec = await _reconcileWalletRedeemed(uid).catch(e => ({ user_id: uid, error: e.message }));
+      rec.promoted_as = promoted.get(uid);
+      return rec;
+    });
+
+    const flagged = results.filter(r => r.verdict === 'FABRICATED_RESOLUTION' || r.verdict === 'INVERTED_GRADE');
+    res.json({
+      promoted_wallets: results.length,
+      clean: results.filter(r => r.verdict === 'clean' || r.verdict === 'clean_partial' || r.verdict === 'no_redeemed_rows').length,
+      flagged: flagged.length,
+      flagged_wallets: flagged,
+      all: results,
+      note: 'Checks each redeemed (held-to-resolution) row against LIVE gamma, bypassing market_settlement_cache. FABRICATED_RESOLUTION = we graded a market gamma reports as still open (the poisoned-cache symptom). INVERTED_GRADE = our win/loss disagrees with gamma\'s actual winner. UNVERIFIABLE (in counts) = market aged out of gamma retention, can\'t check. clean_partial = no disagreements found but some rows unverifiable.',
+    });
+  } catch (e) {
+    console.error('[verify-promoted-redeemed]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/audit-redeemed-open — platform-wide, read-only. Sizes the
+// blast radius of the fabricated-resolution finding before any corrective
+// delete: how many redeemed-path realized_trades sit on markets gamma still
+// reports as closed:false (graded a resolution that hasn't happened). This
+// is the residue the 2026-07-29 cache purge missed — it deleted by cache
+// membership, but these rows' conditions weren't in the cache, so a
+// gamma-keyed pass is the correct measure. Bounded: dedupes conditions,
+// checks a bounded sample (?sample=, default 400) against live gamma, and
+// extrapolates. Nothing deleted.
+// POST /api/admin/purge-fabricated-redeemed — corrective delete for the
+// redeemed-path fabrication (audit-redeemed-open: 59/59 gamma-reachable
+// redeemed conditions are on OPEN markets, 0 legitimately resolved). This
+// removes fabricated GRADES, not traders: the wallet, its identity, and its
+// real sold-path trades all remain; only the fake resolution rows leave the
+// score. A wallet that drops below the qualifying floor becomes "building"
+// (rule 4), not erased, and re-qualifies automatically as it accrues real
+// verified trades. Any genuinely-resolved trade swept up here re-ingests,
+// correctly graded, on the next gamma-guarded backfill.
+//
+// Safety: (1) snapshots every deleted row to realized_trades_quarantine
+// first (reversible); (2) refuses to delete a row a flex_backing_settlements
+// record points at (real FP moved against it — needs manual reversal),
+// same guard as the other corrective deletes; (3) DRY-RUN by default —
+// ?confirm=1 required to actually delete.
+app.post('/api/admin/purge-fabricated-redeemed', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const doIt = req.query.confirm === '1';
+
+    const targets = await dbQuery(`
+      SELECT id, user_id::text AS user_id, condition_id, side, close_reason, realized_pnl, market_question
+      FROM realized_trades
+      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+    `).catch(e => { console.warn('[purge-fab-redeemed] select:', e.message); return null; });
+    if (targets == null) return res.status(500).json({ error: 'select failed' });
+    if (!targets.length) return res.json({ deleted: 0, note: 'No redeemed-path durable rows found.' });
+
+    const ids = targets.map(r => r.id);
+
+    // Safety check: any of these referenced by a real FP settlement?
+    const tainted = await dbQuery(
+      `SELECT id, trade_id FROM flex_backing_settlements WHERE trade_id = ANY($1::bigint[])`,
+      [ids]
+    ).catch(() => []);
+    const taintedIds = new Set(tainted.map(t => String(t.trade_id)));
+    const deletableIds = ids.filter(id => !taintedIds.has(String(id)));
+
+    // Board impact — before/after qualifying-wallet count.
+    const before = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const beforeIds = new Set(before ? before.rows.map(r => r.user_id) : []);
+
+    if (!doIt) {
+      const byWallet = {};
+      for (const r of targets) byWallet[r.user_id] = (byWallet[r.user_id] || 0) + 1;
+      return res.json({
+        dry_run: true,
+        would_delete: deletableIds.length,
+        redeemed_rows_total: targets.length,
+        protected_by_settlements: taintedIds.size,
+        affected_wallets: Object.keys(byWallet).length,
+        qualifying_wallets_now: beforeIds.size,
+        note: 'DRY RUN — nothing deleted. Re-run with ?confirm=1 to snapshot to realized_trades_quarantine and delete. Deletes fabricated GRADES, not traders: wallets and their real sold-path trades remain; sub-floor wallets become "building"; legit trades re-ingest via the gamma-guarded backfill. ' + (taintedIds.size ? taintedIds.size + ' row(s) are referenced by flex_backing_settlements and will be SKIPPED (need manual reversal).' : ''),
+      });
+    }
+
+    // Execute: snapshot then delete, in a transaction.
+    await dbQuery(`CREATE TABLE IF NOT EXISTS realized_trades_quarantine (
+      id BIGINT, user_id TEXT, condition_id TEXT, side TEXT, close_reason TEXT,
+      realized_pnl NUMERIC, market_question TEXT, reason TEXT, quarantined_at TIMESTAMPTZ DEFAULT now()
+    )`).catch(() => {});
+
+    const snapRows = targets.filter(r => !taintedIds.has(String(r.id)));
+    for (const r of snapRows) {
+      await dbQuery(
+        `INSERT INTO realized_trades_quarantine (id, user_id, condition_id, side, close_reason, realized_pnl, market_question, reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [r.id, r.user_id, r.condition_id, r.side, r.close_reason, r.realized_pnl, r.market_question,
+         'redeemed-path fabrication — audit-redeemed-open 2026-07-29, graded on unresolved markets']
+      ).catch(e => console.warn('[purge-fab-redeemed] snapshot', r.id, e.message));
+    }
+
+    const del = await dbQuery(
+      `DELETE FROM realized_trades WHERE id = ANY($1::bigint[]) RETURNING id`,
+      [deletableIds]
+    ).catch(e => { console.error('[purge-fab-redeemed] delete:', e.message); return null; });
+    if (del == null) return res.status(500).json({ error: 'delete failed after snapshot — check realized_trades_quarantine' });
+
+    const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
+    const droppedOff = [...beforeIds].filter(u => !afterIds.has(u));
+
+    res.json({
+      deleted: del.length,
+      snapshotted: snapRows.length,
+      protected_by_settlements: taintedIds.size,
+      qualifying_wallets_before: beforeIds.size,
+      qualifying_wallets_after: afterIds.size,
+      dropped_off_board: droppedOff.length,
+      dropped_off_board_ids: droppedOff.slice(0, 50),
+      note: 'Fabricated redeemed grades removed (snapshot in realized_trades_quarantine, reversible). Dropped-off wallets are NOT erased — they persist with their real sold-path trades as "building" and re-qualify as they accrue verified trades. Genuinely-resolved trades re-ingest correctly on the next gamma-guarded backfill. Re-run GET /api/admin/audit-redeemed-open to confirm.',
+    });
+  } catch (e) {
+    console.error('[purge-fabricated-redeemed]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const sampleN = Math.min(1500, Math.max(50, parseInt(req.query.sample, 10) || 400));
+
+    const totals = await dbQuery(`
+      SELECT COUNT(*)::int AS redeemed_rows,
+             COUNT(DISTINCT condition_id)::int AS redeemed_conditions
+      FROM realized_trades
+      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+    `).catch(() => []);
+
+    // Distinct conditions, sampled at random so the open-rate extrapolates.
+    // Subquery form: `SELECT DISTINCT x ORDER BY random()` is a Postgres
+    // error (ORDER BY expr not in the DISTINCT list) — it silently returned
+    // 0 rows the first run. Dedupe in the inner query, randomize outside.
+    const conds = await dbQuery(`
+      SELECT condition_id FROM (
+        SELECT DISTINCT condition_id FROM realized_trades
+        WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+      ) s
+      ORDER BY random() LIMIT $1
+    `, [sampleN]).catch(e => { console.warn('[audit-redeemed-open] conds query:', e.message); return []; });
+
+    let open = 0, closed = 0, unreachable = 0;
+    const openSamples = [];
+    await _mapLimit(conds, 6, async (row) => {
+      const cond = String(row.condition_id || '').toLowerCase();
+      const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
+      const { ok, markets } = await _fetchGammaKeysetChecked(url);
+      const m = markets && markets[0];
+      if (!ok || !m) { unreachable++; return; }
+      if (m.closed !== true) {
+        open++;
+        if (openSamples.length < 20) openSamples.push({ condition_id: cond, question: String(m.question || '').slice(0, 80) });
+      } else closed++;
+    });
+
+    const checked = open + closed + unreachable;
+    const reachable = open + closed;
+    const openRatePct = reachable ? Math.round((open / reachable) * 1000) / 10 : null;
+    const totalConds = totals[0] ? totals[0].redeemed_conditions : null;
+    res.json({
+      redeemed_rows_total: totals[0] ? totals[0].redeemed_rows : null,
+      redeemed_conditions_total: totalConds,
+      sampled_conditions: checked,
+      open_on_gamma: open,
+      closed_on_gamma: closed,
+      gamma_unreachable: unreachable,
+      open_rate_pct_of_reachable: openRatePct,
+      estimated_fabricated_conditions: (openRatePct != null && totalConds != null)
+        ? Math.round(totalConds * (open / reachable)) : null,
+      open_samples: openSamples,
+      note: 'open_on_gamma = redeemed row on a market gamma reports as closed:false = graded a resolution that has not happened (fabricated). gamma_unreachable aged out of retention (indeterminate). estimated_fabricated_conditions extrapolates the reachable open-rate across all redeemed conditions. Read-only; nothing deleted. Corrective delete should key on live gamma closed:false, NOT cache membership (that is what the 7/29 purge got wrong).',
+    });
+  } catch (e) {
+    console.error('[audit-redeemed-open]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

@@ -141,6 +141,32 @@ Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
 
 `node --check server.js` clean. Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
 
+## 2026-07-29b (⛔ MAJOR — verified the board "beyond reasonable doubt"; found the entire redeemed path fabricated; purged it, board 95→80)
+
+**Marc: "make sure beyond reasonable doubt the grading promotes the right traders."** Built a reconciliation harness, ran it on the homepage-promoted set, hand-checked every flag against gamma/polymarket.com. Verdict: **sold path (98% of volume) reconciles clean; the entire redeemed path was fabricated and is now purged.**
+
+**Shipped (all on origin/main):**
+- `c47d839` — CATEGORY_KING_MIN_N=20 (a king's own in-category n must clear 20, not the n≥10 board floor; crypto king had been crowned on n=10/100%) + `GET /api/admin/verify-promoted` (sold-path reconciliation vs on-chain /activity fills).
+- `7af68e2`, `8abf3e1` — fixed THREE verifier false-positive modes found by hand-checking rather than trusting the harness: (1) 3000-event fetch cap made real older trades look fabricated (Nadmi has 5,501 events); (2) held-to-resolution wins look like pnl mismatches because redemption isn't a trade event; (3) redeemed-path positions can't be reconciled via TRADE events at all. Verifier is now SOLD-PATH ONLY, honest about coverage.
+- `005f77a` — `GET /api/admin/verify-promoted-redeemed`: checks redeemed grades against LIVE gamma, bypassing the (poisoned) settlement cache. **Flagged politics king ultralisk: 17/60 redeemed rows on markets gamma says are OPEN, 0 verified. Hand-confirmed 3 against gamma directly (OpenAI IPO, Romania PM — closed:false).**
+- `7f8110d`, `2b59a7c` — RETIRED `regradeRedeemedTrades` + `/api/admin/regrade-redeems` (410): graded off cashPnl with no gamma check, the landmine that could re-fabricate. Added `GET /api/admin/audit-redeemed-open` (platform-wide, read-only).
+- `d6d51b3` — `POST /api/admin/purge-fabricated-redeemed` (dry-run default, snapshot to `realized_trades_quarantine`, settlement-safety check).
+
+**Root cause (traced through code, not guessed):** redeemed rows on open markets = pre-7/28-fix residue. The unguarded parser graded open markets as resolved off price extremity; the 7/29 cache purge missed them because it deleted by CACHE MEMBERSHIP and these conditions weren't in the cache. The guarded insert path + purged cache can't recreate them; only the manual cashPnl regrade endpoint could, now retired.
+
+**The measurement:** `audit-redeemed-open` sampled 400/534 redeemed conditions — 59 gamma-reachable, **59/59 OPEN, 0 legitimately resolved.** 341 aged out (indeterminate). The redeemed path never correctly graded a still-visible resolved market. ~596 rows / 534 conditions, ~13% of durable trades.
+
+**Executed the purge (Marc's call, after dry-run):** 596 deleted, 596 snapshotted (reversible), 0 settlement-protected. **Qualifying wallets 95 → 80, 15 dropped off** incl. politics king ultralisk (`5dad8307`). Homepage now: overall #1 Nadmi (n 118→115, verified-clean sold-path), world king Nadmi (n 46); sports/macro/crypto kings gone — but that's the n=20 floor raise (they were n=18/11/10), not the delete.
+
+**Framing (Marc):** deletes fabricated GRADES, not traders. Dropped wallets persist with real sold-path trades as "building," re-qualify automatically. Reversible via quarantine table; legit trades re-ingest via gamma-guarded backfill.
+
+**Active blockers / open:**
+- ⏳ Post-purge confirmation still owed: re-run `audit-redeemed-open` (expect ~0 open) + `verify-promoted-redeemed` (expect clean). Marc to run (needs ADMIN_SECRET).
+- The n=20 category-king floor now leaves only 1 category king (world) on the homepage — most categories lack a wallet with 20+ in-category durable trades. Tuning decision: lower the floor, or accept sparse category kings. Not a bug.
+- 341 redeemed conditions were aged-out/indeterminate at purge time — deleted anyway (produced by the discredited method, 0% of checkable ones legit). If any was genuinely legit, it re-ingests correctly via backfill or is recoverable from `realized_trades_quarantine`.
+
+**Discipline note:** the harness itself was wrong in 3+ modes; every "fabricated!" alarm got hand-checked before action. The ONE that survived hand-checking (redeemed-on-open) was real. Do not trust a checker's output without verifying the checker.
+
 ## 2026-07-29 (✅ SHIPPED — trader card rebuild, auto-gen bio, similar-trader matcher, "how they trade" risk disclosure, homepage category kings, + 3 real data-integrity bugs found & fixed)
 
 **Shipped (all pushed to origin/main, verified on origin):**
@@ -178,7 +204,7 @@ Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
 - **Two CLAUDE.md assumptions confirmed FALSE against the live API:** `redeemable=true` does not mean won (`redeemable=true, curPrice=0`, negative pnl observed); the `winning` param is ignored when `redeemed=true` (byte-identical payloads). Both now flagged in CLAUDE.md.
 
 **Open questions / unverified:**
-- **🔴 SCORING MODEL: an early profitable exit is scored identically to correctly calling a resolution.** That is why the #1 (Nadmi) is a 97%-early-exit scalper on $9,840. The `b13f321` risk disclosure now tells the truth about it on the card, but the disclosure is a PATCH — the real fix is weighting held-to-resolution over early exits in the ranking itself. Marc flagged this is a product decision, deferred, not for Claude to pick. **This is the single most important open item: the leaderboard is ranking the wrong thing.**
+- **✅ SCORING MODEL — SETTLED, do not reopen.** Asked whether the ranking should weight held-to-resolution over early exits (since the #1 is a 97%-early-exit wallet). Marc's answer, twice: NO. ~98% of durable trades are closed early; early exit is the normal, legitimate way the market works, so a profitable early exit is real skill and ROI-on-closed-trades ranks it correctly. No weighting/bonus/penalty. Early-exit wallets are NOT suspect. (Corrected the prior session's repeated framing of early exit as a risk/defect — `da91584` removed those flags; now neutral context, only the rare held-to-resolution wallet gets a positive factual note.) Recorded in CLAUDE.md scoring section.
 - Card aggregates, bio text, equity curve, risk-profile flags, matcher `edge_pct` — internally consistent, NONE hand-checked against polymarket.com except the tetrose round-trip (which held up). Per project record, that's the standing risk.
 - Sizing/visual quality on `/connect` and `/p/:handle` — Marc iterated names-bolder and asked for the equity graph (both shipped); "not visually appealing" may persist. Probably needs a designer, not another guess round.
 
