@@ -13439,6 +13439,10 @@ async function _buildTraderProfile(user) {
       category, n: s.n,
       win_rate_pct: Math.round((s.wins / s.n) * 1000) / 10,
       avg_roi_pct: s.roiCount ? Math.round((s.roiSum / s.roiCount) * 1000) / 10 : null,
+      // A 2-trade "specialty" reads as a real edge unless flagged — mute it
+      // in the UI rather than hide it, so the tile stays honest without
+      // deleting the (still true) fact that the wallet has traded there.
+      small_sample: s.n < 5,
     }))
     .sort((a, b) => b.n - a.n);
 
@@ -13531,6 +13535,18 @@ const SIMILAR_MIN_MY_CAT_N    = 5;
 // comparison. Excluding it means some wallets get no matches; that's the
 // honest outcome versus asserting a style match we can't actually see.
 const SIMILAR_EXCLUDED_CATS   = new Set(['other']);
+
+// Confidence tier for a match's headline number, based on the SMALLER of
+// the two sample sizes in the shared category — evidence is only as strong
+// as its thinner side. A "+85% edge" built on n=11 is not the same claim as
+// one built on n=47, even though both clear the n>=10/n>=5 eligibility
+// floors above; those floors gate whether a match can exist at all, this
+// gates how loudly it gets to talk once it does.
+function _matchConfidenceTier(minN) {
+  if (minN >= 30) return 'strong';
+  if (minN >= 15) return 'moderate';
+  return 'thin';
+}
 
 function _cosine(a, b) {
   let dot = 0, na = 0, nb = 0;
@@ -13644,6 +13660,8 @@ async function computeSimilarBetterTraders(userId) {
       if (gap > bestGap) { bestGap = gap; bestCat = k; }
     }
 
+    const headlineMinN = bestCat ? Math.min(myRoiByCat[bestCat].n, c.catN[bestCat]) : null;
+
     matches.push({
       user_id: candId,
       display_name: c.display_name,
@@ -13662,6 +13680,12 @@ async function computeSimilarBetterTraders(userId) {
         their_roi_pct: c.catScore[bestCat],
         their_n: c.catN[bestCat],
       } : null,
+      // Confidence in the HEADLINE number specifically — min(your_n, their_n)
+      // in the headline category, not the total shared-category n. A match
+      // can be 'thin' even with a big overall shared n if the one category
+      // it's headlining is thinly sampled on either side.
+      confidence: headlineMinN != null ? _matchConfidenceTier(headlineMinN) : null,
+      confidence_n: headlineMinN,
       scope_label: 'Ranked on durable markets — n=' + shared.reduce((s, k) => s + c.catN[k], 0),
     });
   }
