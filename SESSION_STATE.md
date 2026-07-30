@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30f (✅ SHIPPED — copy-trading copy honesty pass + "Trade like the pros" tagline. Marc: "find somewhere to put it in.")
+
+Follow-up to 2026-07-30e's behavior change (copy-bot no longer auto-fires for anyone). The UI copy across `whales.html` and `copy-trading.html` still claimed literal automatic execution in a dozen places — "Auto-Mirror", "Auto-execute", "we'll mirror it with your allocation", "Start Auto-Mirroring" — all written when the feature actually did fire trades unattended. Left as-is, this would have been the UI lying about what the product does.
+
+**Shipped:**
+- `copy-trading.html` hero title is now **"Trade like the pros"** (Marc's tagline) with the sub-copy rewritten to describe the real, current behavior (get notified → tap Copy → your wallet signs). Meta description updated to match.
+- Renamed the "Auto-execute" concept to **"Priority alerts"** everywhere it appears (mode toggle, subscription badges, toasts, alerts) — the honest description of what that mode actually does now: a richer interactive banner + faster/prioritized delivery, gated to durable-verified whales, still requiring a manual Copy tap. Same rename applied consistently across both files' JS strings, not just the visible labels.
+- Renamed "Auto-Mirror" (the per-whale subscribe button/modal on `whales.html`) to **"Mirror"** — keeps the existing "Copy: this trade · Mirror: all future" distinction intact, just drops the false "automatically" framing from the button title, modal header, sub-copy, and warning text.
+- Modal warning copy rewritten to state the real downgrade conditions (unverified whale, slippage/expiry/concentration/portfolio filters, daily cap) and to explicitly say every alert still requires a manual Copy tap.
+
+**Not changed:** `copy-bot.js`'s actual behavior (already fixed in 2026-07-30e) — this pass is copy/wording only, no logic touched.
+
+Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
+
 ## 2026-07-30e (✅ SHIPPED — copy-bot no longer auto-fires anything, for anyone. Marc's product call: "copy trading simply sends the signal... [auto-trading] once we build the app." Real auto-execution deferred entirely; signal channels widened to bell + web push + email.)
 
 **Marc's direction after the 2026-07-30d patch:** "only the most consistent get to be auto traded, copy trading simply sends the signal and prompts email notification or phone notification once we build the app." Read as: the durable-verified gate from the prior patch is the right eligibility concept for auto-trading, but auto-trading itself isn't something this web flow should do at all right now — it's a future, app-based feature. Today, copy-bot's job is signal delivery only.

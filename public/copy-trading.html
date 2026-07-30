@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Copy Trading — HYPERFLEX</title>
-<meta name="description" content="Follow top Polymarket whales. Mirror their trades automatically or get notified when they move.">
+<meta name="description" content="Trade like the pros. Get notified the moment a verified Polymarket trader opens a position, then copy it yourself in one tap.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -144,8 +144,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var
 
 <div class="hero">
   <div class="hero-kicker">Polymarket · Copy Trading</div>
-  <h1 class="hero-title">Follow the sharpest capital</h1>
-  <p class="hero-sub">Get notified when top whales enter positions, or auto-execute their trades through your connected wallet.</p>
+  <h1 class="hero-title">Trade like the pros</h1>
+  <p class="hero-sub">Get notified the moment a verified trader opens a position, then copy it yourself in one tap. Your wallet signs every order — nothing fires without you.</p>
 </div>
 
 <div id="authGate" class="auth-gate" style="display:none">
@@ -190,8 +190,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var
     </div>
     <div class="toggle-row" style="margin-bottom:0">
       <div>
-        <div class="toggle-label">Auto-execute</div>
-        <div class="toggle-sub">Trades placed automatically through your wallet. Requires CLOB keys.</div>
+        <div class="toggle-label">Priority alerts</div>
+        <div class="toggle-sub">Interactive banner with a one-tap Copy button, not just the bell. Only available once this whale clears the verified durable board. Still requires you to tap Copy — nothing places a trade on its own.</div>
       </div>
       <label class="toggle" style="margin-left:16px">
         <input type="checkbox" id="autoExecToggle">
@@ -281,14 +281,14 @@ async function saveCopy() {
     var data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
 
-    // Server silently downgrades auto-execute to notify-only for a whale
-    // not on the verified durable board (2026-07-30 guardrail) — say so
-    // rather than let the toast claim "Auto-execute enabled" on a request
-    // that got downgraded.
+    // Server silently downgrades priority alerts to standard notify-only
+    // for a whale not on the verified durable board (2026-07-30 guardrail)
+    // — say so rather than let the toast claim priority alerts are on for
+    // a request that got downgraded.
     if (data.downgraded_reason === 'whale_not_durable_verified') {
-      showToast('Not on the verified board yet — alerts enabled, auto-execute unavailable');
+      showToast('Not on the verified board yet — standard alerts on, priority unavailable');
     } else {
-      showToast(autoExec ? 'Auto-execute enabled' : 'Alerts enabled');
+      showToast(autoExec ? 'Priority alerts on' : 'Alerts on');
     }
     closeModal();
     await loadSubs();
@@ -384,7 +384,7 @@ function renderSubs(subs) {
     return;
   }
   el.innerHTML = subs.map(function(s) {
-    var modeLabel = s.notify_only ? 'Notify only' : 'Auto-execute';
+    var modeLabel = s.notify_only ? 'Notify only' : 'Priority alerts';
     var modeCls = s.notify_only ? 'notify' : '';
     var since = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric'}) : '';
     return '<div class="sub-card">' +
