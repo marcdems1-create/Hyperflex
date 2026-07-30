@@ -64085,6 +64085,124 @@ app.get('/api/admin/verify-promoted', requireAdminSecret, async (req, res) => {
   }
 });
 
+// ── REDEEMED-PATH RECONCILIATION (the one that matters) ──────────────────
+// The sold-path verifier can't touch held-to-resolution positions, and
+// redeemed-path is exactly what the poisoned settlement cache corrupted
+// (2028 elections graded settled). This reconciles our graded win/loss for
+// each redeemed row against gamma's ACTUAL resolution — the real source of
+// truth — bypassing market_settlement_cache entirely (verifying against
+// the thing that got poisoned would be circular). Not compared to the
+// /positions redeemed bucket either (that round-trip-vs-held mismatch is
+// the tetrose method error).
+//
+// Per redeemed condition:
+//   • gamma unreachable / not found → UNVERIFIABLE (aged out of retention).
+//   • gamma reachable but m.closed !== true → FABRICATED_RESOLUTION: we
+//     graded a market that hasn't resolved. THE poisoned-cache symptom.
+//   • closed, decisive winner known → compare: did our credited side
+//     actually win? Disagreement → INVERTED_GRADE (we called a loss a win
+//     or vice versa).
+//   • closed but no decisive winner parseable → UNVERIFIABLE.
+async function _reconcileWalletRedeemed(userId) {
+  const rows = await dbQuery(`
+    SELECT condition_id, side, close_reason, realized_pnl, market_question
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
+      AND close_reason IN ('redeemed-win','redeemed-loss')
+  `, [userId]).catch(() => []);
+  if (!rows.length) return { user_id: userId, redeemed_rows: 0, verdict: 'no_redeemed_rows' };
+
+  const byCond = new Map();
+  for (const r of rows) {
+    const cond = String(r.condition_id || '').toLowerCase();
+    if (!cond) continue;
+    if (!byCond.has(cond)) byCond.set(cond, []);
+    byCond.get(cond).push(r);
+  }
+
+  const fabricatedResolution = []; // graded settled; gamma says still open
+  const invertedGrade = [];        // our win/loss disagrees with gamma winner
+  let unverifiable = 0, verified = 0;
+
+  await _mapLimit([...byCond.keys()], 6, async (cond) => {
+    const group = byCond.get(cond);
+    const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
+    const { ok, markets } = await _fetchGammaKeysetChecked(url);
+    const m = markets && markets[0];
+    if (!ok || !m) { unverifiable += group.length; return; }              // aged out — can't check
+    const q = String(m.question || '').slice(0, 80);
+    if (m.closed !== true) {                                              // graded a resolution that hasn't happened
+      for (const r of group) fabricatedResolution.push({ condition_id: cond, question: q, our: r.close_reason });
+      return;
+    }
+    const settle = _parseOutcomeSettlement(m);
+    if (!settle || !settle.winnerName) { unverifiable += group.length; return; }
+    const winner = settle.winnerName.toLowerCase().trim();
+    for (const r of group) {
+      const ourSide = String(r.side || '').toLowerCase().trim();
+      const actualWon = ourSide === winner;
+      const ourWon = r.close_reason === 'redeemed-win' || Number(r.realized_pnl) > 0;
+      if (actualWon !== ourWon) {
+        invertedGrade.push({ condition_id: cond, question: q, our_side: r.side, we_graded: ourWon ? 'win' : 'loss', gamma_winner: settle.winnerName });
+      } else verified++;
+    }
+  });
+
+  const bad = fabricatedResolution.length + invertedGrade.length;
+  return {
+    user_id: userId,
+    redeemed_rows: rows.length,
+    redeemed_conditions: byCond.size,
+    verified,
+    unverifiable,
+    fabricated_resolution_count: fabricatedResolution.length,
+    inverted_grade_count: invertedGrade.length,
+    fabricated_resolution: fabricatedResolution.slice(0, 25),
+    inverted_grade: invertedGrade.slice(0, 25),
+    verdict: bad === 0
+      ? (unverifiable > 0 ? 'clean_partial' : 'clean')
+      : (fabricatedResolution.length ? 'FABRICATED_RESOLUTION' : 'INVERTED_GRADE'),
+  };
+}
+
+// GET /api/admin/verify-promoted-redeemed — resolution check on the
+// promoted set's held-to-resolution positions, against live gamma.
+app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const moversN = Math.min(12, Math.max(1, parseInt(req.query.movers, 10) || 6));
+    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const promoted = new Map();
+    const add = (uid, why) => { if (!uid) return; if (!promoted.has(uid)) promoted.set(uid, []); promoted.get(uid).push(why); };
+    if (board && board.rows) board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, i === 0 ? 'overall_1' : 'mover'));
+    const cats = await _computeCategoryRoiLeaderboards();
+    if (cats) for (const [cat, c] of Object.entries(cats)) {
+      if (cat === 'other') continue;
+      const k = c.leaderboard && c.leaderboard[0];
+      if (k && k.n >= CATEGORY_KING_MIN_N) add(k.user_id, cat + '_king');
+    }
+
+    const results = await _mapLimit([...promoted.keys()], 2, async (uid) => {
+      const rec = await _reconcileWalletRedeemed(uid).catch(e => ({ user_id: uid, error: e.message }));
+      rec.promoted_as = promoted.get(uid);
+      return rec;
+    });
+
+    const flagged = results.filter(r => r.verdict === 'FABRICATED_RESOLUTION' || r.verdict === 'INVERTED_GRADE');
+    res.json({
+      promoted_wallets: results.length,
+      clean: results.filter(r => r.verdict === 'clean' || r.verdict === 'clean_partial' || r.verdict === 'no_redeemed_rows').length,
+      flagged: flagged.length,
+      flagged_wallets: flagged,
+      all: results,
+      note: 'Checks each redeemed (held-to-resolution) row against LIVE gamma, bypassing market_settlement_cache. FABRICATED_RESOLUTION = we graded a market gamma reports as still open (the poisoned-cache symptom). INVERTED_GRADE = our win/loss disagrees with gamma\'s actual winner. UNVERIFIABLE (in counts) = market aged out of gamma retention, can\'t check. clean_partial = no disagreements found but some rows unverifiable.',
+    });
+  } catch (e) {
+    console.error('[verify-promoted-redeemed]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── POISONED SETTLEMENT CACHE ────────────────────────────────────────────
 // Found 2026-07-29. `market_settlement_cache` was 100% poisoned: all 1,101
 // rows predated the 2026-07-28 guard, and of the 21 sampled rows gamma
