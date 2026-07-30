@@ -13294,8 +13294,23 @@ app.get('/api/kings', async (req, res) => {
       const viable = Object.entries(byCategory)
         .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth && c.leaderboard[0])
         .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
+
+      // Enrich each category king with the wallet-level style flag so a
+      // category tile can't show a win rate naked either (rule 3), same as
+      // the overall king above. One _buildTraderCards call over all the #1
+      // user_ids; exit style is a wallet trait, not category-specific, so
+      // the wallet-wide computation is the right one. Non-fatal — a card
+      // without the flag is still fine, just less informative.
+      const kingRows = viable.map(([, c]) => c.leaderboard[0]);
+      let flagByUser = new Map();
+      try {
+        const kingCards = await _buildTraderCards(kingRows);
+        if (kingCards) for (const kc of kingCards) if (kc.style_flag) flagByUser.set(kc.user_id, { style_flag: kc.style_flag, sold_early_pct: kc.sold_early_pct });
+      } catch (e) { console.warn('[kings] style-flag enrich failed:', e.message); }
+
       for (const [cat, c] of viable) {
         const r = c.leaderboard[0];
+        const enrich = flagByUser.get(r.user_id) || {};
         categories.push({
           category: cat,
           label: labelFor(cat),
@@ -13304,6 +13319,7 @@ app.get('/api/kings', async (req, res) => {
             user_id: r.user_id, display_name: r.display_name, username: r.username,
             polymarket_address: r.polymarket_address, n: r.n, wins: r.wins, losses: r.losses,
             win_rate_pct: r.win_rate_pct, score_pct: r.score_pct, scope_label: r.scope_label,
+            style_flag: enrich.style_flag || null, sold_early_pct: enrich.sold_early_pct != null ? enrich.sold_early_pct : null,
           },
         });
       }
