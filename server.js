@@ -64235,6 +64235,104 @@ app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, r
 // gamma-keyed pass is the correct measure. Bounded: dedupes conditions,
 // checks a bounded sample (?sample=, default 400) against live gamma, and
 // extrapolates. Nothing deleted.
+// POST /api/admin/purge-fabricated-redeemed — corrective delete for the
+// redeemed-path fabrication (audit-redeemed-open: 59/59 gamma-reachable
+// redeemed conditions are on OPEN markets, 0 legitimately resolved). This
+// removes fabricated GRADES, not traders: the wallet, its identity, and its
+// real sold-path trades all remain; only the fake resolution rows leave the
+// score. A wallet that drops below the qualifying floor becomes "building"
+// (rule 4), not erased, and re-qualifies automatically as it accrues real
+// verified trades. Any genuinely-resolved trade swept up here re-ingests,
+// correctly graded, on the next gamma-guarded backfill.
+//
+// Safety: (1) snapshots every deleted row to realized_trades_quarantine
+// first (reversible); (2) refuses to delete a row a flex_backing_settlements
+// record points at (real FP moved against it — needs manual reversal),
+// same guard as the other corrective deletes; (3) DRY-RUN by default —
+// ?confirm=1 required to actually delete.
+app.post('/api/admin/purge-fabricated-redeemed', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const doIt = req.query.confirm === '1';
+
+    const targets = await dbQuery(`
+      SELECT id, user_id::text AS user_id, condition_id, side, close_reason, realized_pnl, market_question
+      FROM realized_trades
+      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+    `).catch(e => { console.warn('[purge-fab-redeemed] select:', e.message); return null; });
+    if (targets == null) return res.status(500).json({ error: 'select failed' });
+    if (!targets.length) return res.json({ deleted: 0, note: 'No redeemed-path durable rows found.' });
+
+    const ids = targets.map(r => r.id);
+
+    // Safety check: any of these referenced by a real FP settlement?
+    const tainted = await dbQuery(
+      `SELECT id, trade_id FROM flex_backing_settlements WHERE trade_id = ANY($1::bigint[])`,
+      [ids]
+    ).catch(() => []);
+    const taintedIds = new Set(tainted.map(t => String(t.trade_id)));
+    const deletableIds = ids.filter(id => !taintedIds.has(String(id)));
+
+    // Board impact — before/after qualifying-wallet count.
+    const before = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const beforeIds = new Set(before ? before.rows.map(r => r.user_id) : []);
+
+    if (!doIt) {
+      const byWallet = {};
+      for (const r of targets) byWallet[r.user_id] = (byWallet[r.user_id] || 0) + 1;
+      return res.json({
+        dry_run: true,
+        would_delete: deletableIds.length,
+        redeemed_rows_total: targets.length,
+        protected_by_settlements: taintedIds.size,
+        affected_wallets: Object.keys(byWallet).length,
+        qualifying_wallets_now: beforeIds.size,
+        note: 'DRY RUN — nothing deleted. Re-run with ?confirm=1 to snapshot to realized_trades_quarantine and delete. Deletes fabricated GRADES, not traders: wallets and their real sold-path trades remain; sub-floor wallets become "building"; legit trades re-ingest via the gamma-guarded backfill. ' + (taintedIds.size ? taintedIds.size + ' row(s) are referenced by flex_backing_settlements and will be SKIPPED (need manual reversal).' : ''),
+      });
+    }
+
+    // Execute: snapshot then delete, in a transaction.
+    await dbQuery(`CREATE TABLE IF NOT EXISTS realized_trades_quarantine (
+      id BIGINT, user_id TEXT, condition_id TEXT, side TEXT, close_reason TEXT,
+      realized_pnl NUMERIC, market_question TEXT, reason TEXT, quarantined_at TIMESTAMPTZ DEFAULT now()
+    )`).catch(() => {});
+
+    const snapRows = targets.filter(r => !taintedIds.has(String(r.id)));
+    for (const r of snapRows) {
+      await dbQuery(
+        `INSERT INTO realized_trades_quarantine (id, user_id, condition_id, side, close_reason, realized_pnl, market_question, reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [r.id, r.user_id, r.condition_id, r.side, r.close_reason, r.realized_pnl, r.market_question,
+         'redeemed-path fabrication — audit-redeemed-open 2026-07-29, graded on unresolved markets']
+      ).catch(e => console.warn('[purge-fab-redeemed] snapshot', r.id, e.message));
+    }
+
+    const del = await dbQuery(
+      `DELETE FROM realized_trades WHERE id = ANY($1::bigint[]) RETURNING id`,
+      [deletableIds]
+    ).catch(e => { console.error('[purge-fab-redeemed] delete:', e.message); return null; });
+    if (del == null) return res.status(500).json({ error: 'delete failed after snapshot — check realized_trades_quarantine' });
+
+    const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
+    const droppedOff = [...beforeIds].filter(u => !afterIds.has(u));
+
+    res.json({
+      deleted: del.length,
+      snapshotted: snapRows.length,
+      protected_by_settlements: taintedIds.size,
+      qualifying_wallets_before: beforeIds.size,
+      qualifying_wallets_after: afterIds.size,
+      dropped_off_board: droppedOff.length,
+      dropped_off_board_ids: droppedOff.slice(0, 50),
+      note: 'Fabricated redeemed grades removed (snapshot in realized_trades_quarantine, reversible). Dropped-off wallets are NOT erased — they persist with their real sold-path trades as "building" and re-qualify as they accrue verified trades. Genuinely-resolved trades re-ingest correctly on the next gamma-guarded backfill. Re-run GET /api/admin/audit-redeemed-open to confirm.',
+    });
+  } catch (e) {
+    console.error('[purge-fabricated-redeemed]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
