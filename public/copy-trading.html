@@ -281,7 +281,15 @@ async function saveCopy() {
     var data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
 
-    showToast(autoExec ? 'Auto-execute enabled' : 'Alerts enabled');
+    // Server silently downgrades auto-execute to notify-only for a whale
+    // not on the verified durable board (2026-07-30 guardrail) — say so
+    // rather than let the toast claim "Auto-execute enabled" on a request
+    // that got downgraded.
+    if (data.downgraded_reason === 'whale_not_durable_verified') {
+      showToast('Not on the verified board yet — alerts enabled, auto-execute unavailable');
+    } else {
+      showToast(autoExec ? 'Auto-execute enabled' : 'Alerts enabled');
+    }
     closeModal();
     await loadSubs();
     renderWhales();

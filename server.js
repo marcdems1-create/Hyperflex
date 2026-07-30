@@ -12610,6 +12610,36 @@ async function _computeRoiLeaderboard(window, minN) {
   return { rows: result, popWeightedRoi };
 }
 
+// Shared read of the durable-verified cohort (all-time, ROI_MIN_N_FLOOR),
+// reusing the same 120s cache _computeRoiLeaderboard's own callers already
+// rely on. Single source of truth for "is this wallet actually verified" —
+// used by the /@handle copy-trading button, and by copy-bot's subscribe +
+// auto-execute gates (2026-07-30 patch: copy-bot was found auto-copying
+// off the OLD capital-deployed whale list with zero reference to this
+// cohort — the exact moat-destroying gap Gate 1 exists to close).
+async function _getCachedDurableLeaderboard() {
+  const _ck = `all:${ROI_MIN_N_FLOOR}`;
+  let _cached = _roiLbCache.get(_ck);
+  if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    if (computed) {
+      _cached = { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+      _roiLbCache.set(_ck, _cached);
+    }
+  }
+  return _cached ? _cached.data : [];
+}
+
+// Address-keyed verification check — copy-bot subscriptions are keyed on a
+// raw wallet address (whale_address), not a users.id, so membership has to
+// be checked by polymarket_address rather than user_id (the check the
+// /@handle card uses).
+function _isAddressDurableVerified(address, leaderboardRows) {
+  if (!address) return false;
+  const a = String(address).toLowerCase();
+  return (leaderboardRows || []).some(r => r.polymarket_address && r.polymarket_address.toLowerCase() === a);
+}
+
 app.get('/api/predictors/leaderboard', async (req, res) => {
   try {
     if (req.query.mode === 'roi') {
@@ -30773,20 +30803,10 @@ app.get('/api/user/profile/:handle', async (req, res) => {
     // open positions. Only a wallet actually on the durable-verified board
     // is copyable; a copy affordance on an unverified/fabricated record
     // would be exactly the moat-destroying failure Gate 1 exists to
-    // prevent. Reuses the public leaderboard's own 120s cache
-    // (`_roiLbCache`, keyed `all:${ROI_MIN_N_FLOOR}`) rather than
-    // recomputing the whole durable cohort on every profile view.
+    // prevent.
     try {
-      const _ck = `all:${ROI_MIN_N_FLOOR}`;
-      let _cached = _roiLbCache.get(_ck);
-      if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
-        const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
-        if (computed) {
-          _cached = { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
-          _roiLbCache.set(_ck, _cached);
-        }
-      }
-      const row = _cached ? _cached.data.find(r => r.user_id === profile.id) : null;
+      const leaderboardRows = await _getCachedDurableLeaderboard();
+      const row = leaderboardRows.find(r => r.user_id === profile.id);
       profile.durable_verified = !!row;
       profile.durable_scope_label = row ? row.scope_label : null;
     } catch (e) {
@@ -37385,9 +37405,13 @@ async function fetchWhalePositions() {
           const wArr = [...openWallets];
           const ph = wArr.map((_, i) => `$${i + 1}`).join(',');
           const cbSubs = await dbQuery(
-            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only, max_per_trade, min_whale_size
+            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only, max_per_trade, min_whale_size, max_daily_spend
              FROM copy_bot_subscriptions WHERE whale_address IN (${ph}) AND active = true`, wArr
           ).catch(() => []);
+          if (!cbSubs.length) return;
+
+          // Fetched once per tick, not per subscriber — see _getCachedDurableLeaderboard.
+          const leaderboardRows = await _getCachedDurableLeaderboard();
 
           for (const sub of cbSubs) {
             const wPos = newSnapshot.get(sub.whale_address) || [];
@@ -37413,6 +37437,17 @@ async function fetchWhalePositions() {
               // checks only apply to auto-execute mode — notify-only subs still
               // see everything so users can make their own call.
               let filterSkipReason = null;
+
+              // Filter 0 (2026-07-30 patch): whale must be on the durable-
+              // verified board. This whale list is sourced from the OLD
+              // capital-deployed leaderboard — the exact axis Gate 1 found
+              // structurally biased toward ephemeral-market bots (19/20
+              // sampled whales came back ungradeable). Auto-copying an
+              // unverified wallet is the moat-destroying case; downgrade to
+              // notify-only, same pattern every filter below already uses.
+              if (!_isAddressDurableVerified(sub.whale_address, leaderboardRows)) {
+                filterSkipReason = 'whale not on verified durable board';
+              }
 
               // Filter 1: Slippage cap — skip if current market price has moved
               // more than 5% from whale's entry price. At that point we're
@@ -37464,6 +37499,40 @@ async function fetchWhalePositions() {
                 }
               }
 
+              // Filter 5 (2026-07-30 patch): daily auto-copy spend cap — the
+              // audit found no cumulative limit existed at all, only the
+              // per-trade cap. Counts 'pending_execution' rows too, not just
+              // 'filled' — a pending_execution row is real capital the SSE
+              // event is about to put at risk the moment it lands, same
+              // "count fired decisions" precedent agent_configs' own
+              // dailySpent check already uses.
+              if (!filterSkipReason) {
+                try {
+                  const maxDaily = parseFloat(sub.max_daily_spend) || 200;
+                  const dayRows = await dbQuery(
+                    `SELECT COALESCE(SUM(size), 0) AS total FROM copy_bot_trades
+                     WHERE user_id = $1 AND status IN ('pending_execution', 'filled')
+                       AND created_at >= date_trunc('day', NOW())`,
+                    [sub.user_id]
+                  ).catch(() => []);
+                  const dailySpent = parseFloat(dayRows[0]?.total) || 0;
+                  if (dailySpent + allocUsd > maxDaily) {
+                    filterSkipReason = `daily copy-spend cap reached ($${dailySpent.toFixed(0)} of $${maxDaily.toFixed(0)})`;
+                  }
+                } catch (fErr) {}
+              }
+
+              // Filter 6 (2026-07-30 patch): cooldown — don't auto-fire more
+              // than once per COPY_BOT_COOLDOWN_MS for the same user, so a
+              // burst of whale opens can't stack multiple unattended fires
+              // back to back.
+              if (!filterSkipReason) {
+                const lastFire = _copyBotLastAutoFire.get(sub.user_id) || 0;
+                if (Date.now() - lastFire < COPY_BOT_COOLDOWN_MS) {
+                  filterSkipReason = `cooldown active (last auto-fire ${Math.round((Date.now() - lastFire) / 60000)}m ago)`;
+                }
+              }
+
               // If any filter skipped the trade AND the user wanted auto-execute,
               // downgrade to notify-only so they still see it but can't blindly copy.
               const effectivelyNotifyOnly = sub.notify_only || !!filterSkipReason;
@@ -37497,6 +37566,9 @@ async function fetchWhalePositions() {
               // Only fire auto-execute SSE if NOT filtered out
               if (tradeId && canExecute && !effectivelyNotifyOnly) {
                 try {
+                  // Stamp the cooldown the moment we commit to firing, not
+                  // after — this is what Filter 6 above reads next tick.
+                  _copyBotLastAutoFire.set(sub.user_id, Date.now());
                   const clients = _copyBotClients.get(sub.user_id);
                   if (clients && clients.size > 0) {
                     const payload = {
@@ -57842,6 +57914,9 @@ app.get('/api/market-trades/:conditionId', async (req, res) => {
     // Add max_trade_size + min_whale_size for risk controls
     await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS max_per_trade NUMERIC(12,2) DEFAULT 500`).catch(() => {});
     await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS min_whale_size NUMERIC(12,2) DEFAULT 10000`).catch(() => {});
+    // 2026-07-30 patch: per-user daily auto-copy spend cap — the audit found
+    // no daily/cumulative limit existed at all, only a per-trade cap.
+    await dbQuery(`ALTER TABLE copy_bot_subscriptions ADD COLUMN IF NOT EXISTS max_daily_spend NUMERIC(12,2) DEFAULT 200`).catch(() => {});
     console.log('[copy-bot] Tables ensured');
   } catch (e) {
     console.warn('[copy-bot] Migration skipped (table may already exist):', e.message?.slice(0, 80));
@@ -57855,6 +57930,14 @@ app.get('/api/market-trades/:conditionId', async (req, res) => {
 
 // SSE clients: Map<userId, Set<Response>>
 const _copyBotClients = new Map();
+
+// 2026-07-30 patch: last-auto-fire timestamp per user, so a burst of whale
+// opens (same tick or across consecutive whale-watch ticks) can't stack
+// multiple unattended fires back to back. In-memory, same idiom as
+// _agentFiredToday's daily dedup — a soft rate limit, not a security
+// boundary, so a server restart clearing it is an acceptable trade-off.
+const _copyBotLastAutoFire = new Map();
+const COPY_BOT_COOLDOWN_MS = 15 * 60 * 1000;
 
 // GET /api/copy-bot/stream — SSE stream of copy opportunities for current user
 app.get('/api/copy-bot/stream', (req, res) => {
@@ -57976,24 +58059,43 @@ app.get('/api/copy-bot/pending', requireAuth, async (req, res) => {
 // POST /api/copy-bot/subscribe — subscribe to copy a whale
 app.post('/api/copy-bot/subscribe', requireAuth, async (req, res) => {
   try {
-    const { whale_address, whale_name, allocation_per_trade, notify_only } = req.body;
+    const { whale_address, whale_name, allocation_per_trade, notify_only, max_daily_spend } = req.body;
     if (!whale_address) return res.status(400).json({ error: 'whale_address required' });
     const alloc = parseFloat(allocation_per_trade) || 100;
-    const notifyFlag = notify_only !== false; // default true
+    const maxDaily = parseFloat(max_daily_spend) || 200;
+    let notifyFlag = notify_only !== false; // default true
+    let downgradedReason = null;
+
+    // 2026-07-30 patch: auto-execute may ONLY ever be enabled for a wallet
+    // actually on the durable-verified board — this whale list is sourced
+    // from the old capital-deployed leaderboard, the exact axis Gate 1
+    // found structurally biased toward ephemeral-market bots. Requesting
+    // auto-execute (notify_only:false) on an unverified wallet is silently
+    // downgraded to notify-only rather than rejected outright, so the
+    // subscription still works as a passive alert — same "downgrade, don't
+    // block" pattern the trigger loop already uses for filtered trades.
+    if (!notifyFlag) {
+      const leaderboardRows = await _getCachedDurableLeaderboard();
+      if (!_isAddressDurableVerified(whale_address, leaderboardRows)) {
+        notifyFlag = true;
+        downgradedReason = 'whale_not_durable_verified';
+      }
+    }
 
     if (pool) {
       const rows = await dbQuery(
-        `INSERT INTO copy_bot_subscriptions (user_id, whale_address, whale_name, allocation, notify_only)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO copy_bot_subscriptions (user_id, whale_address, whale_name, allocation, notify_only, max_daily_spend)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (user_id, whale_address) DO UPDATE SET
            allocation = EXCLUDED.allocation,
            whale_name = COALESCE(EXCLUDED.whale_name, copy_bot_subscriptions.whale_name),
            notify_only = EXCLUDED.notify_only,
+           max_daily_spend = EXCLUDED.max_daily_spend,
            active = true
          RETURNING id`,
-        [req.userId, whale_address, whale_name || null, alloc, notifyFlag]
+        [req.userId, whale_address, whale_name || null, alloc, notifyFlag, maxDaily]
       );
-      return res.json({ subscription_id: rows[0]?.id, whale_address, allocation: alloc, notify_only: notifyFlag });
+      return res.json({ subscription_id: rows[0]?.id, whale_address, allocation: alloc, notify_only: notifyFlag, max_daily_spend: maxDaily, downgraded_reason: downgradedReason });
     } else {
       const { data, error } = await supabase.from('copy_bot_subscriptions')
         .upsert({
@@ -58002,12 +58104,13 @@ app.post('/api/copy-bot/subscribe', requireAuth, async (req, res) => {
           whale_name: whale_name || null,
           allocation: alloc,
           notify_only: notifyFlag,
+          max_daily_spend: maxDaily,
           active: true
         }, { onConflict: 'user_id,whale_address' })
         .select('id')
         .single();
       if (error) throw error;
-      return res.json({ subscription_id: data?.id, whale_address, allocation: alloc, notify_only: notifyFlag });
+      return res.json({ subscription_id: data?.id, whale_address, allocation: alloc, notify_only: notifyFlag, max_daily_spend: maxDaily, downgraded_reason: downgradedReason });
     }
   } catch (err) {
     console.error('[copy-bot subscribe]', err.message);

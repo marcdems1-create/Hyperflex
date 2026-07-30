@@ -49,6 +49,24 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30d (✅ SHIPPED — patched the pre-existing copy-bot.js auto-execute system found in the 2026-07-30c audit: verified-board gate, daily spend cap, cooldown. Marc's call: keep the feature, close the gaps.)
+
+**Audited first (report-only, no changes), then patched on Marc's "no its all good but patch it up.":**
+- **Reachability:** confirmed live — `copy-bot.js` auto-loads on every page via `nav.js`; a real Auto-Copy Modal exists on `whales.html` (mode picker + warning banner) and a dedicated `/copy-trading.html` page. Only 1 subscription existed in production total (`active=true, notify_only=false`), belonging to one account.
+- **Production usage, confirmed via Marc's own TablePlus results:** 461 `copy_bot_trades` rows, **zero ever reached `filled`** — the system has never executed a real trade. Breakdown: 371 `pending` (dead legacy status — traced the code, there is exactly one `INSERT INTO copy_bot_trades` and it never writes the literal string `'pending'`, so these predate the current filter logic and are inert), 79 `notified` (filters correctly downgraded these), 6 `skipped`, 5 `pending_execution` (passed every filter, eligible for real auto-exec, never completed — likely no SSE-connected tab at the moment they fired).
+- **Signing path confirmed non-custodial:** `executeOrder()`/`_executeTrade()` both route through `HFXWallet.getSigner()` → real `ethers.BrowserProvider` → `signer.signTypedData()` — a genuine `eth_signTypedData_v4` call, MetaMask prompts every time, auto-fired or not. No private key or mnemonic stored anywhere.
+- **The real gap, confirmed by tracing subscribe → trigger → insert:** the whale source is an arbitrary address from the OLD capital-deployed leaderboard (`whales.html`'s list) — zero reference anywhere to `_computeRoiLeaderboard`/`durable_verified`. This is the exact axis the 2026-07-20 held-loss diagnostic found structurally biased (19/20 sampled whales ungradeable). A user could auto-copy a wallet with zero independent verification behind it.
+
+**Patched (commit pending push):**
+1. **Verified-board gate.** New shared helper `_getCachedDurableLeaderboard()` + `_isAddressDurableVerified(address, rows)` (factored out of the assisted-copy trader-card check from 2026-07-30c, now used a third time — refactored that call site to use the shared helper too). `POST /api/copy-bot/subscribe` now force-downgrades `notify_only` to `true` whenever the requested whale isn't on the durable board, returning `downgraded_reason: 'whale_not_durable_verified'` in the response. Same check runs again in the whale-watch trigger loop itself as **Filter 0** (defense in depth — catches any subscription created before this patch). Downgrade, not reject — the passive-alert use case still works, only unattended execution is gated.
+2. **Daily spend cap.** New `copy_bot_subscriptions.max_daily_spend` column (default $200, matches the existing `agent_configs.max_daily_spend` default for consistency). New **Filter 5**: sums `pending_execution` + `filled` trade sizes for the user today; skips (downgrades to notify) if adding this trade would exceed the cap. There was previously no cumulative limit at all, only the existing per-trade `max_per_trade` cap.
+3. **Cooldown.** New **Filter 6**: in-memory `_copyBotLastAutoFire` Map (same idiom as the existing `_agentFiredToday` dedup), 15-minute minimum between auto-fires for the same user — stops a burst of whale opens from stacking multiple unattended fires back to back.
+4. **UI honesty:** both subscribe call sites (`whales.html`'s Auto-Copy Modal + per-subscription toggle, `copy-trading.html`'s modal) now surface `downgraded_reason` explicitly instead of silently showing "notify-only" with no explanation — a silent downgrade would read as a bug, not a guardrail.
+
+**Not changed:** the 371 dead `pending` rows (harmless, nothing reads them); the slippage/expiry/whale-concentration/whale-portfolio filters (already reasonable, left as-is); the `agent_configs`/`/api/agent/*` system (confirmed alert-only, never executes — out of scope, not touched).
+
+`node --check server.js` clean. Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
+
 ## 2026-07-30c (✅ SHIPPED — assisted copy trading: verified board → "Copy this" on an open position → existing /market/:slug widget prefilled → user's own wallet signs. Gate 4 written down. One real pre-existing system found and flagged, not touched.)
 
 **Built exactly what was asked, reusing existing scaffolding per instruction — grepped first, found more scaffolding than expected:**

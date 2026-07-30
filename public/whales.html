@@ -1403,7 +1403,7 @@ async function toggleCopyMode(subId, newAutoMode) {
   var sub = _mcData.subs.find(function(s){return s.id === subId});
   if (!sub) return;
   try {
-    await fetch('/api/copy-bot/subscribe', {
+    var r = await fetch('/api/copy-bot/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({
@@ -1413,6 +1413,13 @@ async function toggleCopyMode(subId, newAutoMode) {
         notify_only: !newAutoMode
       })
     });
+    var d = await r.json().catch(function(){ return null; });
+    // Server silently downgrades to notify-only for a whale not on the
+    // verified durable board — say so, rather than let the toggle silently
+    // snap back to "Notify only" with no explanation.
+    if (d && d.downgraded_reason === 'whale_not_durable_verified') {
+      alert((sub.whale_name || 'This whale') + ' isn\'t on the verified durable board yet, so auto-execute isn\'t available for them. Left as notify-only.');
+    }
     loadMyCopies();
   } catch (e) { alert('Failed to update: ' + e.message); }
 }
@@ -2956,9 +2963,19 @@ function submitAutoCopy() {
     if (d.error) throw new Error(d.error);
     var status = document.getElementById('acmStatus');
     status.style.display = '';
-    status.style.background = 'rgba(0,230,138,0.1)';
-    status.style.color = 'var(--green)';
-    status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (_acmMode === 'notify' ? 'notified' : 'auto-mirroring') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
+    // Server silently downgrades auto-execute to notify-only for a whale
+    // that isn't on the verified durable board (2026-07-30 guardrail) \u2014 say
+    // so explicitly rather than letting "notify_only: true" come back on a
+    // request that asked for auto and look like a bug.
+    if (d.downgraded_reason === 'whale_not_durable_verified') {
+      status.style.background = 'rgba(245,158,11,0.1)';
+      status.style.color = '#f59e0b';
+      status.innerHTML = '&#x26A0; Subscribed as notify-only. ' + (_acmName || 'This whale') + ' isn\'t on the verified durable board yet, so auto-execute isn\'t available for them \u2014 you\'ll get alerts and can copy manually.';
+    } else {
+      status.style.background = 'rgba(0,230,138,0.1)';
+      status.style.color = 'var(--green)';
+      status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (d.notify_only ? 'notified' : 'auto-mirroring') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
+    }
     cta.textContent = 'Subscribed \u2713';
   })
   .catch(function(e) {
