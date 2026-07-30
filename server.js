@@ -64248,11 +64248,16 @@ app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) =
     `).catch(() => []);
 
     // Distinct conditions, sampled at random so the open-rate extrapolates.
+    // Subquery form: `SELECT DISTINCT x ORDER BY random()` is a Postgres
+    // error (ORDER BY expr not in the DISTINCT list) — it silently returned
+    // 0 rows the first run. Dedupe in the inner query, randomize outside.
     const conds = await dbQuery(`
-      SELECT DISTINCT condition_id FROM realized_trades
-      WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+      SELECT condition_id FROM (
+        SELECT DISTINCT condition_id FROM realized_trades
+        WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'
+      ) s
       ORDER BY random() LIMIT $1
-    `, [sampleN]).catch(() => []);
+    `, [sampleN]).catch(e => { console.warn('[audit-redeemed-open] conds query:', e.message); return []; });
 
     let open = 0, closed = 0, unreachable = 0;
     const openSamples = [];
