@@ -12487,6 +12487,11 @@ const ROI_CAP = 10.0; // 1000% — winsorize ceiling on a single trade's realize
 const ROI_HALF_LIFE_DAYS = 90;
 const ROI_SHRINK_K = 20;
 const ROI_MIN_N_FLOOR = 10;
+// Higher bar to be CROWNED a category king (public promotion), vs the
+// n>=10 floor to merely appear on a board. A category king is showcased on
+// the homepage, so its record must be thick enough that no single lucky
+// run carries it — see the /api/kings gate. Only affects promotion.
+const CATEGORY_KING_MIN_N = 20;
 const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
 
 function _roiWindowClause(window) {
@@ -13294,8 +13299,18 @@ app.get('/api/kings', async (req, res) => {
       // category, so an "Other King" is meaningless (same reason it's excluded
       // from the similar-trader matcher).
       const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
+      // The king's OWN n in the category must clear a higher bar than the
+      // global n>=10 ranking floor. Crowning "crypto king" off 10 trades at
+      // 100% win rate (YOURSOUL, 2026-07-29) is a lucky-sliver promotion:
+      // the whole moat is that a showcased trader's record is real, and 10
+      // cherry-picked trades is exactly what the CLAUDE.md gaming-risk note
+      // warns about. This gates promotion only — the category leaderboard
+      // computation and the n>=10 board membership are untouched. Tunable
+      // via ?king_min_n= for auditing.
+      const kingMinN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.king_min_n, 10) || CATEGORY_KING_MIN_N);
       const viable = Object.entries(byCategory)
-        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth && c.leaderboard[0])
+        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth
+          && c.leaderboard[0] && c.leaderboard[0].n >= kingMinN)
         .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
 
       // Enrich each category king with the wallet-level style flag so a
@@ -63858,6 +63873,178 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[record-integrity]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PROMOTED-TRADER RECONCILIATION ───────────────────────────────────────
+// "Beyond reasonable doubt the board promotes the right traders" (Marc,
+// 2026-07-29). Reconciles every homepage-promoted wallet's stored record
+// against its REAL on-chain fills from Polymarket /activity — the source
+// of truth for sold-path trades. Read-only.
+//
+// Two independent checks per wallet, chosen to be robust to naming and to
+// the FIFO-partitioning our backfill does (so we're not just re-running
+// backfill's own logic and reproducing its bugs):
+//   1. FABRICATION (hard, naming-independent): every conditionId we have a
+//      realized_trades row for MUST appear in the wallet's on-chain trade
+//      activity. A row whose conditionId is absent on-chain is a trade the
+//      wallet never made — the worst failure, and exactly the class the
+//      poisoned-cache + future-dated bugs produced.
+//   2. PNL-SIGN (aggregate per conditionId, sold-path only): summed
+//      realized_pnl for a condition should agree in sign with (sell_usdc −
+//      buy_usdc) from the actual fills. Redeemed-path conditions are
+//      skipped here (their payout isn't a TRADE event) beyond confirming
+//      buys exist — resolution correctness is the settlement-cache audit's
+//      job, not this one.
+//
+// Deliberately NOT compared against /positions redeemed bucket — that
+// round-trip-vs-held-to-resolution mismatch is what produced the wrong
+// tetrose "fabricated" claim earlier today (see CLAUDE.md method note).
+//
+// Coverage honesty: /activity caps at 500/page; we paginate by offset up
+// to ACTIVITY_MAX_EVENTS. If a wallet exceeds that, its report is marked
+// coverage_capped=true and does NOT count as "verified clean" — an
+// unverifiable wallet is reported as such, never assumed good (same
+// discipline as void_ungradeable never silently shrinking a denominator).
+const ACTIVITY_MAX_EVENTS = 3000;
+
+async function _fetchAllActivity(address) {
+  const out = [];
+  const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+  for (let offset = 0; offset < ACTIVITY_MAX_EVENTS; offset += 500) {
+    const url = 'https://data-api.polymarket.com/activity?user=' + address
+      + '&limit=500&type=TRADE&offset=' + offset;
+    const r = await fetch(url, H).catch(() => null);
+    if (!r || !r.ok) break;
+    const page = await r.json().catch(() => null);
+    if (!Array.isArray(page) || !page.length) break;
+    out.push(...page);
+    if (page.length < 500) break;
+  }
+  return { events: out, capped: out.length >= ACTIVITY_MAX_EVENTS };
+}
+
+async function _reconcileWallet(userId, address) {
+  if (!address) return { user_id: userId, error: 'no polymarket_address' };
+
+  const ourRows = await dbQuery(`
+    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability
+    FROM realized_trades
+    WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
+  `, [userId]).catch(() => []);
+
+  const { events, capped } = await _fetchAllActivity(address.toLowerCase());
+
+  // On-chain fills grouped by conditionId: what the wallet ACTUALLY did.
+  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, nEvents }
+  const onchainConds = new Set();
+  for (const e of events) {
+    const cond = String(e.conditionId || '').toLowerCase();
+    if (!cond) continue;
+    onchainConds.add(cond);
+    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, nEvents: 0 });
+    const g = onchainByCond.get(cond);
+    const usdc = Number(e.usdcSize) || 0;
+    if (String(e.side).toUpperCase() === 'BUY') g.buyUsdc += usdc; else g.sellUsdc += usdc;
+    g.nEvents++;
+  }
+
+  // Our rows grouped by conditionId, so the pnl-sign check aggregates all
+  // round-trips on a market rather than mis-partitioning a single one.
+  const ourByCond = new Map();
+  for (const r of ourRows) {
+    const cond = String(r.condition_id || '').toLowerCase();
+    if (!ourByCond.has(cond)) ourByCond.set(cond, { pnl: 0, rows: 0, anyRedeemed: false });
+    const g = ourByCond.get(cond);
+    g.pnl += Number(r.realized_pnl) || 0;
+    g.rows++;
+    if (String(r.close_reason || '').startsWith('redeemed')) g.anyRedeemed = true;
+  }
+
+  const fabricated = []; // our conditionId with zero on-chain presence
+  const pnlMismatch = []; // sold-path, sign disagreement vs fills
+  for (const [cond, g] of ourByCond) {
+    if (!onchainConds.has(cond)) { fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
+    if (g.anyRedeemed) continue; // redemption payout isn't a TRADE event
+    const oc = onchainByCond.get(cond);
+    const fillNet = oc.sellUsdc - oc.buyUsdc; // realized cash from trading in/out
+    // Only flag a clear sign disagreement with meaningful magnitude — small
+    // opposite-sign residues are FIFO/fee/rounding noise, not a grading bug.
+    const ourSign = Math.sign(g.pnl), fillSign = Math.sign(fillNet);
+    if (ourSign !== 0 && fillSign !== 0 && ourSign !== fillSign
+        && Math.abs(g.pnl) > 50 && Math.abs(fillNet) > 50) {
+      pnlMismatch.push({ condition_id: cond, our_pnl: Math.round(g.pnl), onchain_fill_net_usdc: Math.round(fillNet), rows: g.rows });
+    }
+  }
+
+  const clean = fabricated.length === 0 && pnlMismatch.length === 0 && !capped;
+  return {
+    user_id: userId,
+    address,
+    our_durable_conditions: ourByCond.size,
+    our_durable_rows: ourRows.length,
+    onchain_trade_events: events.length,
+    onchain_conditions: onchainConds.size,
+    coverage_capped: capped,
+    fabricated_count: fabricated.length,
+    pnl_sign_mismatch_count: pnlMismatch.length,
+    fabricated: fabricated.slice(0, 20),
+    pnl_mismatch: pnlMismatch.slice(0, 20),
+    verdict: clean ? 'clean' : (fabricated.length ? 'FABRICATED_TRADES' : (pnlMismatch.length ? 'PNL_MISMATCH' : 'UNVERIFIABLE_CAPPED')),
+  };
+}
+
+// GET /api/admin/verify-promoted — reconcile the homepage-promoted set.
+app.get('/api/admin/verify-promoted', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    // The promoted set = overall #1 + top movers (board slice) + category
+    // kings. Exactly the wallets the public can see, per Marc's scope.
+    const moversN = Math.min(12, Math.max(1, parseInt(req.query.movers, 10) || 6));
+    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const promoted = new Map(); // user_id -> { address, why[] }
+    const add = (uid, addr, why) => {
+      if (!uid) return;
+      if (!promoted.has(uid)) promoted.set(uid, { address: addr, why: [] });
+      promoted.get(uid).why.push(why);
+      if (!promoted.get(uid).address && addr) promoted.get(uid).address = addr;
+    };
+    if (board && board.rows) {
+      board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, r.polymarket_address, i === 0 ? 'overall_1' : 'mover'));
+    }
+    const cats = await _computeCategoryRoiLeaderboards();
+    if (cats) for (const [cat, c] of Object.entries(cats)) {
+      if (cat === 'other') continue;
+      const k = c.leaderboard && c.leaderboard[0];
+      if (k && k.n >= CATEGORY_KING_MIN_N) add(k.user_id, k.polymarket_address, cat + '_king');
+    }
+
+    // Addresses may be missing on the board rows — backfill from users.
+    const needAddr = [...promoted.entries()].filter(([, v]) => !v.address).map(([uid]) => uid);
+    if (needAddr.length) {
+      const rows = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = ANY($1)', [needAddr]).catch(() => []);
+      for (const r of rows) if (promoted.has(r.id)) promoted.get(r.id).address = r.polymarket_address;
+    }
+
+    const results = await _mapLimit([...promoted.entries()], 3, async ([uid, v]) => {
+      const rec = await _reconcileWallet(uid, v.address).catch(e => ({ user_id: uid, error: e.message }));
+      rec.promoted_as = v.why;
+      return rec;
+    });
+
+    const flagged = results.filter(r => r.verdict && r.verdict !== 'clean');
+    res.json({
+      promoted_wallets: results.length,
+      clean: results.filter(r => r.verdict === 'clean').length,
+      flagged: flagged.length,
+      flagged_wallets: flagged,
+      all: results,
+      note: 'FABRICATED_TRADES = we hold realized_trades rows for a conditionId the wallet never traded on-chain (worst case). PNL_MISMATCH = sold-path pnl sign disagrees with actual fills. UNVERIFIABLE_CAPPED = wallet exceeds ' + ACTIVITY_MAX_EVENTS + ' on-chain events, not fully checkable here (reported, never assumed clean). Reconciled against /activity fills only, NOT the /positions redeemed bucket.',
+    });
+  } catch (e) {
+    console.error('[verify-promoted]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
