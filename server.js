@@ -63942,16 +63942,23 @@ async function _reconcileWallet(userId, address) {
   const { events, capped } = await _fetchAllActivity(address.toLowerCase());
 
   // On-chain fills grouped by conditionId: what the wallet ACTUALLY did.
-  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, nEvents }
+  // Track shares too (usdc/price) so we can tell a position that was TRADED
+  // OUT (buyShares≈sellShares) from one HELD TO RESOLUTION and redeemed
+  // (sellShares≪buyShares) — the redemption payout is not a TRADE event, so
+  // only traded-out positions are reconcilable from this feed.
+  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
   const onchainConds = new Set();
   for (const e of events) {
     const cond = String(e.conditionId || '').toLowerCase();
     if (!cond) continue;
     onchainConds.add(cond);
-    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, nEvents: 0 });
+    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
     const g = onchainByCond.get(cond);
     const usdc = Number(e.usdcSize) || 0;
-    if (String(e.side).toUpperCase() === 'BUY') g.buyUsdc += usdc; else g.sellUsdc += usdc;
+    const px = Number(e.price) || 0;
+    const sh = px > 0 ? usdc / px : 0;
+    if (String(e.side).toUpperCase() === 'BUY') { g.buyUsdc += usdc; g.buyShares += sh; }
+    else { g.sellUsdc += usdc; g.sellShares += sh; }
     g.nEvents++;
   }
 
@@ -63967,26 +63974,31 @@ async function _reconcileWallet(userId, address) {
     if (String(r.close_reason || '').startsWith('redeemed')) g.anyRedeemed = true;
   }
 
-  const fabricated = []; // our conditionId with zero on-chain presence
-  const pnlMismatch = []; // sold-path, sign disagreement vs fills
+  // ⚠️ SCOPE: this reconciler is valid for SOLD-PATH positions only. A
+  // held-to-resolution position is acquired by a BUY (a TRADE event) but
+  // exits via REDEMPTION, which is NOT in the TRADE feed — so its outcome
+  // and often its very presence can't be judged here. Redeemed-path rows
+  // are therefore NOT checked for fabrication or pnl and are counted
+  // separately as redeemed_unchecked. (This is why an earlier pass called
+  // the holds-to-resolution politics king 60/60 "fabricated" — all its
+  // positions are redeemed; verified real via the /positions bucket. A
+  // proper redeemed-path reconciler against /positions + gamma is a
+  // separate build.)
+  const fabricated = [];   // SOLD-path conditionId with zero on-chain TRADE presence
+  const pnlMismatch = [];  // SOLD-path, fully traded out, sign disagreement vs fills
+  let redeemedUnchecked = 0;
   for (const [cond, g] of ourByCond) {
-    // FABRICATION only when coverage is COMPLETE. On a capped wallet a
-    // real-but-old trade is indistinguishable from a fabricated one, so
-    // asserting fabrication there is a false positive (the first-pass bug).
+    if (g.anyRedeemed) { redeemedUnchecked++; continue; } // out of scope for a TRADE-only check
+    // FABRICATION (sold-path): a position we say was SOLD must have TRADE
+    // fills. Absence = fabricated — but only assertable with full coverage.
     if (!onchainConds.has(cond)) { if (!capped) fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
-    if (g.anyRedeemed) continue; // redemption payout isn't a TRADE event
     const oc = onchainByCond.get(cond);
-    // PNL-sign is only meaningful when the position was actually TRADED OUT
-    // (real sell volume). If sells are negligible vs buys, the position was
-    // held to resolution / redeemed — its payout is not a TRADE event, so
-    // sell−buy understates the real result and comparing signs is invalid
-    // (this is what flagged TB14: +$94k real redemption win vs a −$194k
-    // trade-only fill_net). Require sell volume ≥ 25% of buy volume before
-    // trusting fill_net as the realized outcome.
-    if (oc.sellUsdc < oc.buyUsdc * 0.25) continue;
-    const fillNet = oc.sellUsdc - oc.buyUsdc; // realized cash from trading in/out
-    // Only flag a clear sign disagreement with meaningful magnitude — small
-    // opposite-sign residues are FIFO/fee/rounding noise, not a grading bug.
+    // PNL-sign only when the position was genuinely TRADED OUT: shares
+    // bought ≈ shares sold (within 10%). If shares remain, the exit was a
+    // redemption whose payout isn't in this feed, so fill_net understates
+    // the real result and a sign comparison is invalid.
+    if (oc.buyShares <= 0 || oc.sellShares < oc.buyShares * 0.9) continue;
+    const fillNet = oc.sellUsdc - oc.buyUsdc;
     const ourSign = Math.sign(g.pnl), fillSign = Math.sign(fillNet);
     if (ourSign !== 0 && fillSign !== 0 && ourSign !== fillSign
         && Math.abs(g.pnl) > 50 && Math.abs(fillNet) > 50) {
@@ -63994,15 +64006,12 @@ async function _reconcileWallet(userId, address) {
     }
   }
 
-  // A capped wallet can't be declared clean OR fabricated — we simply
-  // haven't seen all its fills. It can still catch a pnl mismatch on the
-  // conditions we DID fetch, but absence-of-trade is unprovable, so its
-  // verdict is UNVERIFIABLE_CAPPED unless a real pnl mismatch surfaced.
+  const soldChecked = ourByCond.size - redeemedUnchecked;
   let verdict;
   if (pnlMismatch.length) verdict = 'PNL_MISMATCH';
+  else if (!capped && fabricated.length) verdict = 'FABRICATED_TRADES';
   else if (capped) verdict = 'UNVERIFIABLE_CAPPED';
-  else if (fabricated.length) verdict = 'FABRICATED_TRADES';
-  else verdict = 'clean';
+  else verdict = 'clean'; // sold-path clean; see redeemed_unchecked for scope
 
   return {
     user_id: userId,
@@ -64012,6 +64021,8 @@ async function _reconcileWallet(userId, address) {
     onchain_trade_events: events.length,
     onchain_conditions: onchainConds.size,
     coverage_capped: capped,
+    sold_path_conditions_checked: soldChecked,
+    redeemed_unchecked: redeemedUnchecked,
     fabricated_count: fabricated.length,
     pnl_sign_mismatch_count: pnlMismatch.length,
     fabricated: fabricated.slice(0, 20),
@@ -64066,7 +64077,7 @@ app.get('/api/admin/verify-promoted', requireAdminSecret, async (req, res) => {
       flagged: flagged.length,
       flagged_wallets: flagged,
       all: results,
-      note: 'FABRICATED_TRADES = we hold realized_trades rows for a conditionId the wallet never traded on-chain (worst case). PNL_MISMATCH = sold-path pnl sign disagrees with actual fills. UNVERIFIABLE_CAPPED = wallet exceeds ' + ACTIVITY_MAX_EVENTS + ' on-chain events, not fully checkable here (reported, never assumed clean). Reconciled against /activity fills only, NOT the /positions redeemed bucket.',
+      note: 'SCOPE: SOLD-PATH ONLY. Verifies positions traded out via the /activity TRADE feed. Held-to-resolution (redeemed) positions exit via redemption, which is NOT a trade event, so they are counted as redeemed_unchecked and need a separate /positions+gamma reconciler — that path (the one the poisoned-cache bug corrupted) is NOT proven by this endpoint. FABRICATED_TRADES = a SOLD-path conditionId absent from on-chain trades (full coverage only). PNL_MISMATCH = sold-path, fully-traded-out, pnl sign disagrees with fills. UNVERIFIABLE_CAPPED = exceeds ' + ACTIVITY_MAX_EVENTS + ' events. "clean" means sold-path clean; check redeemed_unchecked for what was out of scope.',
     });
   } catch (e) {
     console.error('[verify-promoted]', e.message);
