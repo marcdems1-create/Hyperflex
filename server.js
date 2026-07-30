@@ -30536,12 +30536,17 @@ async function computeTraderCard(userId) {
   const rows = await dbQuery(`
     SELECT market_question, side, shares, entry_price, exit_price,
            entry_cost_usd, exit_value_usd, realized_pnl, realized_roi,
-           opened_at, closed_at, market_durability
+           opened_at, closed_at, market_durability, close_reason
     FROM realized_trades
     WHERE user_id::text = $1 AND closed_at IS NOT NULL
     ORDER BY closed_at ASC
   `, [userId]).catch(e => { console.warn('[trader-card] query error:', e.message); return null; });
   if (!rows || !rows.length) return null;
+
+  // Risk/style disclosure computed off the same rows — no second query.
+  let riskProfile = null;
+  try { riskProfile = computeTraderRiskProfile(rows); }
+  catch (e) { console.warn('[trader-card] risk profile error:', e.message); }
 
   let wins = 0, losses = 0, totalCost = 0, totalPnl = 0;
   let holdSum = 0, holdCount = 0, sizeSum = 0, sizeCount = 0;
@@ -30609,6 +30614,99 @@ async function computeTraderCard(userId) {
     categories:       [...catCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(c => c[0]),
     roi_series:       series,
     resolutions,
+    risk_profile:     riskProfile,
+  };
+}
+
+// ── TRADER RISK / STYLE PROFILE ─────────────────────────────────────────
+// Every promoted trader needs an honest "how they actually make this
+// number, and what would bite you if you copied them" block — not just a
+// score. This is the disclosure layer the whole product rests on: a win
+// never appears naked (CLAUDE.md rule 3). Every signal here is arithmetic
+// over realized_trades, deterministic, no model call.
+//
+// The signal that motivated this: the current #1 (Nadmi, score 65, 89%
+// win rate) turns out to be 97% early-exit scalping — sells into a price
+// bump long before the market resolves — on ~$10K of capital, with one
+// trade carrying 19% of all profit. "89% win rate" is true and radically
+// misleading about what you'd be copying. This block says so plainly.
+function computeTraderRiskProfile(rows) {
+  const durable = rows.filter(r => (r.market_durability || 'durable') !== 'ephemeral' && r.realized_pnl != null);
+  const n = durable.length;
+  if (n < 5) return null;
+
+  let sold = 0, redeemed = 0, capital = 0, holdSum = 0, holdKnown = 0;
+  const grossProfits = [];
+  for (const r of durable) {
+    const reason = String(r.close_reason || '');
+    if (reason.startsWith('sold')) sold++;
+    else if (reason.startsWith('redeemed')) redeemed++;
+    const cost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
+    if (cost != null && cost > 0) capital += cost;
+    const pnl = Number(r.realized_pnl);
+    if (pnl > 0) grossProfits.push(pnl);
+    if (r.opened_at && r.closed_at) {
+      const d = (new Date(r.closed_at) - new Date(r.opened_at)) / 86400000;
+      if (isFinite(d) && d >= 0) { holdSum += d; holdKnown++; }
+    }
+  }
+  grossProfits.sort((a, b) => b - a);
+  const grossTotal = grossProfits.reduce((s, p) => s + p, 0) || 1;
+
+  const soldPct = Math.round((sold / n) * 100);
+  const topShare = Math.round((grossProfits[0] || 0) / grossTotal * 100);
+  const top3Share = Math.round(grossProfits.slice(0, 3).reduce((s, p) => s + p, 0) / grossTotal * 100);
+  const avgHold = holdKnown ? Math.round((holdSum / holdKnown) * 10) / 10 : null;
+
+  // Flags — each is a specific, checkable risk, phrased for the person
+  // deciding whether to follow. Only fire when the threshold is clearly
+  // crossed; a clean record should surface few or none.
+  const flags = [];
+  if (soldPct >= 80) flags.push({
+    key: 'early_exit', severity: 'high',
+    label: 'Exits early, rarely holds to resolution',
+    detail: soldPct + '% of closed trades were sold before the market resolved. This record measures trading in and out of positions, not calling final outcomes — a different skill than "predicts what happens."',
+  });
+  if (redeemed === 0 && n >= 10) flags.push({
+    key: 'never_resolved', severity: 'medium',
+    label: 'No positions held to resolution',
+    detail: 'Every graded trade was closed early. There is no evidence here of being right about an outcome, only of exiting at a profit.',
+  });
+  if (topShare >= 25) flags.push({
+    key: 'concentrated', severity: 'medium',
+    label: 'Record leans on one trade',
+    detail: 'A single trade is ' + topShare + '% of all profit (top 3 are ' + top3Share + '%). Remove it and the record changes materially — the edge is not evenly spread across calls.',
+  });
+  if (capital > 0 && capital < 5000) flags.push({
+    key: 'small_size', severity: 'low',
+    label: 'Small capital deployed',
+    detail: 'Total deployed across all graded trades is ' + _fmtBioUsd(capital) + '. Percentage returns on a small book do not always survive being sized up.',
+  });
+  if (avgHold != null && avgHold < 2 && n >= 10) flags.push({
+    key: 'fast_turnover', severity: 'low',
+    label: 'Very short holding periods',
+    detail: 'Average time in a position is ' + (avgHold < 1 ? 'under a day' : avgHold + ' days') + '. This is active trading, not patient position-taking — copying it means watching the market closely, not setting and forgetting.',
+  });
+
+  // Plain one-line summary of how the returns are actually made.
+  let style;
+  if (soldPct >= 80) style = 'Trades in and out — takes profit on price moves, rarely waits for resolution.';
+  else if (redeemed / n >= 0.6) style = 'Holds to resolution — the record reflects calling outcomes, not trading swings.';
+  else style = 'Mixed — some positions held to resolution, some sold early on price moves.';
+
+  return {
+    n,
+    style,
+    resolution_style: {
+      sold_early_pct: soldPct,
+      held_to_resolution_pct: Math.round((redeemed / n) * 100),
+      sold_count: sold,
+      resolved_count: redeemed,
+    },
+    concentration: { top_trade_pct: topShare, top3_pct: top3Share },
+    capital_deployed_usd: Math.round(capital),
+    avg_hold_days: avgHold,
+    flags,
   };
 }
 
@@ -30629,9 +30727,15 @@ app.get('/api/user/profile/:handle', async (req, res) => {
         ws.realized_pnl_usd, ws.total_volume_usd, ws.sharpness_score
       FROM users u
       LEFT JOIN wallet_scores ws ON ws.user_id = u.id
-      WHERE u.handle = $1 OR u.username = $1
+      WHERE LOWER(u.handle) = LOWER($1) OR LOWER(u.username) = LOWER($1)
       LIMIT 1
     `, [handle]);
+    // Case-insensitive on purpose: handles are stored lowercase, but the
+    // display name (and therefore hand-typed / shared URLs like /p/Nadmi)
+    // is mixed-case. The case-sensitive `= $1` here 404'd every capitalised
+    // handle while /api/trader-record — which already uses LOWER() via
+    // _resolveTraderHandle — resolved the same trader fine. Two resolution
+    // paths that disagreed on casing; this brings them in line.
 
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     const profile = rows[0];
