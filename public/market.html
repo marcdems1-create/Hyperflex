@@ -8101,15 +8101,22 @@ async function confirmCopyBet() {
 // On destination market page, restore copy attribution from URL params
 // so the trade-success POST stamps the new bet_feed row with the source
 // bet id. Fires once on init via the same applyAlphaPrefill hook.
+// 'trader' is the assisted-copy-trading path from a verified trader's open
+// positions (profile-trader.html "Copy this" button) — no source bet_feed
+// row exists there (the position comes straight from Polymarket, not our
+// own feed), so copy_bet_id is absent and only copy_user_id travels. Same
+// attribution machinery, just tolerant of one field being null instead of
+// the other.
 function _bfHydrateCopyAttribution() {
   try {
     var p = new URLSearchParams(window.location.search);
-    if (p.get('from') !== 'copy') return;
+    var from = p.get('from');
+    if (from !== 'copy' && from !== 'trader') return;
     var betId = p.get('copy_bet_id');
     var userId = p.get('copy_user_id');
-    if (betId) {
+    if (betId || userId) {
       window._bfCopyAttribution = {
-        copied_from_bet_id: betId,
+        copied_from_bet_id: betId || null,
         copied_from_user_id: userId || null,
       };
     }

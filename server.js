@@ -30769,6 +30769,32 @@ app.get('/api/user/profile/:handle', async (req, res) => {
       profile.card = null;
     }
 
+    // Copy-trading gate — see profile-trader.html's "Copy this" button on
+    // open positions. Only a wallet actually on the durable-verified board
+    // is copyable; a copy affordance on an unverified/fabricated record
+    // would be exactly the moat-destroying failure Gate 1 exists to
+    // prevent. Reuses the public leaderboard's own 120s cache
+    // (`_roiLbCache`, keyed `all:${ROI_MIN_N_FLOOR}`) rather than
+    // recomputing the whole durable cohort on every profile view.
+    try {
+      const _ck = `all:${ROI_MIN_N_FLOOR}`;
+      let _cached = _roiLbCache.get(_ck);
+      if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
+        const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+        if (computed) {
+          _cached = { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+          _roiLbCache.set(_ck, _cached);
+        }
+      }
+      const row = _cached ? _cached.data.find(r => r.user_id === profile.id) : null;
+      profile.durable_verified = !!row;
+      profile.durable_scope_label = row ? row.scope_label : null;
+    } catch (e) {
+      console.warn('[api/user/profile] durable_verified check failed:', e.message);
+      profile.durable_verified = false;
+      profile.durable_scope_label = null;
+    }
+
     res.json(profile);
   } catch (err) {
     console.error('[api/user/profile]', err.message);

@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30c (✅ SHIPPED — assisted copy trading: verified board → "Copy this" on an open position → existing /market/:slug widget prefilled → user's own wallet signs. Gate 4 written down. One real pre-existing system found and flagged, not touched.)
+
+**Built exactly what was asked, reusing existing scaffolding per instruction — grepped first, found more scaffolding than expected:**
+- `market.html`'s `applyAlphaPrefill()` already had a `from=trader` case wired into its banner logic ("🎯 Copying trade — review and sign") with a comment literally saying "Copy Trade buttons on sharp profiles" — reserved for this exact feature, never actually wired to a button until now. Used it as-is; zero changes to `executeTrade`/`executeViaProxy`/the CLOB V2 signing path.
+- `_bfHydrateCopyAttribution()` (the Phase-3 live-bet-feed copy-provenance stamper) only fired for `from=copy`. Broadened to also fire for `from=trader`, tolerant of `copy_bet_id` being absent (an open position isn't a `bet_feed` row, so only `copy_user_id` travels) — reuses the exact same `window._bfCopyAttribution` → `/api/bet-feed` POST stamping, no new provenance mechanism built.
+
+**New, server-side:** `/api/user/profile/:handle` now returns `durable_verified` (bool) + `durable_scope_label`, computed by checking membership in `_computeRoiLeaderboard('all', ROI_MIN_N_FLOOR)`'s rows — reuses the public leaderboard's existing 120s `_roiLbCache`, not a fresh computation per profile view. This is the single source of truth for whether the copy button renders; never inferred client-side (a client-side check could be spoofed to show a copy button on an unverified wallet).
+
+**New, client-side (`public/profile-trader.html`):** each open position row gets a `copyHref(p, traderId)` link — only rendered when (a) `d.durable_verified === true` from the server, (b) the position's `market_url` resolves to an internal `/market/:slug` (no button if it'd route through raw polymarket.com, off the builder-fee path), (c) side is a clean yes/no. Link shape: `/market/:slug?from=trader&side=yes|no&size=25&copy_user_id=<trader's users.id>`. `size=25` is a fixed default (matches the site's existing default trade/copy-chip amount elsewhere) — never the king's own position size, per instruction. Tapping it is a full navigation to the destination market's EXISTING trade widget, prefilled, NOT auto-submitted — same "review and sign" pattern the cross-market live-bet-feed copy already used. User changes the amount if they want, then taps Buy themselves; their wallet signs via the unmodified CLOB V2 flow.
+
+**Gate 4 written into CLAUDE.md** (Marc's message referenced it as if already there; it wasn't — formalized now, same pattern as Gates 1-3): SAFE tier (assisted, manual-confirm) is what's live. No auto-execution, no standing authority, amount always user-set.
+
+**🚩 Found while building this, not previously flagged anywhere: a MORE automated copy-trading system already exists and is live.** `public/copy-bot.js` — auto-loaded on EVERY page via `nav.js` (`cb.src = '/copy-bot.js?v=2'`) — plus `public/copy-trading.html` and a full `/api/copy-bot/{subscribe,pending,stream,history,trades/:id/executed,...}` backend in `server.js`. Real, wired-up feature: subscribe to a whale on `whales.html`/`copy-trading.html`, get their trades pushed via SSE, and the client attempts background execution using the user's own stored CLOB API keys (`poly_api_key`/`poly_api_secret` in localStorage) + a live browser-wallet signature via `HFXWallet.getSigner()` (confirmed by reading `executeOrder()` — it's NOT a stored private key, still non-custodial, still needs a real wallet signature per order). The material difference from what Marc described as "not built yet, Gate 4, later": the trade's side/size/market is chosen by a subscription rule and execution is attempted automatically, not reviewed per-trade by the user the way this build's SAFE tier requires. This existed before today and wasn't touched, modified, or referenced by Marc's build request — flagged in CLAUDE.md's new Gate 4 section as an open decision (keep/gate/fold in), not resolved here.
+
+**Open questions / unverified:**
+- Whether `copy-bot.js`'s subscriptions are actually in active use right now (any real rows in whatever table backs `/api/copy-bot/subscriptions`) — not checked, no production DB access from this session.
+- No visible "why isn't there a copy button here" indicator for a non-verified trader's open positions — the button just silently doesn't render. Minor, not fixed, flagging in case it reads as broken rather than as intentional.
+
+`node --check server.js` clean. Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
+
 ## 2026-07-30b (✅ SHIPPED — /@handle is now the canonical profile URL, serving profile-trader.html/computeTraderCard instead of member.html. Resolves the "two competing profile surfaces, pick one" item from the entry below. Full feature diff below, two things flagged, not fixed.)
 
 **Marc's decision:** the clean card (profile-trader.html, computeTraderCard) is the profile going forward, but served at `/@handle` — the shareable convention — not `/p/:handle`.

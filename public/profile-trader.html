@@ -73,6 +73,8 @@
     .open-live::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--green)}
     .row-link{color:var(--cyan)}
     .row-link:hover{text-decoration:underline}
+    .row-copy{border-color:rgba(34,197,94,0.35);color:var(--green)}
+    .row-copy:hover{border-color:var(--green);background:rgba(34,197,94,0.08)}
 
     /* How they trade — risk / style disclosure */
     .risk{padding:30px 34px;border-top:1px solid var(--border)}
@@ -310,7 +312,7 @@
       document.getElementById('root').innerHTML =
         '<div class="card">' + head + hero + quad + strip + risk + chart + openSlot + ledger + foot + '</div>';
 
-      if (d.polymarket_address) loadOpenPositions(d.polymarket_address);
+      if (d.polymarket_address) loadOpenPositions(d.polymarket_address, d.durable_verified === true, d.id);
     }
 
     // Internal market page keeps the trade on our builder-fee path; falls
@@ -320,7 +322,28 @@
       return m ? '/market/' + m[1] : (p.market_url || 'https://polymarket.com');
     }
 
-    function loadOpenPositions(addr){
+    // Assisted copy-trading link — one tap opens the destination market's
+    // EXISTING trade widget prefilled with the same side, a small default
+    // stake the user can change, and this trader's id for provenance. The
+    // user's own wallet still signs; nothing here executes anything.
+    // `from=trader` is market.html's applyAlphaPrefill hook, purpose-built
+    // for exactly this ("Copy Trade buttons on sharp profiles" per its own
+    // comment) but never wired to an actual button until now.
+    // No internal slug, no button — copying to a raw polymarket.com URL
+    // would route around our builder-fee path (guardrail: keep it on
+    // /market/:slug). Same for a side we can't confidently map to yes/no.
+    var COPY_DEFAULT_USD = 25; // matches the site's existing default trade/copy-chip amount
+    function copyHref(p, traderId){
+      var m = /polymarket\.com\/event\/([^/?#]+)/.exec(p.market_url || '');
+      if (!m) return null;
+      var side = String(p.side || '').toLowerCase();
+      if (side !== 'yes' && side !== 'no') return null;
+      var params = ['from=trader', 'side=' + side, 'size=' + COPY_DEFAULT_USD];
+      if (traderId) params.push('copy_user_id=' + encodeURIComponent(traderId));
+      return '/market/' + m[1] + '?' + params.join('&');
+    }
+
+    function loadOpenPositions(addr, copyable, traderId){
       fetch('/api/polymarket/positions/' + encodeURIComponent(addr))
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(d){
@@ -355,12 +378,20 @@
                 var dt = new Date(p.end_date);
                 if (!isNaN(dt)) bits.push('ends ' + dt.toLocaleDateString('en-US', { month:'short', day:'numeric' }));
               }
+              // Copy affordance ONLY on a verified (durable-board) trader —
+              // see server-side durable_verified check. A copy button on an
+              // unverified record is the exact failure this feature exists
+              // to prevent (there'd be nothing behind it worth copying).
+              var cLink = copyable ? copyHref(p, traderId) : null;
+              var copyBtn = cLink ? '<a class="btn-mini row-copy" href="' + esc(cLink) + '">Copy this &#8594;</a>' : '';
               return '<div class="row">' +
                 '<div><div class="row-q">' +
                   '<span class="open-side">' + esc(String(p.side || '').toUpperCase()) + '</span>' +
                   '<a class="row-link" href="' + esc(marketHref(p)) + '">' + esc(p.question || '') + '</a>' +
                 '</div>' +
-                '<div class="row-meta">' + bits.join(' · ') + '</div></div>' +
+                '<div class="row-meta">' + bits.join(' · ') + '</div>' +
+                (copyBtn ? '<div style="margin-top:12px">' + copyBtn + '</div>' : '') +
+                '</div>' +
                 '<div class="row-amt ' + cls + '">' + signedUsd(pnl) + '</div>' +
               '</div>';
             }).join('');
