@@ -13226,10 +13226,20 @@ app.get('/api/kings', async (req, res) => {
     const categories = [];
     if (byCategory) {
       const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' King';
+      // Show EVERY category with a real king, not a hardcoded top-3 — the
+      // homepage brief is "winning traders in every category". The `.slice(0,3)`
+      // cap this replaces meant macro/commodities/crypto/tech kings existed in
+      // the data and were computed on every request but never rendered.
+      // `?min_depth=` lets the bar be tuned without a deploy; default stays at
+      // the 5-qualifying-wallet eyeball threshold used by the category report,
+      // so a category with one lucky wallet can't crown anyone.
+      // 'other' stays excluded — it's the classifier's residual bucket, not a
+      // category, so an "Other King" is meaningless (same reason it's excluded
+      // from the similar-trader matcher).
+      const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
       const viable = Object.entries(byCategory)
-        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= 5 && c.leaderboard[0])
-        .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count)
-        .slice(0, 3);
+        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth && c.leaderboard[0])
+        .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
       for (const [cat, c] of viable) {
         const r = c.leaderboard[0];
         categories.push({

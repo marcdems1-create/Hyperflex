@@ -44,6 +44,7 @@
 
   .king-row{display:flex;justify-content:center;}
   .cat-kings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+  .cat-kings-note{font-size:13.5px;line-height:1.6;color:var(--muted,rgba(240,240,245,.62));max-width:760px;margin:-4px 0 18px;}
   .scroll-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;}
   .scroll-row > a{scroll-snap-align:start;}
 
@@ -87,7 +88,20 @@
   </section>
 
   <section id="catKingsSection" style="display:none;">
-    <div class="section-head"><h2>Category Kings</h2></div>
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Best in every category</div>
+        <h2>Category Kings</h2>
+      </div>
+      <a href="/traders">Full leaderboard →</a>
+    </div>
+    <!-- Ranked on return, not hit rate. Stated up front because some kings
+         legitimately hold a losing W-L record — a trader entering at 10¢ can
+         be badly profitable while winning a minority of the time — and
+         without this line that card reads as a bug rather than as the
+         model working. The W-L stays visible either way (never hide the
+         losses). -->
+    <p class="cat-kings-note" id="catKingsNote"></p>
     <div class="cat-kings-grid" id="catKingsGrid"></div>
   </section>
 
@@ -124,6 +138,18 @@ fetch('/api/kings')
     var catGrid = document.getElementById('catKingsGrid');
     if (d.categories && d.categories.length) {
       catSection.style.display = '';
+
+      var note = document.getElementById('catKingsNote');
+      if (note) {
+        var cats = d.categories.length;
+        var pool = d.categories.reduce(function(s,k){ return s + (k.qualifying_count || 0); }, 0);
+        note.textContent = '#1 by return in each of ' + cats + ' categories, drawn from '
+          + pool + ' qualifying wallets. Ranked on realized return, not win rate — '
+          + 'a trader buying longshots can be well ahead while winning a minority of '
+          + 'their calls, so some kings hold a losing record. Every card shows its '
+          + 'W-L and sample size.';
+      }
+
       catGrid.innerHTML = d.categories.map(function(k){
         var c = Object.assign({}, k.card);
         c.verdict = k.label + ' · ' + c.wins + 'W-' + c.losses + 'L';
