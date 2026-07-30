@@ -63904,10 +63904,15 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
 //
 // Coverage honesty: /activity caps at 500/page; we paginate by offset up
 // to ACTIVITY_MAX_EVENTS. If a wallet exceeds that, its report is marked
-// coverage_capped=true and does NOT count as "verified clean" — an
-// unverifiable wallet is reported as such, never assumed good (same
-// discipline as void_ungradeable never silently shrinking a denominator).
-const ACTIVITY_MAX_EVENTS = 3000;
+// coverage_capped=true and — critically — fabrication is NOT asserted for
+// it, because a trade older than the fetch window looks identical to a
+// fabricated one. (First pass capped at 3000 and produced 6/8 false
+// FABRICATED verdicts: Nadmi alone has 5,501 events and its "fabricated"
+// conditions were all real, just older than the window. Caught because
+// fabricated_count correlated 1:1 with coverage_capped.) Raised to a
+// window that covers real wallets; anything past it is honestly reported
+// UNVERIFIABLE_CAPPED, never FABRICATED.
+const ACTIVITY_MAX_EVENTS = 12000;
 
 async function _fetchAllActivity(address) {
   const out = [];
@@ -63965,9 +63970,20 @@ async function _reconcileWallet(userId, address) {
   const fabricated = []; // our conditionId with zero on-chain presence
   const pnlMismatch = []; // sold-path, sign disagreement vs fills
   for (const [cond, g] of ourByCond) {
-    if (!onchainConds.has(cond)) { fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
+    // FABRICATION only when coverage is COMPLETE. On a capped wallet a
+    // real-but-old trade is indistinguishable from a fabricated one, so
+    // asserting fabrication there is a false positive (the first-pass bug).
+    if (!onchainConds.has(cond)) { if (!capped) fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
     if (g.anyRedeemed) continue; // redemption payout isn't a TRADE event
     const oc = onchainByCond.get(cond);
+    // PNL-sign is only meaningful when the position was actually TRADED OUT
+    // (real sell volume). If sells are negligible vs buys, the position was
+    // held to resolution / redeemed — its payout is not a TRADE event, so
+    // sell−buy understates the real result and comparing signs is invalid
+    // (this is what flagged TB14: +$94k real redemption win vs a −$194k
+    // trade-only fill_net). Require sell volume ≥ 25% of buy volume before
+    // trusting fill_net as the realized outcome.
+    if (oc.sellUsdc < oc.buyUsdc * 0.25) continue;
     const fillNet = oc.sellUsdc - oc.buyUsdc; // realized cash from trading in/out
     // Only flag a clear sign disagreement with meaningful magnitude — small
     // opposite-sign residues are FIFO/fee/rounding noise, not a grading bug.
@@ -63978,7 +63994,16 @@ async function _reconcileWallet(userId, address) {
     }
   }
 
-  const clean = fabricated.length === 0 && pnlMismatch.length === 0 && !capped;
+  // A capped wallet can't be declared clean OR fabricated — we simply
+  // haven't seen all its fills. It can still catch a pnl mismatch on the
+  // conditions we DID fetch, but absence-of-trade is unprovable, so its
+  // verdict is UNVERIFIABLE_CAPPED unless a real pnl mismatch surfaced.
+  let verdict;
+  if (pnlMismatch.length) verdict = 'PNL_MISMATCH';
+  else if (capped) verdict = 'UNVERIFIABLE_CAPPED';
+  else if (fabricated.length) verdict = 'FABRICATED_TRADES';
+  else verdict = 'clean';
+
   return {
     user_id: userId,
     address,
@@ -63991,7 +64016,7 @@ async function _reconcileWallet(userId, address) {
     pnl_sign_mismatch_count: pnlMismatch.length,
     fabricated: fabricated.slice(0, 20),
     pnl_mismatch: pnlMismatch.slice(0, 20),
-    verdict: clean ? 'clean' : (fabricated.length ? 'FABRICATED_TRADES' : (pnlMismatch.length ? 'PNL_MISMATCH' : 'UNVERIFIABLE_CAPPED')),
+    verdict,
   };
 }
 
