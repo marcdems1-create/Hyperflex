@@ -11430,8 +11430,14 @@ function _validateHandleFormat(handle) {
   return null;
 }
 
-// GET /@:handle — canonical profile URL. Serves member.html; page-side JS
-// reads /api/user-by-handle/:handle to resolve → user_id and render.
+// GET /@:handle — canonical profile URL. Serves profile-trader.html (the
+// computeTraderCard surface, formerly at /p/:handle); page-side JS reads
+// /api/user/profile/:handle to resolve → user_id and render. member.html
+// retired from this route 2026-07-30 — the card UI is the profile going
+// forward, per computeTraderCard already carrying the auto-generated
+// trade_bio (see SESSION_STATE.md) plus CLV grade, wallet class, open
+// positions and the resolution ledger member.html also had. Still used
+// directly by /m/:userId for handle-less wallets (unchanged).
 app.get('/@:handle', (req, res) => {
   // Early-exit with 404 if the handle shape is obviously wrong so Google
   // doesn't index /@null /@undefined /@admin etc.
@@ -11439,15 +11445,16 @@ app.get('/@:handle', (req, res) => {
   // Top-level profile HTML must revalidate so a deploy propagates immediately
   // (matches the `/` homepage route + static .html policy above). Without it,
   // sendFile's default max-age=0 still lets Cloudflare/browsers serve a stale
-  // member.html — that's what pinned the pre-fix isOwnProfile build after deploy.
+  // build after deploy.
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'member.html'));
+  res.sendFile(path.join(__dirname, 'public', 'profile-trader.html'));
 });
 
 // GET /api/user-by-handle/:handle — resolve handle → public profile fields.
-// Used by member.html to hydrate the profile page when the URL is /@handle.
-// SELECT * so schema drift (missing is_whale/avatar_url/etc from a skipped
-// migration) doesn't cause a silent 404.
+// member.html no longer serves /@handle (see above, 2026-07-30) but still
+// uses this to hydrate itself when /m/:userId falls through for a
+// handle-less wallet. SELECT * so schema drift (missing is_whale/avatar_url/
+// etc from a skipped migration) doesn't cause a silent 404.
 app.get('/api/user-by-handle/:handle', async (req, res) => {
   try {
     const handle = String(req.params.handle || '').trim().replace(/^@+/, '').toLowerCase();
@@ -11725,10 +11732,11 @@ app.get('/api/verify/:userId', async (req, res) => {
   }
 });
 
-// GET /p/:username — public verified trader profile page
+// GET /p/:username — legacy shape, 301 → /@{handle}. profile-trader.html
+// (computeTraderCard) is now served at /@handle directly; kept redirecting
+// rather than removed so existing shared /p/ links don't break.
 app.get('/p/:username', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'profile-trader.html'));
+  res.redirect(301, '/@' + encodeURIComponent(req.params.username));
 });
 
 // GET /api/trader-profile/:username — trader profile data (public)
@@ -30508,7 +30516,9 @@ async function computeTradeBio(userId) {
 }
 
 // ── TRADER CARD PAYLOAD ─────────────────────────────────────────────────
-// Everything the /p/:handle card renders, computed in one pass over
+// Everything the /@handle card renders (profile-trader.html — canonical
+// profile URL as of 2026-07-30, formerly at /p/:handle), computed in one
+// pass over
 // realized_trades: headline aggregates, a cumulative-ROI series for the
 // sparkline, and the resolution ledger (per-trade receipts). Same
 // discipline as the rest of the scoring surface — every number here is
@@ -30679,7 +30689,7 @@ app.get('/:slug', async (req, res, next) => {
     }
 
     // No creator found — treat as a trader handle, redirect to the profile page.
-    if (!settings) return res.redirect(302, `/p/${slug}`);
+    if (!settings) return res.redirect(302, `/@${slug}`);
 
     const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
 

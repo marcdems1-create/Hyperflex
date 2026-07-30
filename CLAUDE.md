@@ -295,7 +295,7 @@ Before shipping copy, read it aloud. If any of these are true, rewrite:
 - **Landing / Explore** at `/` (file: `public/explore.html`) — the front door. Shows top edges, intelligence cards, live stats, and a **preview** of the FLEX Feed. NOT the full feed — users click through to `/feed` for the full experience. `/explore` redirects here (301).
 - **FLEX Feed** at `/feed` (file: `public/feed.html`) — the full social feed. Two tabs: **For You** (algorithmic + followed users) and **Trending** (trending takes + influencer posts from X/Reddit interleaved). This is a SEPARATE file from explore.html — do NOT confuse them.
 - **Alpha Terminal** at `/alpha-live` — live Polymarket edges ranked by Edge Score (8 signals). The Bloomberg layer underneath the social product.
-- **Member Profiles** at `/m/:userId` (file: `public/member.html`) — trader profile with tier card, takes, trades, track record. Auto-created for every user + top-50 Polymarket whales.
+- **Trader Profile (canonical)** at `/@handle` (file: `public/profile-trader.html`, data from `computeTraderCard`) — the shareable profile: FLEX score, auto-generated trade_bio, CLV grade, wallet class, live open positions, resolution ledger, Share on X + Passport link. As of 2026-07-30 this replaced member.html at `/@handle`; `/p/:handle` (its old route) now 301s here. `/m/:userId` (file: `public/member.html`, tier ladder/takes/follow/challenge) still serves as a fallback for handle-less wallets only — no longer the canonical profile. See SESSION_STATE.md 2026-07-30 for the full feature diff and what wasn't ported (follow/DM/copy-trade/challenge, the old tier ladder, whale score badge, sports FLEX gauge).
 - **Prediction Passport** at `/passport/:userId` (file: `public/passport.html`) — shareable credential page for verified prediction track record. Embeddable via iframe.
 - **Market Pages** at `/market/:slug` — Polymarket trading with Community Takes section, post-trade "Share your take" prompt.
 
@@ -426,7 +426,8 @@ Social products compound. Every take posted is content. Every follow is a connec
 |------|-------|-----------|
 | `public/explore.html` | `/` (landing) | **Landing page + feed preview.** Intelligence briefing, top edges, live stats, feed preview. `/explore` redirects here. ⚠️ NOT the full feed — that's feed.html. |
 | `public/feed.html` | `/feed` | **FLEX Feed (full).** Two tabs: For You + Trending. Influencer posts (X/Reddit) interleaved with user takes. ⚠️ SEPARATE from explore.html. |
-| `public/member.html` | `/m/:userId` | **Member profile.** Tier card, takes, trades, track record, passport link. |
+| `public/profile-trader.html` | `/@handle` (canonical) | **Trader profile.** FLEX score, trade_bio, CLV grade, wallet class, open positions, resolution ledger. `computeTraderCard`. `/p/:handle` 301s here. |
+| `public/member.html` | `/m/:userId` (legacy fallback only) | **Old member profile.** Tier ladder, takes, follow/copy-trade/challenge/DM. No longer canonical as of 2026-07-30 — only serves handle-less wallets falling through `/m/:userId`. |
 | `public/passport.html` | `/passport/:userId` | **Prediction Passport.** Shareable credential page. Embeddable via iframe. |
 | `public/market.html` | `/market/:slug` | **Market page.** Polymarket trading, CLOB orders, community takes, stop-loss. |
 | `public/alpha-live.html` | `/alpha-live` | **Alpha Terminal.** Live edge cards ranked by Edge Score (8 signals). |

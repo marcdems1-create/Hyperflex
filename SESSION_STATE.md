@@ -49,6 +49,32 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30b (✅ SHIPPED — /@handle is now the canonical profile URL, serving profile-trader.html/computeTraderCard instead of member.html. Full feature diff below, two things flagged, not fixed.)
+
+**Marc's decision:** the clean card (profile-trader.html, computeTraderCard) is the profile going forward, but served at `/@handle` — the shareable convention — not `/p/:handle`.
+
+**Shipped:**
+- `/@:handle` now serves `profile-trader.html` (was `member.html`).
+- `/p/:handle` → 301 redirect to `/@handle` (route kept, no longer serves the page directly).
+- `/:slug` catch-all fallback (no creator match) redirects to `/@${slug}` (was `/p/${slug}`).
+- Internal profile links updated to `/@` instead of `/p/`: `connect.html` (similar-traders matcher card), `creator-dashboard.html` (followers empty-state), `explore.html` (×2), `whales.html`. nav.js already used `/@` — no change needed there.
+- Added to profile-trader.html (present in member.html, weren't on the card): **Share on X** button and a **Passport →** link (`/@handle/passport`, route already existed). Footer text fixed from `hyperflex.network/p/` to `/@`.
+- `member.html` NOT deleted — still serves `/m/:userId` for handle-less wallets (unchanged fallback behavior).
+
+**Full diff against member.html — what's confirmed kept, what's deliberately not ported:**
+- ✅ Kept/already present: auto-generated `trade_bio` (Marc's specific callout — confirmed already wired via `/api/user/profile/:handle`), CLV grade, wallet class, win rate + n, realized ROI + staked, avg hold/size, top categories, cumulative-ROI sparkline, resolution ledger, live open positions.
+- ✅ Added back this pass: Share on X, Passport link.
+- ❌ NOT ported — old tier ladder (FLEXIN/WHALE/SHARK/SHARP/PROFITABLE/TRADER/Building) + progress-to-next-tier bar: CLAUDE.md's own Voice & Posture §8 already retires "tiers to unlock" as part of the FLEX Score redesign — porting it forward would resurrect something the docs already call dead. (Flagging that this directly contradicts the older NORTH STAR section's "keep compounding the tier ladder" bullet — those two CLAUDE.md sections disagree with each other; treated §8's explicit retirement as authoritative since it's the more specific, dated statement.)
+- ❌ NOT ported — Follow/Followers-Following+modal, Copy-trade, Challenge (quote-predict), Message (DM): separate social-graph features, no plumbing in computeTraderCard's data model at all. Real functionality loss for whoever used them on member.html. Bigger lift than a route swap — needs an explicit decision, not assumed back in.
+- ❌ NOT ported — streak/oracle/sharp/verified badges: tied to `takes` (social predictions posted), not to `realized_trades`. Different data model than the on-chain trade-record card.
+- ❌ NOT ported — Whale Score badge (capital-flow heuristic): deliberately left out. Gate 1's 2026-07-20 finding was that capital-deployed as a signal axis is structurally biased toward ephemeral-market bots (19/20 sampled whales ungradeable). Resurfacing it on the new canonical profile would reintroduce the axis Gate 1 moved away from.
+- ❌ NOT ported — Sports FLEX score gauge (separate CLV-component gauge): a distinct, separately-active sports scoring surface (t5/t6/t7 branches exist). Wasn't asked for, deserves its own integration call.
+- ❌ NOT ported — self-editable "Edit Bio" (user-authored text, distinct from auto-generated `trade_bio`) and the "Activate your profile" wallet-connect CTA for owners with no wallet yet — `/connect` already owns the "no record yet" experience per CLAUDE.md rule 4, but worth knowing `/@handle` itself has no such prompt.
+
+**🚩 Flagged, not fixed — scoring-discipline gap, separate from feature parity:** `computeTraderCard` computes win-rate/ROI over **all** `realized_trades` with no `market_durability` filter, no `scope_label`, no ephemeral-trade disclosure — unlike the newer Gate-1-compliant `/trader/:handle` surface (`_buildTraderProfile`, this session's similar-traders-matcher/specialty-small-sample work) which carries that discipline throughout. Making computeTraderCard's output the site's most-shared URL means its numbers aren't held to the same "every score carries n + durability scope" bar Gate 1 established elsewhere. Not fixed here since it's a scoring-methodology change, not a routing change — needs Marc's call: leave as-is, or bring `/@handle` up to Gate-1 parity (durable-only score + scope_label + ephemeral disclosure) before it's the front door people actually share.
+
+`node --check server.js` clean. Not yet merged to main — pushed to `claude/onchain-expansion-thesis-9trllr`.
+
 ## 2026-07-29 (✅ SHIPPED — trader card rebuild, auto-generated trade bio, "trades like you but better" matcher, 2 real data-integrity bugs fixed)
 
 **Shipped (all pushed to origin/main, verified on origin):**

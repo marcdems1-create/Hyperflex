@@ -787,7 +787,7 @@ function loadSimilarTraders(handle){
         + d.matches.map(function(m){
             var h = m.headline;
             var name = m.username || m.display_name || 'Trader';
-            var link = m.username ? '/p/' + encodeURIComponent(m.username) : null;
+            var link = m.username ? '/@' + encodeURIComponent(m.username) : null;
             var nameHtml = link
               ? '<a href="'+esc(link)+'" class="sim-name">'+esc(name)+'</a>'
               : '<span class="sim-name">'+esc(name)+'</span>';

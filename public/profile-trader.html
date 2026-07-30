@@ -28,10 +28,14 @@
     .card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden}
 
     /* Card header strip */
-    .card-head{display:flex;align-items:baseline;justify-content:space-between;padding:34px 52px;border-bottom:1px solid var(--border)}
+    .card-head{display:flex;align-items:baseline;justify-content:space-between;padding:34px 52px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:16px}
     .who{font-family:var(--mono);font-size:40px;font-weight:600;color:var(--ink)}
     .who-sub{font-family:var(--mono);font-size:26px;color:var(--dim);margin-left:16px}
     .brand{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:0.14em;color:var(--cyan)}
+    .card-actions{display:flex;align-items:center;gap:10px}
+    .btn-mini{font-family:var(--mono);font-size:16px;font-weight:600;padding:9px 18px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--dim);cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+    .btn-mini:hover{border-color:var(--cyan);color:var(--cyan)}
+    @media(max-width:640px){.card-head{padding:24px 24px}.btn-mini{font-size:14px;padding:7px 14px}}
 
     /* Hero score */
     .hero{padding:60px 52px 52px}
@@ -126,6 +130,13 @@
 
     var CLASS_LABEL = { sharp:'SHARP', good:'GOOD', square:'SQUARE', fade:'FADE' };
 
+    // Inline onclick handlers run in global scope, so this needs to live on
+    // window rather than staying trapped in the surrounding IIFE closure.
+    window.shareTraderCard = function(handle){
+      var text = 'My prediction market track record on HYPERFLEX\n\nhyperflex.network/@' + handle;
+      window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'noopener');
+    };
+
     function sparkline(series){
       if(!series || series.length<2) return '';
       var vals = series.map(function(p){return num(p.roi_pct)||0;});
@@ -158,7 +169,11 @@
       var head =
         '<div class="card-head">' +
           '<div><span class="who">@' + esc(name) + '</span><span class="who-sub">· trader profile</span></div>' +
-          '<span class="brand">HYPERFLEX</span>' +
+          '<div class="card-actions">' +
+            '<button class="btn-mini" onclick="shareTraderCard(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Share on X</button>' +
+            '<a class="btn-mini" href="/@' + esc(name) + '/passport">Passport &#8594;</a>' +
+            '<span class="brand">HYPERFLEX</span>' +
+          '</div>' +
         '</div>';
 
       var bio = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
@@ -237,7 +252,7 @@
 
       var foot =
         '<div class="foot">' +
-          '<span>hyperflex.network/p/' + esc(name) + '</span>' +
+          '<span>hyperflex.network/@' + esc(name) + '</span>' +
           '<span>' + (c && c.n != null ? c.n + ' resolved · ' : '') + 'updated live</span>' +
         '</div>';
 

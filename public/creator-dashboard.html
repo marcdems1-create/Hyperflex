@@ -9803,7 +9803,7 @@ async function loadFollowersList() {
     var list = data.followers || data || [];
     if (!Array.isArray(list) || list.length === 0) {
       var slug = (creatorData && creatorData.creator && creatorData.creator.slug) || '';
-      var profileUrl = slug ? '/p/' + slug : '/predictors';
+      var profileUrl = slug ? '/@' + slug : '/predictors';
       el.innerHTML = '<div style="padding:32px 20px;text-align:center;background:var(--ink);border:1px solid var(--border);border-radius:12px">' +
         '<div style="font-size:24px;margin-bottom:10px">&#x1F465;</div>' +
         '<div style="font-size:13px;color:var(--text);margin-bottom:6px">No followers yet</div>' +
