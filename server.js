@@ -13287,7 +13287,7 @@ app.get('/api/kings', async (req, res) => {
     const byCategory = await _computeCategoryRoiLeaderboards();
     const categories = [];
     if (byCategory) {
-      const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' King';
+      const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' Leader';
       // Show EVERY category with a real king, not a hardcoded top-3 — the
       // homepage brief is "winning traders in every category". The `.slice(0,3)`
       // cap this replaces meant macro/commodities/crypto/tech kings existed in
@@ -13296,7 +13296,7 @@ app.get('/api/kings', async (req, res) => {
       // the 5-qualifying-wallet eyeball threshold used by the category report,
       // so a category with one lucky wallet can't crown anyone.
       // 'other' stays excluded — it's the classifier's residual bucket, not a
-      // category, so an "Other King" is meaningless (same reason it's excluded
+      // category, so an "Other Leader" is meaningless (same reason it's excluded
       // from the similar-trader matcher).
       const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
       // The king's OWN n in the category must clear a higher bar than the
