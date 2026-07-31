@@ -1359,10 +1359,10 @@ function renderMyCopies() {
 
   // Subscriptions
   if (!_mcData.subs.length) {
-    subsEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:8px">No active copy subscriptions. Click 🤖 Auto-Mirror on any whale to start.</div>';
+    subsEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;border:1px dashed var(--border);border-radius:8px">No active copy subscriptions. Click 🤖 Copy Signal on any whale to start.</div>';
   } else {
     subsEl.innerHTML = _mcData.subs.map(function(s) {
-      var modeLabel = s.notify_only ? 'Notify only' : 'Auto-execute';
+      var modeLabel = s.notify_only ? 'Notify only' : 'Priority alerts';
       var modeColor = s.notify_only ? '#f59e0b' : '#00e68a';
       return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#141412;border:1px solid rgba(168,85,247,0.18);border-radius:10px;margin-bottom:8px">' +
         '<span style="font-size:18px">🐋</span>' +
@@ -1370,7 +1370,7 @@ function renderMyCopies() {
           '<div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">' + escMc(s.whale_name || s.whale_address.slice(0,10)) + '</div>' +
           '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">$' + parseFloat(s.allocation || 0).toFixed(0) + ' per trade · <span style="color:' + modeColor + '">' + modeLabel + '</span> · ' + (s.trades_copied || 0) + ' copies</div>' +
         '</div>' +
-        '<button onclick="toggleCopyMode(\'' + s.id + '\',' + !s.notify_only + ')" style="padding:6px 10px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer" title="' + (s.notify_only ? 'Switch to auto-execute' : 'Switch to notify only') + '">' + (s.notify_only ? '⚡ Auto' : '🔔 Notify') + '</button>' +
+        '<button onclick="toggleCopyMode(\'' + s.id + '\',' + !s.notify_only + ')" style="padding:6px 10px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer" title="' + (s.notify_only ? 'Switch to priority alerts' : 'Switch to notify only') + '">' + (s.notify_only ? '⚡ Priority' : '🔔 Notify') + '</button>' +
         '<button onclick="cancelCopy(\'' + s.id + '\')" style="padding:6px 10px;font-family:var(--mono);font-size:10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--red);cursor:pointer">Cancel</button>' +
       '</div>';
     }).join('');
@@ -1418,7 +1418,7 @@ async function toggleCopyMode(subId, newAutoMode) {
     // verified durable board — say so, rather than let the toggle silently
     // snap back to "Notify only" with no explanation.
     if (d && d.downgraded_reason === 'whale_not_durable_verified') {
-      alert((sub.whale_name || 'This whale') + ' isn\'t on the verified durable board yet, so auto-execute isn\'t available for them. Left as notify-only.');
+      alert((sub.whale_name || 'This whale') + ' isn\'t on the verified durable board yet, so priority alerts aren\'t available for them. Left as notify-only.');
     }
     loadMyCopies();
   } catch (e) { alert('Failed to update: ' + e.message); }
@@ -1462,7 +1462,7 @@ setInterval(loadMyCopies, 30000);
               // Show success banner
               var banner = document.createElement('div');
               banner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#00e68a,#00b876);color:#0a0a0f;padding:14px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 20px rgba(0,230,138,0.3);max-width:90vw;text-align:center';
-              banner.innerHTML = '✅ Wallet ready! Now auto-mirroring ' + (pending.whale_name || 'this whale') + ' at $' + Math.round(pending.allocation_per_trade) + '/trade';
+              banner.innerHTML = '✅ Wallet ready! Now getting priority alerts on ' + (pending.whale_name || 'this whale') + ' at $' + Math.round(pending.allocation_per_trade) + '/trade';
               document.body.appendChild(banner);
               setTimeout(function() { banner.remove(); }, 5000);
               loadMyCopies();
@@ -1874,7 +1874,7 @@ function renderTable() {
         '<button class="follow-btn' + (_followedWhales.has(p.proxyWallet||'') ? ' following' : '') + '" onclick="event.stopPropagation();' + (_followedWhales.has(p.proxyWallet||'') ? "unfollowWhale('" + escAttr(p.proxyWallet||'') + "',this)" : "followWhale('" + escAttr(p.proxyWallet||'') + "','" + escAttr(whaleName(p.trader,p.proxyWallet)) + "',this)") + '">' + (_followedWhales.has(p.proxyWallet||'') ? 'Following \u2713' : '+ Follow') + '</button>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
-        '<button class="ac-btn" title="Mirror all future trades from this wallet automatically" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Mirror</button>' +
+        '<button class="ac-btn" title="Get alerted on every future trade from this wallet \u2014 you copy each one yourself" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Mirror</button>' +
       '<div style="font-size:11px;color:#9a9a8e;margin-top:3px;text-align:center">Copy: this trade \u00B7 Mirror: all future</div>' +
       '</div></td>' +
       '</tr>';
@@ -1903,7 +1903,7 @@ function renderMobileCards() {
         '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(p.market_url || '') : (p.market_url || '#')) + '" class="view-link">View \u2192</a>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
-        '<button class="ac-btn" title="Mirror all future trades from this wallet automatically" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Mirror</button>' +
+        '<button class="ac-btn" title="Get alerted on every future trade from this wallet \u2014 you copy each one yourself" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Mirror</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2719,13 +2719,13 @@ function closeWhaleProfile() {
   </div>
 </div>
 
-<!-- Auto-Mirror Modal -->
+<!-- Mirror (copy-signal subscription) Modal -->
 <div class="acm-overlay" id="acmOverlay" onclick="if(event.target===this)closeAutoCopy()">
   <div class="acm-modal">
     <button class="acm-close" onclick="closeAutoCopy()">&times;</button>
     <div class="acm-header">
-      <h3 id="acmTitle">&#x1F916; Auto-Mirror Trades</h3>
-      <div class="acm-header-sub" id="acmSub">When this whale opens a new position, we'll mirror it with your allocation.</div>
+      <h3 id="acmTitle">&#x1F916; Mirror Trades</h3>
+      <div class="acm-header-sub" id="acmSub">When this whale opens a new position, you'll be alerted at your allocation — nothing places itself, you tap Copy.</div>
     </div>
     <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Allocation per trade</div>
     <div class="acm-alloc-grid">
@@ -2740,13 +2740,13 @@ function closeWhaleProfile() {
     <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Mode <span style="color:var(--gold);font-weight:600;text-transform:none;letter-spacing:0">· Notify is strongly recommended</span></div>
     <div class="acm-mode">
       <button class="acm-mode-btn active" data-mode="notify" onclick="setAcmMode('notify', this)">&#x1F514; Notify Only</button>
-      <button class="acm-mode-btn" data-mode="auto" onclick="setAcmMode('auto', this)">&#x26A1; Auto-Execute</button>
+      <button class="acm-mode-btn" data-mode="auto" onclick="setAcmMode('auto', this)">&#x26A1; Priority Alerts</button>
     </div>
     <div id="acmAutoWarning" style="display:none;margin-top:10px;padding:12px 14px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--gold);line-height:1.6">
-      <strong>⚠ Auto-execute has real limits.</strong> Bots move faster than you — by the time your order signs, the price may have moved. HYPERFLEX auto-skips trades where: price moved >5%, market expires <48h, whale opened 5+ positions in the last hour (arbing), or whale has 20+ active positions (systematic). If a skip happens, you'll still get a notification.
+      <strong>⚠ Priority alerts are only available for verified traders.</strong> HYPERFLEX downgrades to notify-only for: whales not on the verified durable board, price moved >5% since entry, market expires <48h, whale opened 5+ positions in the last hour (arbing), whale has 20+ active positions (systematic), or your daily cap is reached. Every alert still requires you to tap Copy yourself — nothing places a trade on its own.
     </div>
-    <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Auto-Mirroring &rarr;</button>
-    <div class="acm-info">Safe mode: You'll be notified before any trade is placed. Auto-execute requires CLOB trading to be enabled.</div>
+    <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Mirroring &rarr;</button>
+    <div class="acm-info">Nothing places a trade for you — every alert requires your own Copy tap. Priority alerts require CLOB trading to be enabled and the whale to be verified.</div>
     <div id="acmStatus" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;text-align:center"></div>
   </div>
 </div>
@@ -2849,12 +2849,12 @@ function openAutoCopy(address, name) {
   _acmName = name;
   _acmAlloc = 100;
   _acmMode = 'notify';
-  document.getElementById('acmTitle').innerHTML = '&#x1F916; Auto-Mirror ' + (name || 'Whale');
+  document.getElementById('acmTitle').innerHTML = '&#x1F916; Mirror ' + (name || 'Whale');
   document.querySelectorAll('.acm-alloc-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.alloc === '100'); });
   document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.mode === 'notify'); });
   document.getElementById('acmCustomWrap').style.display = 'none';
   document.getElementById('acmStatus').style.display = 'none';
-  document.getElementById('acmCta').textContent = 'Start Auto-Mirroring \u2192';
+  document.getElementById('acmCta').textContent = 'Start Mirroring \u2192';
   document.getElementById('acmCta').disabled = false;
   document.getElementById('acmOverlay').classList.add('open');
 }
@@ -2886,7 +2886,7 @@ function setAcmMode(mode, el) {
   _acmMode = mode;
   document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.remove('active'); });
   el.classList.add('active');
-  // Show honest warning when user picks auto-execute — bots are faster than us
+  // Show honest warning when user picks priority alerts — bots are faster than us
   var warn = document.getElementById('acmAutoWarning');
   if (warn) warn.style.display = mode === 'auto' ? 'block' : 'none';
 }
@@ -2927,13 +2927,13 @@ function submitAutoCopy() {
     _acmAlloc = parseFloat(customVal) || 100;
   }
 
-  // ── Setup check: if user picked auto-execute but has no wallet, redirect to setup ──
+  // ── Setup check: if user picked priority alerts but has no wallet, redirect to setup ──
   if (_acmMode !== 'notify' && !hasTradingSetup()) {
     var status = document.getElementById('acmStatus');
     status.style.display = '';
     status.style.background = 'rgba(168,85,247,0.1)';
     status.style.color = '#a855f7';
-    status.innerHTML = '⚡ Auto-execute needs a Polymarket wallet (one-time setup, ~30s).<br>' +
+    status.innerHTML = '⚡ Priority alerts need a Polymarket wallet (one-time setup, ~30s).<br>' +
       '<div style="margin-top:10px;display:flex;gap:8px">' +
         '<button onclick="redirectToSetup()" style="flex:1;background:#a855f7;color:#fff;border:none;padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Set up trading →</button>' +
         '<button onclick="setAcmMode(\'notify\',document.querySelector(\'.acm-mode-btn[data-mode=notify]\'));submitAutoCopy()" style="background:rgba(255,255,255,0.08);color:#888;border:none;padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer">Use notify-only</button>' +
@@ -2963,18 +2963,19 @@ function submitAutoCopy() {
     if (d.error) throw new Error(d.error);
     var status = document.getElementById('acmStatus');
     status.style.display = '';
-    // Server silently downgrades auto-execute to notify-only for a whale
-    // that isn't on the verified durable board (2026-07-30 guardrail) \u2014 say
-    // so explicitly rather than letting "notify_only: true" come back on a
-    // request that asked for auto and look like a bug.
+    // Server silently downgrades priority alerts to standard notify-only
+    // for a whale that isn't on the verified durable board (2026-07-30
+    // guardrail) \u2014 say so explicitly rather than letting "notify_only:
+    // true" come back on a request that asked for priority and look like
+    // a bug.
     if (d.downgraded_reason === 'whale_not_durable_verified') {
       status.style.background = 'rgba(245,158,11,0.1)';
       status.style.color = '#f59e0b';
-      status.innerHTML = '&#x26A0; Subscribed as notify-only. ' + (_acmName || 'This whale') + ' isn\'t on the verified durable board yet, so auto-execute isn\'t available for them \u2014 you\'ll get alerts and can copy manually.';
+      status.innerHTML = '&#x26A0; Subscribed as notify-only. ' + (_acmName || 'This whale') + ' isn\'t on the verified durable board yet, so priority alerts aren\'t available for them \u2014 you\'ll get standard alerts and can copy manually.';
     } else {
       status.style.background = 'rgba(0,230,138,0.1)';
       status.style.color = 'var(--green)';
-      status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (d.notify_only ? 'notified' : 'auto-mirroring') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
+      status.innerHTML = '&#x2705; Subscribed! You\'ll get ' + (d.notify_only ? 'notified' : 'priority alerts') + ' on ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position \u2014 tap Copy to place one yourself.';
     }
     cta.textContent = 'Subscribed \u2713';
   })
@@ -2984,7 +2985,7 @@ function submitAutoCopy() {
     status.style.background = 'rgba(255,107,107,0.1)';
     status.style.color = 'var(--red)';
     status.textContent = 'Failed: ' + (e.message || 'Try again');
-    cta.textContent = 'Start Auto-Mirroring \u2192';
+    cta.textContent = 'Start Mirroring \u2192';
     cta.disabled = false;
   });
 }
