@@ -63917,6 +63917,7 @@ app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, r
 
     const del = await dbQuery(`DELETE FROM realized_trades WHERE closed_at > NOW() RETURNING id`);
 
+    _roiLbCache.clear(); // corrected board visible immediately, not after 120s TTL
     const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
     const afterIds = after ? new Set(after.rows.map(r => r.user_id)) : new Set();
 
@@ -64415,6 +64416,13 @@ app.post('/api/admin/purge-fabricated-redeemed', requireAdminSecret, async (req,
     ).catch(e => { console.error('[purge-fab-redeemed] delete:', e.message); return null; });
     if (del == null) return res.status(500).json({ error: 'delete failed after snapshot — check realized_trades_quarantine' });
 
+    // Invalidate the leaderboard cache immediately so the corrected board is
+    // visible NOW, not after the 120s TTL. Without this, a logged-out
+    // /traders visitor in the 2-minute window after a purge would see the
+    // pre-purge board including wallets that were just dropped. The next
+    // _computeRoiLeaderboard below repopulates it with the post-delete rows.
+    _roiLbCache.clear();
+
     const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
     const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
     const droppedOff = [...beforeIds].filter(u => !afterIds.has(u));
@@ -64660,6 +64668,7 @@ app.post('/api/admin/purge-poisoned-settlement-cache', requireAdminSecret, async
         );
         tradesDeleted = del.length;
 
+        _roiLbCache.clear(); // corrected board visible immediately, not after 120s TTL
         const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
         const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
         affectedWallets = [...beforeById.values()]
