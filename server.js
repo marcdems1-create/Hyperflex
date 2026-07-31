@@ -13350,6 +13350,108 @@ app.get('/api/kings', async (req, res) => {
   }
 });
 
+// ── GET /api/feed/category-wins ──────────────────────────────────────────
+// Public, no auth — the /feed page's "score wall": one row per market
+// category, most-liquid category first, each row a wall of real winning
+// trades. "Winning trades" means the specific WIN evidence line (bought at
+// X -> WON Yx) for a qualifying wallet's best trade IN THAT CATEGORY — not
+// the wallet's single overall best/worst trade _buildTraderCards already
+// picks (that can be a loss, or in a different category). Score+n still
+// travel with every entry (rule 3, non-negotiable) via the SAME
+// _buildTraderCards() call every other trader surface uses, so this can
+// never show a number the leaderboard/profile wouldn't back up.
+//
+// "Liquidity" here means total durable-trade capital (entry_cost_usd, win
+// AND loss) our own tracked wallets have deployed in that category — the
+// only real signal available without a separate live Polymarket
+// category-volume integration. Documented assumption, not Polymarket's own
+// category volume.
+app.get('/api/feed/category-wins', async (req, res) => {
+  try {
+    if (!pool) return res.json({ categories: [] });
+
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
+             entry_cost_usd, realized_pnl, realized_roi, closed_at
+      FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+    `).catch(e => { console.warn('[feed/category-wins] trade fetch error:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'trade query failed' });
+
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    const qualifyingIds = new Set(computed.rows.map(r => r.user_id));
+    const cards = await _buildTraderCards(computed.rows);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+    const cardByUser = new Map(cards.map(c => [c.user_id, c]));
+
+    // liquidity totals — every durable trade, win or loss, all wallets (not
+    // just qualifying ones) so a thin qualifying-set doesn't understate a
+    // category's real depth.
+    const liquidityByCat = new Map();
+    // best win per (category, user) among QUALIFYING wallets only.
+    const bestWinByCat = new Map(); // cat -> Map(user_id -> row)
+
+    for (const t of rows) {
+      const cat = classifyCardCategory(t.market_question);
+      if (cat === 'other') continue;
+      liquidityByCat.set(cat, (liquidityByCat.get(cat) || 0) + Number(t.entry_cost_usd));
+
+      const pnl = Number(t.realized_pnl);
+      if (pnl <= 0) continue;
+      if (!qualifyingIds.has(t.user_id)) continue;
+      if (!bestWinByCat.has(cat)) bestWinByCat.set(cat, new Map());
+      const byUser = bestWinByCat.get(cat);
+      const existing = byUser.get(t.user_id);
+      if (!existing || pnl > Number(existing.realized_pnl)) byUser.set(t.user_id, t);
+    }
+
+    const limit = Math.min(30, parseInt(req.query.limit, 10) || 16);
+    const categories = [...liquidityByCat.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, totalVolume]) => {
+        const byUser = bestWinByCat.get(cat);
+        const entries = byUser ? [...byUser.entries()]
+          .map(([userId, t]) => {
+            const card = cardByUser.get(userId);
+            if (!card) return null;
+            const pnl = Number(t.realized_pnl);
+            const roi = t.realized_roi != null ? Number(t.realized_roi) : null;
+            return {
+              user_id: userId, display_name: card.display_name, username: card.username,
+              polymarket_address: card.polymarket_address,
+              score_pct: card.score_pct, n: card.n, scope_label: card.scope_label,
+              win: {
+                question: t.market_question, side: (t.side || '').toUpperCase(),
+                entry_price: t.entry_price != null ? Number(t.entry_price) : null,
+                exit_price: t.exit_price != null ? Number(t.exit_price) : null,
+                roi_pct: roi != null ? Math.round(roi * 1000) / 10 : null,
+                multiplier: roi != null && roi >= 1 ? Math.round((1 + roi) * 10) / 10 : null,
+                pnl_usd: Math.round(pnl * 100) / 100,
+                closed_at: t.closed_at,
+              },
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => b.win.pnl_usd - a.win.pnl_usd)
+          .slice(0, limit) : [];
+        return {
+          category: cat,
+          label: cat.charAt(0).toUpperCase() + cat.slice(1),
+          total_volume_usd: Math.round(totalVolume),
+          entries,
+        };
+      })
+      .filter(c => c.entries.length >= 3); // thin categories with <3 real wins aren't a "wall"
+
+    res.json({ categories });
+  } catch (e) {
+    console.error('[feed/category-wins]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TRADER PROFILE ───────────────────────────────────────────────────────
 // Deep surface behind every trader card: full receipts (headline stats,
 // best/worst call side by side, per-category specialty breakdown, complete
