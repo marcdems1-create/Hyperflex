@@ -49,6 +49,24 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30g (✅ SHIPPED — homepage hero replaced with connect-first split hero, per rule 1)
+
+Marc asked for homepage design directions; picked "split hero" (connect CTA next to a rotating real verdict card, winner+loser both) over "pure gate" and "score wall" after reviewing PNG mockups (artifact/inline rendering was broken client-side this session — screenshots sent as plain image files instead, which did work).
+
+**Shipped (`a5f212b` on `main`, merged with a concurrent origin push, no conflicts):**
+- `public/home.html`'s old carousel hero (`#hero` showing "biggest market right now" + YES/NO trade buttons) replaced with a two-column hero: left = headline + wallet-address input + Connect button, right = rotating card from the existing public `GET /api/trader-cards` endpoint (real score/n/verdict/scope_label, un-curated — includes losers as they come, not cherry-picked).
+- Connect button: pasted address → validates `0x[0-9a-fA-F]{40}` → `/connect?address=…`; empty input → tries `window.ethereum.request({method:'eth_requestAccounts'})` (same pattern as `connect.html`'s `connectWallet()`) → falls back to plain `/connect`. Invalid paste shows inline error, no navigation.
+- Removed the now-dead `renderHero`/`setHeroIdx`/`buildHeroDots` JS and all `#hero`/`.hero-badge`/`.btn-yes`/`.hero-dots` CSS (including the leftover overrides in the three desktop breakpoint blocks) so nothing references deleted DOM.
+- Verified: all inline `<script>` blocks still parse (`new Function()` per block), rendered locally via a static server + headless Chrome screenshot (production `/api/trader-cards` unreachable from this sandbox, so the empty-state fallback — a dashed-border honest message, not a fabricated card — was what actually got exercised; the endpoint itself is unchanged and already live).
+
+**Not done / explicitly out of scope this round:** the market-grid rows BELOW the hero (ticker, topic chips, Hot Right Now row, etc.) are untouched — rule 2 says these come off the homepage too eventually, but that's a separate decision Marc hasn't made yet, flagged to him, not assumed.
+
+**Active blockers:**
+- (none for this change — but see note below on artifact rendering)
+
+**Notes for next session:**
+- Artifact/inline-render delivery (both the Artifacts panel and `SendUserFile` with `display:"render"`) did not work for Marc this session — "page not found" even on a trivial test artifact. Plain-attachment `SendUserFile` also failed. What DID work: PNG screenshots taken via headless Chrome + sent as image files. If a future session hits the same "can't see it" report, don't loop on the artifact panel — go straight to a real screenshot.
+
 ## 2026-07-30f (✅ SHIPPED — copy-trading copy honesty pass + "Trade like the pros" tagline. Marc: "find somewhere to put it in.")
 
 Follow-up to 2026-07-30e's behavior change (copy-bot no longer auto-fires for anyone). The UI copy across `whales.html` and `copy-trading.html` still claimed literal automatic execution in a dozen places — "Auto-Mirror", "Auto-execute", "we'll mirror it with your allocation", "Start Auto-Mirroring" — all written when the feature actually did fire trades unattended. Left as-is, this would have been the UI lying about what the product does.
