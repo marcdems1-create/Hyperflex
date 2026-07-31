@@ -64643,7 +64643,64 @@ async function _sweepResolutionArchive(limit) {
     _resolutionSweepRunning = false;
   }
 }
-setTimeout(() => { _sweepResolutionArchive(500).then(r => r && r.checked && console.log('[resolution-archive] initial sweep:', JSON.stringify(r))).catch(() => {}); }, 150 * 1000);
+// ── The real archive engine: gamma's resolution STREAM ───────────────────
+// Driving capture off our own trades barely works — trade timestamps are
+// sell dates, not resolution dates, so they point at open markets (nothing
+// to archive) or long-resolved ones gamma already dropped (2nd sweep:
+// 440/500 unreachable, 0 archivable). The correct source is gamma's list of
+// CLOSED markets: page through it and archive every resolution while it's
+// fresh, independent of whether we hold a trade yet. Then the resolution is
+// already banked by the time any trade needs it. Idempotent (ON CONFLICT DO
+// NOTHING), so cycling the offset across runs steadily builds comprehensive,
+// permanent coverage of the entire resolution stream.
+let _streamOffset = 0;
+let _streamSweepRunning = false;
+async function _sweepClosedMarketStream(pages) {
+  if (!pool || _streamSweepRunning) return { archived: 0, scanned: 0, skipped: true };
+  _streamSweepRunning = true;
+  try {
+    const PAGE = 200;
+    const nPages = Math.min(20, Math.max(1, pages || 5));
+    let archived = 0, scanned = 0, decisiveClosed = 0;
+    for (let i = 0; i < nPages; i++) {
+      const url = 'https://gamma-api.polymarket.com/markets?closed=true&limit=' + PAGE
+        + '&offset=' + _streamOffset + '&order=endDate&ascending=false';
+      const m = await _fetchGammaFlatList(url);
+      if (!m || !m.length) { _streamOffset = 0; break; } // wrapped to end → restart next run
+      for (const mkt of m) {
+        scanned++;
+        const cond = String(mkt.conditionId || '').toLowerCase();
+        if (!cond || mkt.closed !== true) continue;
+        const st = _parseOutcomeSettlement(mkt);
+        if (!st || !st.winnerName) continue;
+        decisiveClosed++;
+        const before = await getArchivedResolution(cond);
+        _archiveResolution(cond, mkt);
+        if (!before) archived++;
+      }
+      _streamOffset += PAGE;
+    }
+    return { archived, scanned, decisive_closed: decisiveClosed, next_offset: _streamOffset };
+  } finally {
+    _streamSweepRunning = false;
+  }
+}
+
+// Fetch a flat gamma markets list (array). Separate from _fetchGammaFlatMarket
+// (single-condition) — this pages the closed-market stream.
+async function _fetchGammaFlatList(url) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 10000);
+    const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    return Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : null);
+  } catch { return null; }
+}
+
+setTimeout(() => { _sweepClosedMarketStream(5).then(r => r && console.log('[resolution-archive] stream sweep:', JSON.stringify(r))).catch(() => {}); }, 150 * 1000);
+setInterval(() => { _sweepClosedMarketStream(5).catch(() => {}); }, 30 * 60 * 1000);
 setInterval(() => { _sweepResolutionArchive(500).catch(() => {}); }, 60 * 60 * 1000);
 
 // GET /api/admin/resolution-archive — coverage + on-demand sweep. ?sweep=1
@@ -64651,7 +64708,8 @@ setInterval(() => { _sweepResolutionArchive(500).catch(() => {}); }, 60 * 60 * 1
 app.get('/api/admin/resolution-archive', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
-    let swept = null;
+    let swept = null, streamed = null;
+    if (req.query.stream === '1') streamed = await _sweepClosedMarketStream(parseInt(req.query.pages, 10) || 10);
     if (req.query.sweep === '1') swept = await _sweepResolutionArchive(parseInt(req.query.limit, 10) || 500);
 
     const [arch, tradeConds] = await Promise.all([
@@ -64672,8 +64730,9 @@ app.get('/api/admin/resolution-archive', requireAdminSecret, async (req, res) =>
       trade_conditions_total: tradeC,
       trade_conditions_archived: cov,
       trade_coverage_pct: tradeC ? Math.round((cov / tradeC) * 1000) / 10 : null,
+      streamed,
       swept,
-      note: 'Permanent, immutable archive of gamma-confirmed resolutions. trade_coverage_pct = share of markets we hold a trade on whose resolution is now captured forever (independent of gamma retention). Sweep hourly + on ?sweep=1. Removes the "aged out of gamma, unverifiable" wall.',
+      note: 'Permanent, immutable archive of gamma-confirmed resolutions. The engine is the CLOSED-MARKET STREAM (?stream=1, ?pages=): pages gamma\'s closed markets and archives every decisive resolution while fresh, independent of our trades — runs every 30 min, offset cycles to build full coverage over time. ?sweep=1 is the secondary trade-driven capture. trade_coverage_pct = share of markets we hold a trade on whose resolution is captured forever. Removes the "aged out of gamma, unverifiable" wall for everything resolving from now on.',
     });
   } catch (e) {
     console.error('[resolution-archive]', e.message);
