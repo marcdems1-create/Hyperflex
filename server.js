@@ -55217,10 +55217,20 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 });
 
 // POST /api/polymarket/order — server-side CLOB order proxy
-// Routes signed orders through Railway (US IP) to bypass geo-restrictions.
-// The order is already signed client-side — we just forward it.
-// CRITICAL: Do NOT forward X-Forwarded-For or any geo-identifying headers —
-// the CLOB must see Railway's server IP, not the end user's IP.
+// LAST-RESORT technical fallback only — direct CLOB unreachable (CORS/
+// redirect breakage) or a network error on the CF Worker edge proxy. The
+// order is already signed client-side — we just forward it.
+// ⛔ COMPLIANCE: this route must NEVER be used as a retry path after
+// Polymarket's CLOB has returned a geo-restriction response for this order
+// (on the direct call or via the CF Worker). Doing so would submit the same
+// order under Railway's IP instead of the user's real one — precisely the
+// "circumvent geographic restrictions" behavior Polymarket's Terms of Use
+// prohibit. market.html's submitClobOrder() and creator-dashboard.html's
+// confirmTrade() both enforce this client-side: a detected "restricted"
+// response is surfaced to the user immediately and never triggers a retry
+// through this endpoint. Do not add a geo-block-triggered call to this route
+// anywhere. It exists solely for CORS/network failures and (historically) a
+// signature-format mismatch during the V1→V2 cutover — never for geography.
 // V2 trade observability — see supabase_migration_polymarket_v2_trades.sql.
 // Detects V2 orders by presence of `order.builder` (not in V1 struct) and
 // logs every attempt/accept/reject row. DB errors are swallowed so the trade

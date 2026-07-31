@@ -49,6 +49,29 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-31 (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
+
+**Shipped (with hashes):** pending push this session — see commit on this branch after this entry.
+
+**Finding — the trade-routing fallback chain in both trade surfaces auto-circumvented Polymarket's own geo-restriction, on every trade.** `market.html`'s `submitClobOrder()` and `creator-dashboard.html`'s `confirmTrade()` (`qt-trade`) both had logic that, on detecting a `"restricted"` response from one host, automatically resubmitted the *identical signed order* through a different apparent-origin host (CF Worker edge, then Railway's static US IP) specifically *because* a geo-block was detected — not for any technical/network reason. `server.js`'s `/api/polymarket/order` doc-comment matched this framing verbatim: "Routes signed orders through Railway (US IP) to **bypass geo-restrictions**" + "do NOT forward X-Forwarded-For... the CLOB must see Railway's server IP, not the end user's IP." This is textbook circumvention of Polymarket's Terms of Use (VPN/proxy-style geographic-restriction bypass is explicitly prohibited), independent of and worse than the existing "don't make Railway primary" operating note in CLAUDE.md (which was about reliability, not compliance) — the CF Worker's Cloudflare-anycast routing means for OFAC-sanctioned countries where Cloudflare has no local PoP, this chain could plausibly get an actually-blocked trader through by landing on an edge in a neighboring unsanctioned country. Not something either Claude flagged before; found via read-through of the actual fallback code while auditing against Polymarket's public ToS/Builder Code of Conduct (fetched via WebSearch — direct WebFetch to polymarket.com/help.polymarket.com/builders.polymarket.com all 403'd in this environment, likely bot-protection on the proxy).
+- **Fix:** in both files, a detected `"restricted"` response now returns/surfaces immediately to the user (honest "Trading restricted in your region" message) and **never** triggers a retry through CF Worker or Railway. Fallback to another host is now gated *only* on genuine technical failure (thrown/network exception, or — market.html only — a signature-format mismatch string, unrelated to geography). `server.js`'s route comment rewritten to state this as a hard compliance rule (⛔) instead of framing Railway routing as a geo-bypass tool, so a future session doesn't reintroduce a geo-triggered call into it.
+- **Verified:** `node --check server.js` passes; both HTML files' inline `<script>` blocks parse via `new Function()` (no live trade test — would require an actual geo-blocked IP to hit the changed branch, not available in this environment).
+- **Not touched:** the CF Worker itself (`cloudflare-trade-proxy/src/worker.js`) — kept as-is, since its "run at the nearest edge" behavior is a legitimate CORS/reliability mechanism when NOT chained off a detected geo-block (the fix removes the chaining, not the Worker). Builder fee disclosure checked separately — currently a non-issue since builder fees are still 0% pending Polymarket's builder-profile verification (per existing CLAUDE.md V2 section); revisit UI fee disclosure before fees go non-zero, per the Builder Code of Conduct's "don't hide fees" rule.
+
+**Active blockers:**
+- (none newly introduced by this fix)
+
+**Queued (priority order):**
+1. Before builder fees go non-zero: add an explicit fee-disclosure line to the trade confirm UI in `market.html`/`creator-dashboard.html` (Builder Code of Conduct requirement, currently moot at 0%).
+2. Live-test the geo-restriction path with an actual blocked-region IP/VPN once available, to confirm the honest-surface behavior end-to-end (not just static syntax checks).
+
+**Open questions / unverified:**
+- Whether Cloudflare actually lacks PoPs in every OFAC-sanctioned country today (assumed from general Cloudflare network-map knowledge, not independently re-verified this session) — doesn't change the fix (the fix removes the geo-triggered chaining regardless of whether the worst case was reachable), but worth a real check if this ever gets audited externally.
+
+**Notes for next session:**
+- Do not add any retry/fallback call to `/api/polymarket/order` or the CF Worker that triggers off a `"restricted"`/geo-block string match. Technical-failure fallback only.
+- Full official Polymarket ToS/Builder Code of Conduct text could not be fetched directly in this environment (403s across polymarket.com, help.polymarket.com, builders.polymarket.com) — findings here are from WebSearch snippets, not a full-document read. If precise legal text is ever needed verbatim, fetch from a machine without the proxy's bot-blocking issue.
+
 ## 2026-07-30h (✅ SHIPPED, corrects 2026-07-30g — the homepage split-hero work actually landed; 2026-07-30g's target file was dead)
 
 **2026-07-30g shipped its split-hero change to `public/home.html` without checking the live route first.** `home.html` has been unrouted since 2026-07-26 (`app.get('/', ...)` serves `public/home-kings.html` — comment right above the route in `server.js:760-765` says so explicitly). That earlier commit is harmless (dead file, nothing served from it) but had zero effect on the live site — caught when Marc screenshotted the real homepage and it matched neither the old file nor the new one. **Lesson: before editing anything described as "the homepage," grep `app.get('/'` in server.js first — don't trust CLAUDE.md's file map, which doesn't mention `home-kings.html` at all and is stale on this point.**

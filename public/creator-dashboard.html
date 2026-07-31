@@ -23627,11 +23627,26 @@ async function confirmTrade() {
     const clobHost = 'https://clob.polymarket.com';
 
     // Order of attempts:
-    // 1. Direct CLOB — works if user's IP is in an allowed region
-    // 2. CF Worker — runs at nearest Cloudflare edge to user
-    // 3. Railway server proxy — last resort (US IP, may be geo-blocked)
+    // 1. Direct CLOB — the user's real browser IP. If Polymarket returns a
+    //    geo-restriction here it has correctly identified the user's true
+    //    jurisdiction. We do NOT retry elsewhere in that case: Polymarket's
+    //    Terms of Use explicitly prohibit circumventing geographic
+    //    restrictions, and resubmitting the same order through a different
+    //    apparent origin (CF Worker edge, Railway's US IP) after a
+    //    restriction is detected would be exactly that. CF Worker / Railway
+    //    below only fire for genuine technical failures — a thrown/network
+    //    error, or (for Railway) a signature-format mismatch — never in
+    //    reaction to a "restricted" response.
+    // 2. CF Worker — only on a thrown/network error from step 1.
+    // 3. Railway server proxy — only on a thrown/network error from step 2,
+    //    or a technical signature-format mismatch. Never on a geo-restriction.
     console.log('[qt-trade] Submitting via direct CLOB (primary)');
     let res, data;
+    function _qtSigError(ok, d) {
+      if (ok) return false;
+      const s = JSON.stringify(d || {}).toLowerCase();
+      return s.includes('invalid signature') || s.includes('signature verification failed');
+    }
     try {
       res = await fetch(clobHost + '/order', {
         method: 'POST',
@@ -23641,45 +23656,8 @@ async function confirmTrade() {
       data = await res.json().catch(() => ({}));
       console.log('[qt-trade] Direct CLOB:', res.status, JSON.stringify(data).slice(0, 200));
 
-      // If geo-blocked, try CF Worker
-      const geoBlocked = !res.ok && JSON.stringify(data).toLowerCase().includes('restricted');
-      if (geoBlocked) {
-        console.warn('[qt-trade] Direct CLOB geo-blocked — trying CF Worker');
-        try {
-          res = await fetch('https://hyperflex-trade-proxy.hyperflex.workers.dev/order', {
-            method: 'POST',
-            headers: clobHeaders,
-            body: requestBody
-          });
-          data = await res.json().catch(() => ({}));
-          console.log('[qt-trade] CF Worker:', res.status, JSON.stringify(data).slice(0, 200));
-
-          // Fall through to Railway on geo-block OR signature errors. The
-          // signature case catches CF Worker hitting a V1 backend with a
-          // V2-signed order pre-Apr-28 cutover — Railway is V2-aware
-          // (server.js:40087, commit f7c30d3) so it'll succeed.
-          const cfBodyLower = JSON.stringify(data).toLowerCase();
-          const cfGeoBlocked = !res.ok && cfBodyLower.includes('restricted');
-          const cfSigError   = !res.ok && (cfBodyLower.includes('invalid signature') || cfBodyLower.includes('signature verification failed'));
-          if (cfGeoBlocked || cfSigError) {
-            console.warn('[qt-trade] CF Worker', cfGeoBlocked ? 'geo-blocked' : 'returned signature error', '— trying Railway proxy');
-            res = await fetch('/api/polymarket/order', {
-              method: 'POST',
-              headers: clobHeaders,
-              body: requestBody
-            });
-            data = await res.json().catch(() => ({}));
-            console.log('[qt-trade] Railway proxy:', res.status, JSON.stringify(data).slice(0, 200));
-          }
-        } catch (cfErr) {
-          console.warn('[qt-trade] CF Worker failed:', cfErr.message, '— trying Railway');
-          res = await fetch('/api/polymarket/order', {
-            method: 'POST',
-            headers: clobHeaders,
-            body: requestBody
-          });
-          data = await res.json().catch(() => ({}));
-        }
+      if (!res.ok && JSON.stringify(data).toLowerCase().includes('restricted')) {
+        console.warn('[qt-trade] Direct CLOB reports geo-restriction — surfacing to user, not retrying via another host');
       }
     } catch (directErr) {
       // Direct CLOB unreachable — try CF Worker then Railway
