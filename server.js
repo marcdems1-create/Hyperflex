@@ -64205,11 +64205,18 @@ app.get('/api/admin/score-backtest', requireAdminSecret, async (req, res) => {
       bottom_quartile_forward_roi_pct: pct(botFwd),
       quartile_spread_pct: pct(topFwd - botFwd),
       all_wallet_avg_forward_roi_pct: pct(allFwd),
-      interpretation: spearman >= 0.2 && (topFwd - botFwd) > 0
-        ? 'PREDICTIVE — higher score-at-T tracks higher forward ROI. The score forecasts, not just describes.'
-        : (spearman <= 0.05 || (topFwd - botFwd) <= 0
-          ? 'NOT PREDICTIVE at these params — score-at-T does not forecast forward ROI. Honest but not yet actionable; the ranking model needs work before it is copy-trade alpha.'
-          : 'WEAK — some signal but not decisive. Widen the sample or windows and re-run.'),
+      // n<30 is UNDERSAMPLED — never call it predictive, however pretty the
+      // correlation. A high Spearman on a dozen wallets is exactly the
+      // small-sample mirage this project's Gate 3 discipline exists to
+      // resist ("internal consistency is not truth"). Direction is reported;
+      // a verdict is withheld until the sample can support one.
+      interpretation: pts.length < 30
+        ? 'UNDERSAMPLED (n=' + pts.length + ') — direction is ' + (spearman > 0.05 ? 'positive' : (spearman < -0.05 ? 'negative' : 'flat')) + ' but n<30 cannot support a verdict. Lower min_before/min_after or widen windows to grow the sample, and check sign-stability across cutoff_days before believing it.'
+        : (spearman >= 0.2 && (topFwd - botFwd) > 0
+          ? 'PREDICTIVE — higher score-at-T tracks higher forward ROI across n=' + pts.length + '. The score forecasts, not just describes.'
+          : (spearman <= 0.05 || (topFwd - botFwd) <= 0
+            ? 'NOT PREDICTIVE — score-at-T does not forecast forward ROI. Honest but not yet actionable; the ranking model needs work before it is copy-trade alpha.'
+            : 'WEAK — some signal but not decisive. Widen the sample or windows and re-run.')),
       note: 'No lookahead: score-at-T uses only trades closed before T (decay toward T); forward ROI uses only trades closed in [T, T+forward_days), a disjoint set. No survivorship filter. Spearman is rank correlation of score-at-T vs forward ROI across ' + pts.length + ' wallets. Run multiple cutoff_days to check stability.',
     });
   } catch (e) {
