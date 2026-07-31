@@ -100,92 +100,67 @@ nav{
 .search-empty,.search-loading{padding:16px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;}
 @media(max-width:720px){.nav-search{max-width:140px;margin:0 8px;}}
 
-/* ── HERO ── */
+/* ── HERO (connect-first) ── */
 #hero{
-  position:relative;width:100%;height:100vh;min-height:600px;max-height:900px;
-  display:flex;align-items:flex-end;
-  overflow:hidden;
+  position:relative;width:100%;overflow:hidden;
+  background:radial-gradient(ellipse 900px 500px at 50% 0%, rgba(77,159,255,.06), transparent 60%), var(--bg);
 }
-#hero-bg{
-  position:absolute;inset:0;
-  background-size:cover;background-position:center top;
-  transition:opacity .8s;
-}
-#hero-bg::after{
+#hero::before{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(
-    105deg,
-    rgba(14,14,21,.92) 0%,
-    rgba(14,14,21,.6) 45%,
-    rgba(14,14,21,.1) 80%,
-    rgba(14,14,21,0) 100%
-  ),
-  linear-gradient(
-    to top,
-    rgba(14,14,21,1) 0%,
-    rgba(14,14,21,.7) 25%,
-    transparent 60%
-  );
+  background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:42px 42px;
+  mask-image:radial-gradient(ellipse 700px 420px at 30% 30%,#000,transparent 75%);
 }
 .hero-content{
   position:relative;z-index:2;
-  max-width:640px;padding:0 48px 72px;
+  display:grid;grid-template-columns:1.05fr .95fr;gap:32px;
+  padding:56px 48px;align-items:center;
 }
-.hero-badge{
+.hero-eyebrow{
   display:inline-flex;align-items:center;gap:7px;
-  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--cyan);
-  background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);
-  padding:5px 10px;border-radius:4px;margin-bottom:18px;
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--cyan);margin-bottom:16px;
 }
-.hero-badge-dot{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:pulse 1.6s infinite;}
+.hero-eyebrow-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.8s infinite;}
 #hero-title{
-  font-family:var(--display);font-size:clamp(36px,5.5vw,68px);
-  font-weight:900;color:#fff;line-height:1.02;letter-spacing:-.03em;
-  margin-bottom:18px;text-shadow:0 2px 48px rgba(0,0,0,.7);
+  font-family:var(--display);font-size:clamp(32px,4.6vw,54px);
+  font-weight:900;color:#fff;line-height:1.06;letter-spacing:-.03em;
+  margin-bottom:16px;
 }
-.hero-meta{
-  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-  font-family:var(--mono);font-size:11px;color:var(--ink2);
-  margin-bottom:28px;
-}
-.hero-price{
-  font-size:42px;font-family:var(--display);font-weight:900;
-  line-height:1;margin-bottom:28px;
-}
-.hero-price span.pct-label{font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;vertical-align:middle;}
-.hero-actions{display:flex;gap:10px;flex-wrap:wrap;}
-.btn-yes{
-  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;
-  color:#000;background:var(--green);border:none;border-radius:6px;
-  padding:12px 28px;cursor:pointer;text-decoration:none;transition:opacity .12s,transform .1s;
-}
-.btn-yes:hover{opacity:.85;transform:translateY(-1px);}
-.btn-no{
-  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;
-  color:#fff;background:rgba(255,77,106,.18);border:1px solid rgba(255,77,106,.3);
-  border-radius:6px;padding:12px 28px;cursor:pointer;text-decoration:none;
-  transition:opacity .12s,transform .1s;
-}
-.btn-no:hover{opacity:.85;transform:translateY(-1px);}
-.btn-info{
-  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;
-  color:var(--ink2);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-  border-radius:6px;padding:12px 28px;cursor:pointer;text-decoration:none;
-  transition:background .12s;
-}
-.btn-info:hover{background:rgba(255,255,255,.13);}
+.hero-sub{font-family:var(--sans);font-size:14.5px;color:var(--ink2);max-width:420px;line-height:1.6;margin-bottom:26px;}
+.hero-form{display:flex;gap:8px;background:var(--surface,#141420);border:1px solid var(--border-hover);border-radius:10px;padding:5px;max-width:420px;}
+.hero-input{flex:1;min-width:0;background:none;border:none;color:var(--ink);font-family:var(--mono);font-size:12.5px;padding:10px 12px;}
+.hero-input:focus{outline:none;}
+.hero-connect-btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.04em;color:#000;background:#fff;border:none;border-radius:6px;padding:10px 18px;cursor:pointer;white-space:nowrap;transition:opacity .12s;}
+.hero-connect-btn:hover{opacity:.85;}
+.hero-note{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.02em;}
+.hero-err{font-family:var(--sans);font-size:12.5px;color:var(--red);margin-top:12px;display:none;}
 
-/* hero nav dots */
-.hero-dots{
-  position:absolute;bottom:28px;right:48px;z-index:3;
-  display:flex;gap:8px;align-items:center;
+.hero-proof{position:relative;min-height:190px;}
+.vcard{
+  position:absolute;inset:0;width:100%;max-width:340px;
+  background:rgba(255,255,255,.03);border:1px solid var(--border-hover);border-radius:12px;
+  padding:20px 22px;box-shadow:0 20px 50px -20px rgba(0,0,0,.55);
+  opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s;
+  pointer-events:none;
 }
-.hero-dot{
-  width:28px;height:3px;border-radius:2px;background:rgba(255,255,255,.25);
-  cursor:pointer;transition:background .2s,width .2s;
+.vcard.active{opacity:1;transform:translateY(0);pointer-events:auto;}
+.vcard-handle{font-family:var(--mono);font-size:13px;font-weight:700;color:#fff;margin-bottom:10px;}
+.vcard-score{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;}
+.vcard-score .n{font-family:var(--display);font-size:28px;font-weight:800;letter-spacing:-.02em;}
+.vcard-score .lbl{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;}
+.vcard-verdict{font-family:var(--sans);font-size:13px;color:var(--ink2);line-height:1.55;}
+.vcard-scope{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.vcard-dots{display:flex;gap:6px;margin-top:16px;}
+.vcard-dots span{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.16);transition:width .2s,background .2s;}
+.vcard-dots span.on{background:var(--ink2);width:16px;border-radius:3px;}
+.hero-proof{display:flex;align-items:center;}
+.hero-proof-empty{font-family:var(--sans);font-size:13px;color:var(--muted);line-height:1.55;max-width:340px;border:1px dashed var(--border-hover);border-radius:12px;padding:20px 22px;}
+
+@media(max-width:900px){
+  .hero-content{grid-template-columns:1fr;padding:40px 20px;}
+  .hero-proof{min-height:170px;margin-top:8px;}
 }
-.hero-dot.active{background:#fff;width:40px;}
 
 /* ── TICKER ── */
 #ticker{
@@ -383,7 +358,6 @@ footer{
 .footer-right{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);}
 
 @media(max-width:640px){
-  .hero-content{padding:24px 20px 48px;}
   .row-head,.row-scroll{padding-left:16px;padding-right:16px;}
   .mcard{width:180px;height:260px;}
   .wcard{width:300px;height:190px;}
@@ -401,8 +375,6 @@ footer{
 .mdp-sub{font-family:var(--mono);font-size:10px;color:var(--muted);}
 .mdp-cta{font-family:var(--mono);font-size:12px;font-weight:700;color:#000;background:#00e68a;padding:10px 18px;border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0;}
 @media(max-width:768px){
-  #hero{height:auto;min-height:420px;max-height:none;padding-bottom:0;}
-  #hero-title{font-size:clamp(24px,6.5vw,34px);}
   #ticker{display:none;}
   .home-topics{display:none;}
   .mobile-daily-prompt{display:flex;}
@@ -436,12 +408,6 @@ footer{
    (≤767px, which renders correctly) is untouched. */
 @media (min-width: 768px) {
   .rows-wrap { max-width: 100%; padding: 0 0 64px; }
-
-  /* hero */
-  #hero-title { font-size: 56px !important; line-height: 1.08; letter-spacing: -1.5px; }
-  .hero-badge { font-size: 12px; }
-  .hero-meta  { font-size: 14px; }
-  .btn-yes, .btn-no, .btn-info { font-size: 14px; padding: 13px 30px; }
 
   /* ticker */
   .ticker-item  { font-size: 15px !important; }
@@ -493,7 +459,6 @@ footer{
 }
 
 @media (min-width: 1200px) {
-  #hero-title  { font-size: 68px !important; }
   .row-title   { font-size: 32px !important; }
   .mcard-q     { font-size: 20px !important; }
   .wcard-q     { font-size: 24px !important; }
@@ -517,11 +482,7 @@ footer{
    All min-width:1024px — mobile (≤1023px) is untouched. */
 @media (min-width: 1024px) {
   .rows-wrap, .home-topics { max-width: min(2040px, 95vw); margin-left: auto; margin-right: auto; }
-  .hero-content { max-width: 820px; margin-left: max(0px, calc((100% - min(2040px, 95vw)) / 2)); }
-
-  /* hero: tight band instead of a 900px void */
-  #hero { height: 60vh; min-height: 520px; max-height: 640px; }
-  .hero-content { padding-bottom: 56px; }
+  .hero-content { max-width: min(1400px, 95vw); margin-left: auto; margin-right: auto; }
 
   /* density: pull sections together */
   .row-section { margin-top: 30px; }
@@ -581,25 +542,24 @@ footer{
 })();
 </script>
 
-<!-- ── HERO ── -->
+<!-- ── HERO (connect-first) ── -->
 <div id="hero">
-  <div id="hero-bg"></div>
   <div class="hero-content">
-    <div class="hero-badge"><span class="hero-badge-dot"></span><span id="hero-tag">BIGGEST MARKET RIGHT NOW</span></div>
-    <h1 id="hero-title">Loading…</h1>
-    <div class="hero-meta">
-      <span id="hero-vol" style="color:var(--cyan);"></span>
-      <span id="hero-close"></span>
-      <span id="hero-whale"></span>
+    <div>
+      <div class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>CONNECT → SEE YOUR SCORE</div>
+      <h1 id="hero-title">Your record. Verified.</h1>
+      <p class="hero-sub">Wins and losses, graded against what actually happened. No screenshots, no cherry-picking — the receipts are on-chain.</p>
+      <div class="hero-form">
+        <input class="hero-input" id="heroAddr" placeholder="Paste your wallet address…" autocomplete="off">
+        <button class="hero-connect-btn" id="heroConnectBtn">CONNECT</button>
+      </div>
+      <div class="hero-err" id="heroErr"></div>
+      <div class="hero-note">LISTED BY DEFAULT · ONE-CLICK OPT-OUT</div>
     </div>
-    <div class="hero-price" id="hero-price" style="color:var(--green);"></div>
-    <div class="hero-actions">
-      <a class="btn-yes" id="hero-yes" href="#">YES — TRADE</a>
-      <a class="btn-no" id="hero-no" href="#">NO — SHORT</a>
-      <a class="btn-info" id="hero-more" href="#">MORE INFO ↗</a>
+    <div class="hero-proof" id="heroProof">
+      <div class="hero-proof-empty">Loading real trader records…</div>
     </div>
   </div>
-  <div class="hero-dots" id="heroDots"></div>
 </div>
 
 <!-- ── MOBILE DAILY PICKS PROMPT ── -->
@@ -1326,51 +1286,69 @@ function buildTicker(markets){
   track.style.animationDuration=(markets.length*4)+'s';
 }
 
-/* ── hero ── */
-var heroMarkets = [];
-var heroIdx = 0;
-function renderHero(m){
-  var img = getImg(m);
-  var slug = getSlug(m);
-  var href = '/market/'+esc(slug);
-  var price = getYesPrice(m);
-  var pct   = price!=null?Math.round(price*100):null;
-  var col   = price!=null?pColor(price):'#fff';
-  var vol   = fmtVol(m.volume||0);
-  var close = fmtClose(m.endDate||m.end_date||null);
-  document.getElementById('hero-title').textContent = getTitle(m);
-  document.getElementById('hero-vol').textContent   = vol?vol+' volume':'';
-  document.getElementById('hero-close').textContent = close||'';
-  if(pct!=null){
-    document.getElementById('hero-price').textContent='';
-    var priceEl = document.getElementById('hero-price');
-    priceEl.style.color=col;
-    priceEl.innerHTML='<span style="font-size:0.9em">'+pct+'¢</span> YES <span class="pct-label">LEADING OUTCOME</span>';
+/* ── hero: connect ── */
+function heroGoToConnect(addr){
+  location.href = addr ? ('/connect?address='+encodeURIComponent(addr)) : '/connect';
+}
+function heroShowErr(msg){
+  var e=document.getElementById('heroErr');
+  e.textContent=msg; e.style.display='block';
+}
+async function heroConnect(){
+  var pasted=(document.getElementById('heroAddr').value||'').trim();
+  if(pasted){
+    if(!/^0x[0-9a-fA-F]{40}$/.test(pasted)){ heroShowErr('Enter a valid Ethereum address (0x… 40 hex characters).'); return; }
+    heroGoToConnect(pasted); return;
   }
-  document.getElementById('hero-yes').href = href+'?side=YES';
-  document.getElementById('hero-no').href  = href+'?side=NO';
-  document.getElementById('hero-more').href= href;
-  var bg = document.getElementById('hero-bg');
-  bg.style.backgroundImage = img ? 'url('+JSON.stringify(img)+')' : '';
+  if(window.ethereum){
+    try{
+      var accounts=await window.ethereum.request({method:'eth_requestAccounts'});
+      if(accounts&&accounts[0]){ heroGoToConnect(accounts[0]); return; }
+    }catch(e){ heroShowErr('Wallet connection was rejected.'); return; }
+  }
+  heroGoToConnect(null);
 }
-function setHeroIdx(i){
-  heroIdx=i;
-  renderHero(heroMarkets[i]);
-  document.querySelectorAll('.hero-dot').forEach(function(d,j){d.classList.toggle('active',j===i);});
+document.getElementById('heroConnectBtn').addEventListener('click', heroConnect);
+document.getElementById('heroAddr').addEventListener('keydown', function(e){ if(e.key==='Enter') heroConnect(); });
+
+/* ── hero: rotating real verdict card — score+n always travel together,
+   winners and losers both, straight from the durable-market board (no
+   curation) so this can never drift from what /traders actually shows. */
+function heroRenderProofEmpty(){
+  var el=document.getElementById('heroProof');
+  if(el) el.innerHTML='<div class="hero-proof-empty">Every score is verified against real, resolved markets — wins and losses both.</div>';
 }
-function buildHeroDots(markets){
-  var dots = document.getElementById('heroDots');
-  dots.innerHTML = markets.map(function(_,i){
-    return '<div class="hero-dot'+(i===0?' active':'')+'"></div>';
-  }).join('');
-  dots.querySelectorAll('.hero-dot').forEach(function(d,i){
-    d.addEventListener('click',function(){setHeroIdx(i);});
-  });
-  setInterval(function(){
-    if(!heroMarkets.length) return;
-    setHeroIdx((heroIdx+1)%heroMarkets.length);
-  },7000);
+function heroInitProof(){
+  fetch('/api/trader-cards?limit=8')
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      var cards=(d&&Array.isArray(d.cards))?d.cards.filter(function(c){return c.n>=10;}):[];
+      if(!cards.length){ heroRenderProofEmpty(); return; }
+      var el=document.getElementById('heroProof');
+      el.innerHTML=cards.map(function(c,i){
+        var handle='@'+esc(c.username||c.display_name||(c.polymarket_address||'').slice(0,8));
+        var win=c.win_rate_pct!=null;
+        var color=win&&c.win_rate_pct>=50?'var(--green)':'var(--red)';
+        var verdict=esc(c.verdict||'');
+        return '<div class="vcard'+(i===0?' active':'')+'">'
+          +'<div class="vcard-handle">'+handle+'</div>'
+          +'<div class="vcard-score"><span class="n" style="color:'+color+';">'+(c.win_rate_pct!=null?c.win_rate_pct.toFixed(1):'—')+'%</span><span class="lbl">WIN RATE</span></div>'
+          +'<div class="vcard-verdict">'+verdict+'</div>'
+          +'<div class="vcard-scope">'+esc(c.scope_label||'')+'</div>'
+          +'</div>';
+      }).join('') + '<div class="vcard-dots">'+cards.map(function(_,i){return '<span class="'+(i===0?'on':'')+'"></span>';}).join('')+'</div>';
+      if(cards.length>1){
+        var idx=0;
+        setInterval(function(){
+          idx=(idx+1)%cards.length;
+          el.querySelectorAll('.vcard').forEach(function(c,i){c.classList.toggle('active',i===idx);});
+          el.querySelectorAll('.vcard-dots span').forEach(function(d,i){d.classList.toggle('on',i===idx);});
+        },4500);
+      }
+    })
+    .catch(function(){heroRenderProofEmpty();});
 }
+heroInitProof();
 
 /* ── patch missing images from Gamma ── */
 function patchImages(container){
@@ -1428,15 +1406,6 @@ Promise.all([loadCarousel(), loadGamma()]).then(function(results){
   function isValidMarket(m){var p=getYesPrice(m);return p==null||(p>0.01&&p<0.99);}
   var primary = raw.filter(isValidMarket);
   if(!primary.length) primary = raw;
-
-  /* hero — top 5 with a valid mid-range price (skip 0¢/100¢ shells) */
-  heroMarkets = primary.filter(function(m){
-    var p = getYesPrice(m);
-    return p != null && p > 0.01 && p < 0.99;
-  }).slice(0,5);
-  if(!heroMarkets.length) heroMarkets = primary.slice(0,1);
-  renderHero(heroMarkets[0]);
-  buildHeroDots(heroMarkets);
 
   /* ticker */
   buildTicker(primary.slice(0,12));
