@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30i (✅ SHIPPED — /feed rebuilt as a category "score wall"; "Kings" copy fully retired)
+
+**Shipped (`0eaa358` on `main`):**
+- `public/feed.html` fully rebuilt per Marc's direction: replaced the old News/Edge tab layout with (1) a top "Anomalies" row reusing the existing `/api/signals` whale_cluster/momentum/arbitrage/volume_surge/new_entry detectors — no score/hit-rate number shown (that stays behind Gate 3), just the raw fact (N whales, which side, capital); (2) category rows below, most-liquid-category first, each a horizontal scroll wall of real winning trades.
+- New `GET /api/feed/category-wins` (server.js, after `/api/kings`): per category, orders by total durable-trade capital our own tracked wallets have deployed there (documented as OUR tracked volume, not Polymarket's own category volume — no live Polymarket category-volume integration exists). For qualifying wallets (same n>=10 durable-board gate, same `_computeRoiLeaderboard`/`_buildTraderCards` pipeline every other trader surface uses), surfaces their single best WIN *in that category specifically* — deliberately NOT reusing `_buildTraderCards`'s wallet-wide `maxTrade` (that can be a loss, or from an unrelated category). Score_pct/n/scope_label still travel with every entry — rule 3 holds even in a "showcase wins" surface. Categories with <3 real qualifying wins are dropped rather than shown thin/empty.
+- **"Kings" copy fully retired**, closing the loop from 2026-07-30h: confirmed via `grep -rnE "\bKings?\b" public/*.html server.js` that the only remaining hits are real proper nouns (`fight.html`'s UFC fighter "King Green", the NHL's "Kings" in a team-name list) — both correctly left alone. Internal identifiers (`kingRow`, `/api/kings` route, `home-kings.html` filename) also deliberately left alone, same reasoning as 2026-07-30h: no user ever sees them.
+- Verified locally against a hand-written mock server (`/private/tmp/.../mock_feed_server.js`, not committed) standing in for both `/api/signals` and the new endpoint — this sandbox has no path to the real DB or hyperflex.network. Confirmed rendering at 375px (single-column, rows stack correctly) and 1440px (scaled, centered). **The real endpoint's behavior against live production data is unverified** — the SQL is copied from the same query shape `_buildTraderCards` already uses in production, but nobody has hit `/api/feed/category-wins` against the real Railway Postgres yet.
+
+**Active blockers:**
+- (none functionally, but see verification note above — worth a live hand-check of `/api/feed/category-wins` output once deployed, same discipline as every other trader-facing number in this project)
+
+**Notes for next session:**
+- The old News/Edge tabs (`/api/news-feed`, `/api/edge-feed`) are no longer linked from `/feed` — those endpoints are untouched and still live, just orphaned from this page. Flag if anyone wants that content back somewhere.
+
 ## 2026-07-30h (✅ SHIPPED, corrects 2026-07-30g — the homepage split-hero work actually landed; 2026-07-30g's target file was dead)
 
 **2026-07-30g shipped its split-hero change to `public/home.html` without checking the live route first.** `home.html` has been unrouted since 2026-07-26 (`app.get('/', ...)` serves `public/home-kings.html` — comment right above the route in `server.js:760-765` says so explicitly). That earlier commit is harmless (dead file, nothing served from it) but had zero effect on the live site — caught when Marc screenshotted the real homepage and it matched neither the old file nor the new one. **Lesson: before editing anything described as "the homepage," grep `app.get('/'` in server.js first — don't trust CLAUDE.md's file map, which doesn't mention `home-kings.html` at all and is stale on this point.**
