@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-30h (✅ SHIPPED, corrects 2026-07-30g — the homepage split-hero work actually landed; 2026-07-30g's target file was dead)
+
+**2026-07-30g shipped its split-hero change to `public/home.html` without checking the live route first.** `home.html` has been unrouted since 2026-07-26 (`app.get('/', ...)` serves `public/home-kings.html` — comment right above the route in `server.js:760-765` says so explicitly). That earlier commit is harmless (dead file, nothing served from it) but had zero effect on the live site — caught when Marc screenshotted the real homepage and it matched neither the old file nor the new one. **Lesson: before editing anything described as "the homepage," grep `app.get('/'` in server.js first — don't trust CLAUDE.md's file map, which doesn't mention `home-kings.html` at all and is stale on this point.**
+
+**What's actually live (`acafed4` on `main`):**
+- `public/home-kings.html` (shipped 2026-07-26b, already connect-first + a real single "King" card below the hero) got the split-hero treatment instead: desktop (>=1024px) hero goes two-column, copy left / a rotating real trader card right, reusing `HFXTraderCard.render(card,'compact')` off the same `/api/trader-cards` fetch the Movers row already made (refactored to one fetch, feeds both) — no new endpoint, no curated selection, whatever the durable board returns (win or loss) rotates through. Mobile (<1024px) stays single-column, unchanged from the 2026-07-26 mobile-first mandate — the override is desktop-only, a scoping call made without re-confirming with Marc; flag if he wanted mobile changed too.
+- Renamed "King of the Castle" → "Top Trader" and "Category Kings" → "Category Leaders" (h2 text + the one dynamically-generated note sentence that said "some kings hold a losing record") per Marc's mid-task note that the "Kings" language read as dated. Internal identifiers (`kingRow`, `catKingsGrid`, `GET /api/kings`) deliberately left alone — no user-facing surface, changing them was unnecessary risk.
+- Verified: inline scripts parse (`new Function()` per block), rendered locally via static server + headless-Chrome screenshot at both 1440px (two-column, confirmed) and 375px (single-column, confirmed) — local server has no backend so `/api/kings`/`/api/trader-cards` hit their `.catch()` empty-state fallbacks; those fallbacks are what got visually verified, not the populated-card path (endpoint itself is unchanged and already live in production).
+
+**Not done:** `public/home.html` was NOT reverted — it's already explicitly documented as intentional dead-code-for-rollback, so the 2026-07-30g commit sitting on it is just inert, not cleaned up. Low priority, flagged in case a future session wants to actually delete it rather than leave two divergent unused homepage drafts on disk.
+
+**Active blockers:**
+- (none)
+
 ## 2026-07-30g (✅ SHIPPED — homepage hero replaced with connect-first split hero, per rule 1)
 
 Marc asked for homepage design directions; picked "split hero" (connect CTA next to a rotating real verdict card, winner+loser both) over "pure gate" and "score wall" after reviewing PNG mockups (artifact/inline rendering was broken client-side this session — screenshots sent as plain image files instead, which did work).
