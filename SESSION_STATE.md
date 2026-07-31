@@ -49,6 +49,23 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-31 (verification arc part 2 — permanent resolution archive + score-predictiveness backtest; strategic reframe)
+
+**Built the "verified → permanent → predictive" stack. Shipped (origin/main):**
+- `ed7430c`, `7af4bbb`, `df412a5` — **permanent resolution archive.** New immutable `market_resolutions` table + capture engine. First design (drive off our trades) failed — trade timestamps are sell dates, so they point at open or long-aged-out markets (2 sweeps: ~440-489/500 unreachable, 0 archived). Correct engine is `_sweepClosedMarketStream`: pages gamma's `?closed=true` list and archives every decisive resolution while fresh, independent of our trades (idempotent, offset cycles, every 30 min). First stream run: **1000/1000 archived, 64 already matched our trade set.** This removes the "aged out of gamma, unverifiable" wall for everything resolving GOING FORWARD (can't recover deep history gamma already dropped — that's on-chain UMA/CTF, a future build). `getArchivedResolution()` lets grading read our store first, gamma second. `GET /api/admin/resolution-archive` (?stream=1 / ?sweep=1).
+- `df412a5`→`7fc1f09` — **score-predictiveness backtest.** `GET /api/admin/score-backtest`: point-in-time, no-lookahead. Scores each wallet as of past date T (only trades closed < T, exact _computeRoiLeaderboard formula), measures forward ROI on disjoint trades in [T, T+forward). Spearman impl self-tested (+1/-1/~0). n<30 guard added so it can't over-claim on tiny samples.
+
+**🔴 BACKTEST RESULT — the score is NOT demonstrably predictive.** Signal is unstable across windows: 90/90 → Spearman +0.62 (spread +65%); 120/90 → +0.04 (+25%); 150/120 → **−0.09 (−7.9%, sign flip).** n=15-21 throughout — too small to conclude, and the sign instability is the signature of noise, not forecasting. The opening 90/90 run's +0.776 was a small-sample mirage. **No predictive claim is supportable today.** The score describes the past honestly; it does not forecast the future at available sample sizes.
+
+**Strategic reframe (Marc: "then what's the point of a leaderboard?"):** past≠future is what an EFFICIENT market looks like — reliable forward-prediction would be arbitraged away. Same result every mutual-fund study finds; track records are TRUST INFRASTRUCTURE (like credit scores / audited financials), not crystal balls. The leaderboard's real, defensible value: (1) proof against fakes in a screenshot-and-delete space — we literally caught our own board promoting fabrications tonight; (2) permanent un-gameable reputation/credential; (3) accountability (surviving losses publicly). **Sell verification + reputation (real, ours now); treat predictive alpha as a RESEARCH BET, not a revenue foundation.** If copy-trading is built, frame it "copy a verified-real trader," never "copy a guaranteed winner."
+
+**Named next frontiers (not started):**
+- **Aggregate/basket predictiveness** — "does #1 predict" failed, but "does a top-decile BASKET beat the market on average" is a different, more robust question (top quartile beat bottom in 2/3 windows). Testable with the backtest instrument as data grows.
+- **Predictive model** — current score is time-decayed ROI shrunk to prior (a fair *description*). Making it *predict* needs better features (consistency, calibration, category skill, sizing) trained/validated out-of-sample against forward returns via score-backtest. Research project, gated on more longitudinal data (only 15-21 wallets have enough before+after trades — a DATA depth problem as much as a model one).
+- **On-chain resolution archive** (UMA/CTF) to recover the deep history gamma dropped — makes the archive complete, not just forward-complete.
+
+
+
 ## 2026-07-30i (✅ SHIPPED — /feed rebuilt as a category "score wall"; "Kings" copy fully retired)
 
 **Shipped (`0eaa358` on `main`):**
