@@ -62359,6 +62359,23 @@ function _archiveResolution(conditionId, m) {
   } catch {}
 }
 
+// Flat gamma markets endpoint — measurably better retention than the
+// keyset endpoint (confirmed 2026-07-31: reached resolutions keyset had
+// already dropped). Returns the market object or null. Used by the archive
+// sweep so we capture as much as gamma still holds before it ages out.
+async function _fetchGammaFlatMarket(conditionId) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch('https://gamma-api.polymarket.com/markets?condition_ids=' + encodeURIComponent(conditionId),
+      { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const a = Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []);
+    return a.length ? a[0] : null;
+  } catch { return null; }
+}
+
 // Read the permanent archive first. Returns { winnerName, price } or null.
 // Verification/grading should prefer this over a live gamma fetch — it's
 // faster and, crucially, still answers for markets gamma has since dropped.
@@ -64592,11 +64609,18 @@ async function _sweepResolutionArchive(limit) {
   _resolutionSweepRunning = true;
   try {
     const cap = Math.min(1500, Math.max(50, limit || 500));
+    // Prioritise the MOST RECENTLY closed trades. Recent resolutions are the
+    // ones gamma still holds and that are about to age out — capturing those
+    // is where the archive actually gains ground. Walking oldest-first (the
+    // bug in the first version: LIMIT with no ORDER BY) spends every request
+    // on markets gamma dropped long ago (489/500 unreachable on run 1).
     const conds = await dbQuery(`
-      SELECT DISTINCT rt.condition_id
+      SELECT rt.condition_id, MAX(rt.closed_at) AS last_closed
       FROM realized_trades rt
       LEFT JOIN market_resolutions mr ON mr.condition_id = LOWER(rt.condition_id)
-      WHERE rt.condition_id IS NOT NULL AND mr.condition_id IS NULL
+      WHERE rt.condition_id IS NOT NULL AND rt.closed_at IS NOT NULL AND mr.condition_id IS NULL
+      GROUP BY rt.condition_id
+      ORDER BY MAX(rt.closed_at) DESC
       LIMIT $1
     `, [cap]).catch(() => []);
     if (!conds.length) return { archived: 0, checked: 0 };
@@ -64606,10 +64630,9 @@ async function _sweepResolutionArchive(limit) {
       const cond = String(row.condition_id || '').toLowerCase();
       if (!cond) return;
       checked++;
-      const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
-      const { ok, markets } = await _fetchGammaKeysetChecked(url);
-      const m = markets && markets[0];
-      if (!ok || !m) { unreachable++; return; }
+      // Flat endpoint — better retention than keyset (2026-07-31).
+      const m = await _fetchGammaFlatMarket(cond);
+      if (!m) { unreachable++; return; }
       if (m.closed !== true) { stillOpen++; return; }
       const before = await getArchivedResolution(cond);
       _archiveResolution(cond, m);
