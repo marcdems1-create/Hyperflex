@@ -61832,6 +61832,34 @@ if (pool) {
         winner_name TEXT,
         verified_at TIMESTAMPTZ DEFAULT now()
       )`).catch(() => {});
+
+      // ── PERMANENT RESOLUTION ARCHIVE ──────────────────────────────────
+      // Our own immutable record of every market's ACTUAL resolution,
+      // captured the moment we see gamma report it closed with a decisive
+      // winner. Built 2026-07-31 after the redeemed-fabrication audit found
+      // 341 of 534 conditions had AGED OUT of gamma's retention — meaning
+      // our ability to verify a trade decays over time because it depends
+      // on a third party keeping the data. This table removes that
+      // dependency: once a resolution is archived it's ours forever, so
+      // verification never again hits an "unverifiable — aged out" wall.
+      //
+      // Distinct from market_settlement_cache (which was poisoned by the
+      // pre-guard parser and got purged): this is written ONLY when gamma's
+      // own closed flag is true AND a decisive winner is parseable, and it
+      // is IMMUTABLE — first correct write wins, never overwritten. It is a
+      // record of truth, not a speculative cache.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_resolutions (
+        condition_id     TEXT PRIMARY KEY,
+        question         TEXT,
+        winner_name      TEXT,
+        winner_index     INTEGER,
+        winner_price     NUMERIC(8,6),
+        outcome_prices   TEXT,
+        gamma_closed     BOOLEAN,
+        first_archived_at TIMESTAMPTZ DEFAULT now(),
+        source           TEXT DEFAULT 'gamma'
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_market_resolutions_archived ON market_resolutions(first_archived_at DESC)`).catch(() => {});
       // users columns needed by backfill aggregate refresh
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
@@ -62299,6 +62327,49 @@ function _parseOutcomeSettlement(m) {
     }
     return { price: price0, winnerName };
   } catch { return null; }
+}
+
+// ── Permanent resolution archive: capture + read ─────────────────────────
+// _archiveResolution is called on every gamma market object we already
+// fetch, so building the archive costs ZERO extra requests — it piggybacks
+// on reads the reconcilers/verifiers/backfill do anyway. Writes only a
+// gamma-closed, decisively-won market, immutably (ON CONFLICT DO NOTHING).
+// This is the mechanism that makes verification permanent: once here, a
+// resolution survives even after gamma drops it from retention.
+function _archiveResolution(conditionId, m) {
+  try {
+    if (!pool || !conditionId || !m || m.closed !== true) return;
+    const st = _parseOutcomeSettlement(m); // already requires closed===true + decisive
+    if (!st || !st.winnerName) return;
+    let winnerIndex = null;
+    try {
+      const prices = (typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices).map(parseFloat);
+      winnerIndex = prices.findIndex(p => !isNaN(p) && p > 0.95);
+    } catch {}
+    const pricesStr = typeof m.outcomePrices === 'string' ? m.outcomePrices : JSON.stringify(m.outcomePrices || null);
+    dbQuery(
+      `INSERT INTO market_resolutions
+         (condition_id, question, winner_name, winner_index, winner_price, outcome_prices, gamma_closed)
+       VALUES ($1,$2,$3,$4,$5,$6,true)
+       ON CONFLICT (condition_id) DO NOTHING`,
+      [String(conditionId).toLowerCase(), String(m.question || '').slice(0, 500),
+       st.winnerName, winnerIndex != null && winnerIndex >= 0 ? winnerIndex : null,
+       st.price, pricesStr]
+    ).catch(() => {});
+  } catch {}
+}
+
+// Read the permanent archive first. Returns { winnerName, price } or null.
+// Verification/grading should prefer this over a live gamma fetch — it's
+// faster and, crucially, still answers for markets gamma has since dropped.
+async function getArchivedResolution(conditionId) {
+  if (!pool || !conditionId) return null;
+  const rows = await dbQuery(
+    `SELECT winner_name, winner_price FROM market_resolutions WHERE condition_id = $1`,
+    [String(conditionId).toLowerCase()]
+  ).catch(() => []);
+  if (!rows.length) return null;
+  return { winnerName: rows[0].winner_name, price: rows[0].winner_price != null ? Number(rows[0].winner_price) : null };
 }
 
 // Independently verifies a market's actual winning outcome via gamma before
@@ -64261,6 +64332,7 @@ async function _reconcileWalletRedeemed(userId) {
       for (const r of group) fabricatedResolution.push({ condition_id: cond, question: q, our: r.close_reason });
       return;
     }
+    _archiveResolution(cond, m); // permanent capture — piggybacks on this read
     const settle = _parseOutcomeSettlement(m);
     if (!settle || !settle.winnerName) { unverifiable += group.length; return; }
     const winner = settle.winnerName.toLowerCase().trim();
@@ -64475,6 +64547,7 @@ app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) =
       const { ok, markets } = await _fetchGammaKeysetChecked(url);
       const m = markets && markets[0];
       if (!ok || !m) { unreachable++; return; }
+      _archiveResolution(cond, m); // capture while we have it
       if (m.closed !== true) {
         open++;
         if (openSamples.length < 20) openSamples.push({ condition_id: cond, question: String(m.question || '').slice(0, 80) });
@@ -64500,6 +64573,87 @@ app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) =
     });
   } catch (e) {
     console.error('[audit-redeemed-open]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── RESOLUTION-ARCHIVE SWEEP (proactive capture) ─────────────────────────
+// The read-hooks above capture resolutions only for markets we happen to
+// re-check. This sweep is the proactive engine: it walks distinct
+// condition_ids from realized_trades that are NOT yet archived, fetches
+// gamma once each, and archives the closed ones — so a market's resolution
+// lands in our permanent store while gamma still has it, BEFORE it ages out.
+// Bounded per run; runs hourly. This is what turns "we can verify what we
+// happened to look at" into "we will always be able to verify everything we
+// have a trade on."
+let _resolutionSweepRunning = false;
+async function _sweepResolutionArchive(limit) {
+  if (!pool || _resolutionSweepRunning) return { archived: 0, checked: 0, skipped: true };
+  _resolutionSweepRunning = true;
+  try {
+    const cap = Math.min(1500, Math.max(50, limit || 500));
+    const conds = await dbQuery(`
+      SELECT DISTINCT rt.condition_id
+      FROM realized_trades rt
+      LEFT JOIN market_resolutions mr ON mr.condition_id = LOWER(rt.condition_id)
+      WHERE rt.condition_id IS NOT NULL AND mr.condition_id IS NULL
+      LIMIT $1
+    `, [cap]).catch(() => []);
+    if (!conds.length) return { archived: 0, checked: 0 };
+
+    let archived = 0, checked = 0, stillOpen = 0, unreachable = 0;
+    await _mapLimit(conds, 6, async (row) => {
+      const cond = String(row.condition_id || '').toLowerCase();
+      if (!cond) return;
+      checked++;
+      const url = 'https://gamma-api.polymarket.com/markets/keyset?condition_ids=' + encodeURIComponent(cond) + '&limit=1';
+      const { ok, markets } = await _fetchGammaKeysetChecked(url);
+      const m = markets && markets[0];
+      if (!ok || !m) { unreachable++; return; }
+      if (m.closed !== true) { stillOpen++; return; }
+      const before = await getArchivedResolution(cond);
+      _archiveResolution(cond, m);
+      if (!before) archived++;
+    });
+    return { archived, checked, still_open: stillOpen, unreachable };
+  } finally {
+    _resolutionSweepRunning = false;
+  }
+}
+setTimeout(() => { _sweepResolutionArchive(500).then(r => r && r.checked && console.log('[resolution-archive] initial sweep:', JSON.stringify(r))).catch(() => {}); }, 150 * 1000);
+setInterval(() => { _sweepResolutionArchive(500).catch(() => {}); }, 60 * 60 * 1000);
+
+// GET /api/admin/resolution-archive — coverage + on-demand sweep. ?sweep=1
+// runs a bounded capture now (?limit= to size it); otherwise read-only stats.
+app.get('/api/admin/resolution-archive', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    let swept = null;
+    if (req.query.sweep === '1') swept = await _sweepResolutionArchive(parseInt(req.query.limit, 10) || 500);
+
+    const [arch, tradeConds] = await Promise.all([
+      dbQuery(`SELECT COUNT(*)::int AS archived FROM market_resolutions`).catch(() => []),
+      dbQuery(`SELECT COUNT(DISTINCT condition_id)::int AS trade_conditions FROM realized_trades WHERE condition_id IS NOT NULL`).catch(() => []),
+    ]);
+    const covered = await dbQuery(`
+      SELECT COUNT(*)::int AS covered FROM (
+        SELECT DISTINCT LOWER(rt.condition_id) AS c FROM realized_trades rt WHERE rt.condition_id IS NOT NULL
+      ) t JOIN market_resolutions mr ON mr.condition_id = t.c
+    `).catch(() => []);
+
+    const archived = arch[0] ? arch[0].archived : 0;
+    const tradeC = tradeConds[0] ? tradeConds[0].trade_conditions : 0;
+    const cov = covered[0] ? covered[0].covered : 0;
+    res.json({
+      archived_resolutions: archived,
+      trade_conditions_total: tradeC,
+      trade_conditions_archived: cov,
+      trade_coverage_pct: tradeC ? Math.round((cov / tradeC) * 1000) / 10 : null,
+      swept,
+      note: 'Permanent, immutable archive of gamma-confirmed resolutions. trade_coverage_pct = share of markets we hold a trade on whose resolution is now captured forever (independent of gamma retention). Sweep hourly + on ?sweep=1. Removes the "aged out of gamma, unverifiable" wall.',
+    });
+  } catch (e) {
+    console.error('[resolution-archive]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
