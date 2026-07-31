@@ -35,6 +35,16 @@
   .connect-alt button:hover{color:var(--ink);border-color:rgba(240,240,245,.3);}
   .connect-err{color:var(--red);font-size:13px;margin-top:14px;}
 
+  /* ── hero proof: a rotating real trader card (win or loss, whatever the
+     durable board actually returns — no curation) so the ask for a wallet
+     is never made without evidence right there. Stacked below the connect
+     form on phones; moves beside it at desktop (see >=1024px block below),
+     which is a deliberate override of the otherwise-mobile-first single-
+     column layout for this one element, per explicit product call. ── */
+  .hero-proof{margin:28px auto 0;max-width:400px;min-height:168px;opacity:1;transition:opacity .25s;}
+  .hero-proof .tcard{text-align:left;}
+  .hero-proof-empty{font-size:13px;color:var(--muted);border:1px dashed var(--border);border-radius:12px;padding:18px 20px;line-height:1.55;}
+
   section{margin-top:44px;}
   .section-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;}
   .section-kicker{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin:0 0 6px;}
@@ -55,12 +65,17 @@
   /* ── desktop scale (>=1024px) — mobile untouched below this query ── */
   @media (min-width: 1024px) {
     main { max-width: 1120px; }
-    .hero h1 { font-size: 64px; }
-    .hero p { font-size: 20px; max-width: 640px; }
-    .connect-btn { font-size: 20px; padding: 20px 44px; }
-    .connect-alt { margin-top: 30px; }
-    .connect-alt input { font-size: 15px; width: 420px; padding: 14px 18px; }
+    .hero{
+      display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:48px;
+      text-align:left;padding:64px 0 48px;
+    }
+    .hero h1 { font-size: 56px; }
+    .hero p { font-size: 18px; max-width: 520px; margin-left:0;margin-right:0; }
+    .connect-btn { font-size: 18px; padding: 18px 38px; }
+    .connect-alt { margin-top: 26px; justify-content:flex-start; }
+    .connect-alt input { font-size: 15px; width: 340px; padding: 14px 18px; }
     .connect-alt button { font-size: 14px; padding: 14px 18px; }
+    .hero-proof{margin:0;max-width:400px;}
     .section-head h2 { font-size: 26px; }
   }
 </style>
@@ -72,18 +87,21 @@
 
 <main>
   <div class="hero">
-    <h1>What's your score?</h1>
-    <p>On-chain traders have no honest track record — everyone screenshots wins and deletes losses. Connect your wallet to see yours: wins and losses, graded against what actually happened.</p>
-    <a class="connect-btn" href="/connect">Connect Wallet</a>
-    <div class="connect-alt">
-      <input type="text" id="pasteAddr" placeholder="or paste a wallet address to preview" autocomplete="off">
-      <button id="pasteBtn">Preview</button>
+    <div class="hero-copy">
+      <h1>What's your score?</h1>
+      <p>On-chain traders have no honest track record — everyone screenshots wins and deletes losses. Connect your wallet to see yours: wins and losses, graded against what actually happened.</p>
+      <a class="connect-btn" href="/connect">Connect Wallet</a>
+      <div class="connect-alt">
+        <input type="text" id="pasteAddr" placeholder="or paste a wallet address to preview" autocomplete="off">
+        <button id="pasteBtn">Preview</button>
+      </div>
+      <div class="connect-err" id="connectErr" style="display:none;"></div>
     </div>
-    <div class="connect-err" id="connectErr" style="display:none;"></div>
+    <div class="hero-proof" id="heroProof"><div class="hero-proof-empty">Loading a real trader record…</div></div>
   </div>
 
   <section>
-    <div class="section-head"><div><div class="section-kicker">Currently ranked #1</div><h2>King of the Castle</h2></div></div>
+    <div class="section-head"><div><div class="section-kicker">Currently ranked #1</div><h2>Top Trader</h2></div></div>
     <div class="king-row" id="kingRow"><div class="skel"></div></div>
   </section>
 
@@ -91,7 +109,7 @@
     <div class="section-head">
       <div>
         <div class="section-kicker">Best in every category</div>
-        <h2>Category Kings</h2>
+        <h2>Category Leaders</h2>
       </div>
       <a href="/traders">Full leaderboard →</a>
     </div>
@@ -146,7 +164,7 @@ fetch('/api/kings')
         note.textContent = '#1 by return in each of ' + cats + ' categories, drawn from '
           + pool + ' qualifying wallets. Ranked on realized return, not win rate — '
           + 'a trader buying longshots can be well ahead while winning a minority of '
-          + 'their calls, so some kings hold a losing record. Every card shows its '
+          + 'their calls, so some category leaders hold a losing record. Every card shows its '
           + 'W-L and sample size.';
       }
 
@@ -161,6 +179,29 @@ fetch('/api/kings')
     document.getElementById('kingRow').innerHTML = '<div class="empty">Could not load the current #1.</div>';
   });
 
+/* ── hero proof rotator: same /api/trader-cards feed the Movers row uses
+   below — real wins and losses, un-curated, so the hero can never show
+   something the rest of the page wouldn't back up. ── */
+function heroProofEmpty(){
+  var el = document.getElementById('heroProof');
+  if (el) el.innerHTML = '<div class="hero-proof-empty">Every score is verified against real, resolved markets — wins and losses both.</div>';
+}
+function heroInitProof(cards){
+  var el = document.getElementById('heroProof');
+  if (!el) return;
+  if (!cards.length) { heroProofEmpty(); return; }
+  var idx = 0;
+  function show(i){ el.innerHTML = HFXTraderCard.render(cards[i], 'compact'); }
+  show(0);
+  if (cards.length > 1) {
+    setInterval(function(){
+      idx = (idx + 1) % cards.length;
+      el.style.opacity = 0;
+      setTimeout(function(){ show(idx); el.style.opacity = 1; }, 250);
+    }, 4500);
+  }
+}
+
 fetch('/api/trader-cards?limit=10')
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(d){
@@ -168,9 +209,11 @@ fetch('/api/trader-cards?limit=10')
     document.getElementById('moversRow').innerHTML = cards.length
       ? cards.map(function(c){ return HFXTraderCard.render(c, 'feed'); }).join('')
       : '<div class="empty">No wallets currently meet the minimum sample size (n&ge;10 durable resolved trades) for a card.</div>';
+    heroInitProof(cards.filter(function(c){ return c.n >= 10; }));
   })
   .catch(function(){
     document.getElementById('moversRow').innerHTML = '<div class="empty">Could not load the leaderboard.</div>';
+    heroProofEmpty();
   });
 </script>
 </body>
