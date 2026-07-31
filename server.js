@@ -64091,6 +64091,133 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
   }
 });
 
+// ── SCORE PREDICTIVENESS BACKTEST (the third act) ────────────────────────
+// Verified says the score is REAL. Permanent says we can always prove it.
+// This asks the only question that makes the score worth money: does it
+// PREDICT? If we rank traders by their score as of a past date T — using
+// ONLY trades that had closed before T — do the top-ranked ones actually
+// out-earn the bottom-ranked ones in the period AFTER T, on trades the
+// score never saw?
+//
+// The entire validity rests on no lookahead, enforced structurally:
+//   • score-at-T uses only trades with closed_at < T (weight decays toward
+//     T, not now — the exact _computeRoiLeaderboard formula, evaluated as
+//     of T).
+//   • forward return uses only trades with T ≤ closed_at < T+forward, a
+//     DISJOINT set the score at T could not have contained.
+//   • no survivorship filter — any wallet with enough before-trades to
+//     have a score AND enough after-trades to measure gets included, even
+//     if it later went quiet.
+//
+// Output: Spearman rank correlation (score-at-T vs forward ROI) and the
+// top-quartile-minus-bottom-quartile forward-return spread. Positive and
+// material ⇒ the score is forward-predictive ⇒ alpha, not a trophy.
+app.get('/api/admin/score-backtest', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const cutoffDays  = Math.min(365, Math.max(30, parseInt(req.query.cutoff_days, 10)  || 90));
+    const forwardDays = Math.min(365, Math.max(14, parseInt(req.query.forward_days, 10) || 90));
+    const minBefore   = Math.max(5,  parseInt(req.query.min_before, 10) || ROI_MIN_N_FLOOR);
+    const minAfter    = Math.max(3,  parseInt(req.query.min_after, 10)  || 5);
+
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, closed_at, entry_cost_usd, realized_roi
+      FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_roi IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0 AND closed_at IS NOT NULL
+    `).catch(e => { console.warn('[score-backtest] query:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'query failed' });
+
+    const now = Date.now();
+    const T    = now - cutoffDays  * 86400000;   // scoring cutoff
+    const Tend = T   + forwardDays * 86400000;   // end of forward window
+    const cap = v => Math.min(Math.max(v, -1.0), ROI_CAP);
+
+    // Population weighted-ROI prior, computed ONLY from before-T trades
+    // (the shrinkage target the as-of-T score would have used).
+    let popNum = 0, popDen = 0;
+    const before = new Map(); // user -> { n, wnum, wden }
+    const after  = new Map(); // user -> { cost, num } (capital-weighted fwd ROI)
+    for (const r of rows) {
+      const ts = new Date(r.closed_at).getTime();
+      const cost = Number(r.entry_cost_usd);
+      const roi  = Number(r.realized_roi);
+      if (ts < T) {
+        const w = cost * Math.pow(0.5, ((T - ts) / 86400000) / ROI_HALF_LIFE_DAYS);
+        popNum += cap(roi) * w; popDen += w;
+        if (!before.has(r.user_id)) before.set(r.user_id, { n: 0, wnum: 0, wden: 0 });
+        const b = before.get(r.user_id); b.n++; b.wnum += cap(roi) * w; b.wden += w;
+      } else if (ts < Tend) {
+        if (!after.has(r.user_id)) after.set(r.user_id, { cost: 0, num: 0, n: 0 });
+        const a = after.get(r.user_id); a.cost += cost; a.num += roi * cost; a.n++;
+      }
+    }
+    const popWroi = popDen > 0 ? popNum / popDen : 0;
+
+    // Wallets with both a real as-of-T score and a measurable forward return.
+    const pts = [];
+    for (const [uid, b] of before) {
+      if (b.n < minBefore) continue;
+      const a = after.get(uid);
+      if (!a || a.n < minAfter || a.cost <= 0) continue;
+      const wroi   = b.wden > 0 ? b.wnum / b.wden : 0;
+      const shrunk = (b.n / (b.n + ROI_SHRINK_K)) * wroi + (ROI_SHRINK_K / (b.n + ROI_SHRINK_K)) * popWroi;
+      pts.push({ user_id: uid, score: shrunk, forward_roi: a.num / a.cost, n_before: b.n, n_after: a.n });
+    }
+
+    if (pts.length < 8) {
+      return res.json({ n_wallets: pts.length, note: 'Too few wallets with both a pre-T score and post-T trades at these thresholds to measure predictiveness. Try smaller cutoff_days/forward_days or lower min_before/min_after.' });
+    }
+
+    // Spearman = Pearson on average ranks.
+    const avgRanks = (key) => {
+      const idx = pts.map((p, i) => i).sort((x, y) => pts[x][key] - pts[y][key]);
+      const rank = new Array(pts.length);
+      let i = 0;
+      while (i < idx.length) {
+        let j = i; while (j + 1 < idx.length && pts[idx[j + 1]][key] === pts[idx[i]][key]) j++;
+        const r = (i + j) / 2 + 1;
+        for (let k = i; k <= j; k++) rank[idx[k]] = r;
+        i = j + 1;
+      }
+      return rank;
+    };
+    const rs = avgRanks('score'), rf = avgRanks('forward_roi');
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const ms = mean(rs), mf = mean(rf);
+    let num = 0, ds = 0, df = 0;
+    for (let i = 0; i < pts.length; i++) { const a = rs[i] - ms, b = rf[i] - mf; num += a * b; ds += a * a; df += b * b; }
+    const spearman = (ds > 0 && df > 0) ? num / Math.sqrt(ds * df) : 0;
+
+    // Quartile spread: mean forward ROI of top-score quartile vs bottom.
+    const byScore = [...pts].sort((a, b) => a.score - b.score);
+    const q = Math.max(1, Math.floor(byScore.length / 4));
+    const botFwd = mean(byScore.slice(0, q).map(p => p.forward_roi));
+    const topFwd = mean(byScore.slice(-q).map(p => p.forward_roi));
+    const allFwd = mean(pts.map(p => p.forward_roi));
+
+    const pct = x => Math.round(x * 1000) / 10;
+    res.json({
+      cutoff_days: cutoffDays, forward_days: forwardDays, min_before: minBefore, min_after: minAfter,
+      n_wallets: pts.length,
+      spearman_score_vs_forward_roi: Math.round(spearman * 1000) / 1000,
+      top_quartile_forward_roi_pct: pct(topFwd),
+      bottom_quartile_forward_roi_pct: pct(botFwd),
+      quartile_spread_pct: pct(topFwd - botFwd),
+      all_wallet_avg_forward_roi_pct: pct(allFwd),
+      interpretation: spearman >= 0.2 && (topFwd - botFwd) > 0
+        ? 'PREDICTIVE — higher score-at-T tracks higher forward ROI. The score forecasts, not just describes.'
+        : (spearman <= 0.05 || (topFwd - botFwd) <= 0
+          ? 'NOT PREDICTIVE at these params — score-at-T does not forecast forward ROI. Honest but not yet actionable; the ranking model needs work before it is copy-trade alpha.'
+          : 'WEAK — some signal but not decisive. Widen the sample or windows and re-run.'),
+      note: 'No lookahead: score-at-T uses only trades closed before T (decay toward T); forward ROI uses only trades closed in [T, T+forward_days), a disjoint set. No survivorship filter. Spearman is rank correlation of score-at-T vs forward ROI across ' + pts.length + ' wallets. Run multiple cutoff_days to check stability.',
+    });
+  } catch (e) {
+    console.error('[score-backtest]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── PROMOTED-TRADER RECONCILIATION ───────────────────────────────────────
 // "Beyond reasonable doubt the board promotes the right traders" (Marc,
 // 2026-07-29). Reconciles every homepage-promoted wallet's stored record
