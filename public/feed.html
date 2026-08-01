@@ -275,6 +275,10 @@ document.addEventListener('DOMContentLoaded', function() {
   loadAnomalies();
   loadCategoryRows();
   setInterval(loadAnomalies, 2 * 60 * 1000);
+  // Category wins change less often than live signals (a new qualifying
+  // win is a rarer event than a whale position), so a longer interval here
+  // is enough to keep "Live Feed" honest without hammering the endpoint.
+  setInterval(loadCategoryRows, 3 * 60 * 1000);
 });
 </script>
 </body>
