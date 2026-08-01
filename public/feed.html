@@ -33,6 +33,7 @@ body {
 .page-head h1 span { background: linear-gradient(120deg, var(--purple), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .page-sub { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.5; max-width: 480px; }
 .live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 10px; }
+.page-stat { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.8s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
 
@@ -123,6 +124,7 @@ body {
     <h1>FLEX <span>Feed</span></h1>
     <p class="page-sub">Live whale activity, and the largest verified wins on the durable board — grouped by category, most-traded first.</p>
     <div class="live-badge"><div class="live-dot"></div><span id="live-count">live</span></div>
+    <div class="page-stat" id="pageStat"></div>
   </div>
 
   <div class="anom-section">
@@ -273,6 +275,11 @@ function loadCategoryRows() {
     .then(function(d) {
       var cats = (d && d.categories) || [];
       if (!cats.length) { wrap.innerHTML = '<div class="empty-state">No category has enough verified wins yet to show a wall.</div>'; return; }
+      var stat = document.getElementById('pageStat');
+      if (stat) {
+        var totalVol = cats.reduce(function(s, c) { return s + (c.total_volume_usd || 0); }, 0);
+        stat.textContent = fmtUsd(totalVol) + ' tracked across ' + cats.length + ' categor' + (cats.length === 1 ? 'y' : 'ies');
+      }
       wrap.innerHTML = cats.map(function(c) {
         var accent = CAT_COLORS[c.category] || '#c9920d';
         return '<div class="cat-row">'
