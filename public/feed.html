@@ -9,14 +9,17 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root{
-  --paper:#0e0e15; --card:#111118; --border:#1e1e2a;
-  --ink:#f0f0f5; --muted:rgba(240,240,245,.45);
+  --paper:#0a0a0f; --card:#121218; --card2:#16161e; --border:#1e1e2a;
+  --ink:#f5f5fa; --muted:rgba(240,240,245,.42);
   --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --cyan:#4d9fff; --purple:#a855f7; --amber:#f59e0b;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  background: var(--paper);
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -8%, rgba(168,85,247,.05), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 85% 15%, rgba(0,230,138,.04), transparent 60%),
+    var(--paper);
   color: var(--ink);
   min-height: 100vh;
 }
@@ -24,77 +27,84 @@ body {
 #nav-root { position: sticky; top: 0; z-index: 100; }
 
 /* ── mobile-first base: single column, edge-to-edge rows ── */
-.page-wrap { padding: 20px 0 72px; }
-.page-head { padding: 0 16px; margin-bottom: 18px; }
-.page-head h1 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; color: #fff; }
-.page-head h1 span { color: var(--purple); }
-.page-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
-.live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 8px; }
-.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+.page-wrap { padding: 22px 0 80px; }
+.page-head { padding: 0 16px; margin-bottom: 22px; }
+.page-head h1 { font-size: 22px; font-weight: 900; letter-spacing: -.03em; color: #fff; }
+.page-head h1 span { background: linear-gradient(120deg, var(--purple), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.page-sub { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.5; max-width: 480px; }
+.live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 10px; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
+
+/* row edge fade — hints there's more to scroll without a visible scrollbar */
+.fade-row { position: relative; }
+.fade-row::after { content: ''; position: absolute; top: 0; right: 0; bottom: 8px; width: 36px; background: linear-gradient(90deg, transparent, var(--paper)); pointer-events: none; }
+@media (min-width: 1024px) { .fade-row::after { display: none; } }
 
 /* ── ANOMALIES ROW (top) ── */
-.anom-section { margin-bottom: 28px; }
-.anom-head { display: flex; align-items: baseline; gap: 10px; padding: 0 16px; margin-bottom: 10px; }
-.anom-head h2 { font-size: 15px; font-weight: 800; color: #fff; }
-.anom-head .kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
-.anom-scroll { display: flex; gap: 10px; overflow-x: auto; padding: 2px 16px 8px; scrollbar-width: none; }
+.anom-section { margin-bottom: 32px; }
+.anom-head { display: flex; align-items: center; gap: 8px; padding: 0 16px; margin-bottom: 12px; }
+.anom-head .live-swatch { width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.6s ease-in-out infinite; }
+.anom-head h2 { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
+.anom-head .kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.anom-scroll { display: flex; gap: 10px; overflow-x: auto; padding: 2px 16px 10px; scrollbar-width: none; }
 .anom-scroll::-webkit-scrollbar { display: none; }
 .anom-card {
-  flex: 0 0 auto; width: 230px; background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 12px 14px; text-decoration: none; color: var(--ink);
-  transition: border-color .15s;
+  flex: 0 0 auto; width: 220px; background: var(--card); border: 1px solid var(--border);
+  border-top: 2px solid var(--accent, var(--gold));
+  border-radius: 4px 4px 12px 12px; padding: 13px 14px; text-decoration: none; color: var(--ink);
+  transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.anom-card:hover { border-color: #33333f; }
-.anom-badge-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.anom-badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; }
+.anom-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(0,0,0,.5); }
+.anom-badge-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.anom-badge { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 800; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px; }
 .anom-age { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
-.anom-market { font-size: 12.5px; font-weight: 600; line-height: 1.35; color: #e5e5e5; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.anom-market { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #f0f0f5; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .anom-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.anom-side { font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.anom-side { font-family: 'JetBrains Mono', monospace; font-weight: 800; padding: 2px 7px; border-radius: 4px; }
 .anom-side.yes { color: var(--green); background: rgba(0,230,138,.1); }
 .anom-side.no  { color: var(--red); background: rgba(255,77,106,.1); }
 .anom-extra { color: var(--muted); font-size: 11px; }
 .anom-empty { padding: 20px 16px; color: var(--muted); font-size: 12.5px; }
 
 /* ── CATEGORY WIN ROWS (score wall) ── */
-.cat-row { margin-bottom: 30px; }
-.cat-row-head { display: flex; align-items: baseline; gap: 10px; padding: 0 16px; margin-bottom: 10px; }
-.cat-row-head h2 { font-size: 15px; font-weight: 800; color: #fff; }
-.cat-row-vol { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
-.win-scroll { display: flex; gap: 10px; overflow-x: auto; padding: 2px 16px 8px; scrollbar-width: none; }
+.cat-row { margin-bottom: 34px; }
+.cat-row-head { display: flex; align-items: center; gap: 9px; padding: 0 16px; margin-bottom: 12px; }
+.cat-row-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent, var(--gold)); flex-shrink: 0; }
+.cat-row-head h2 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
+.cat-row-vol { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--muted); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; margin-left: auto; }
+.win-scroll { display: flex; gap: 12px; overflow-x: auto; padding: 2px 16px 10px; scrollbar-width: none; }
 .win-scroll::-webkit-scrollbar { display: none; }
 .wcard {
-  flex: 0 0 auto; width: 240px; background: var(--card); border: 1px solid var(--border);
-  border-radius: 12px; padding: 14px 16px; text-decoration: none; color: var(--ink);
-  display: flex; flex-direction: column; gap: 8px; transition: border-color .15s, transform .15s;
+  flex: 0 0 auto; width: 210px; background: linear-gradient(160deg, var(--card2), var(--card));
+  border: 1px solid var(--border); border-left: 3px solid var(--accent, var(--gold));
+  border-radius: 4px 14px 14px 4px; padding: 16px; text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.wcard:hover { border-color: #33333f; transform: translateY(-2px); }
-.wcard-top { display: flex; align-items: center; gap: 8px; }
-.wcard-avatar { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #0e0e15; }
-.wcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: rgba(240,240,245,.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wcard-line { font-size: 13px; font-weight: 600; }
-.wcard-line .won { color: var(--green); }
-.wcard-q { font-size: 11.5px; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.wcard-score { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--border); }
-.wcard-score .pct { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800; }
-.wcard-score .pct.positive { color: var(--green); }
-.wcard-score .pct.negative { color: var(--red); }
-.wcard-score .n { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
-
-.skel-row { display: flex; gap: 10px; padding: 2px 16px 8px; }
-.skel { flex: 0 0 auto; width: 230px; height: 150px; border-radius: 12px; background: linear-gradient(90deg, rgba(255,255,255,.03) 25%, rgba(255,255,255,.07) 50%, rgba(255,255,255,.03) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.wcard:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -14px rgba(0,0,0,.55); }
+.wcard-hero { display: flex; align-items: baseline; gap: 6px; }
+.wcard-hero .won-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+.wcard-hero .mult { font-size: 26px; font-weight: 900; letter-spacing: -.02em; color: var(--green); font-variant-numeric: tabular-nums; }
+.wcard-entry { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.wcard-q { font-size: 12px; color: rgba(240,240,245,.72); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 33px; }
+.wcard-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.wcard-avatar { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800; color: #0a0a0f; }
+.wcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.wcard-score { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+.wcard-score.positive { color: var(--green); }
+.wcard-score.negative { color: var(--red); }
+.wcard-score .n { font-weight: 500; color: var(--muted); }
 
 .empty-state { padding: 24px 16px; color: var(--muted); font-size: 12.5px; }
 
 /* ── desktop scale-up (>=1024px) ── */
 @media (min-width: 1024px) {
-  .page-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 0 80px; }
-  .page-head, .anom-head, .cat-row-head, .anom-scroll, .win-scroll, .skel-row, .anom-empty, .empty-state { padding-left: 32px; padding-right: 32px; }
-  .page-head h1 { font-size: 26px; }
-  .anom-card { width: 260px; }
-  .wcard { width: 270px; }
+  .page-wrap { max-width: 1240px; margin: 0 auto; padding: 36px 0 88px; }
+  .page-head, .anom-head, .cat-row-head, .anom-scroll, .win-scroll, .anom-empty, .empty-state { padding-left: 32px; padding-right: 32px; }
+  .page-head h1 { font-size: 28px; }
+  .anom-card { width: 250px; }
+  .wcard { width: 226px; }
+  .wcard-hero .mult { font-size: 28px; }
 }
 </style>
 </head>
@@ -112,11 +122,11 @@ body {
   </div>
 
   <div class="anom-section">
-    <div class="anom-head"><div class="kicker">Live</div><h2>Anomalies</h2></div>
-    <div class="anom-scroll" id="anomScroll"><div class="skel-row"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div></div>
+    <div class="anom-head"><span class="live-swatch"></span><h2>Live Feed</h2></div>
+    <div class="anom-scroll fade-row" id="anomScroll"></div>
   </div>
 
-  <div id="catRows"><div class="skel-row"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div></div>
+  <div id="catRows"></div>
 
 </div>
 
@@ -158,6 +168,12 @@ function handleOf(c) {
   return 'Trader';
 }
 
+// One accent per category — quick visual scanning as you scroll past rows.
+var CAT_COLORS = {
+  world: '#a855f7', politics: '#4d9fff', macro: '#c9920d', sports: '#00e68a',
+  crypto: '#f59e0b', commodities: '#d97706', tech: '#38bdf8', entertainment: '#ff4d6a', weather: '#6b7280',
+};
+
 // ── ANOMALIES: reuse /api/signals — the existing whale-cluster / momentum /
 // arbitrage / volume-surge / new-entry detectors (Alpha Engine). No score or
 // hit-rate number is shown here (that's gated separately) — just the raw,
@@ -166,7 +182,7 @@ var ANOM_COLORS = { whale_cluster: ['rgba(168,85,247,.12)', '#a855f7'], momentum
 var ANOM_LABELS = { whale_cluster: 'WHALE CLUSTER', momentum: 'MOMENTUM', arbitrage: 'ARB', volume_surge: 'VOLUME SURGE', new_entry: 'NEW ENTRY' };
 
 function renderAnomEmpty() {
-  document.getElementById('anomScroll').innerHTML = '<div class="anom-empty">No live anomalies right now — check back shortly.</div>';
+  document.getElementById('anomScroll').innerHTML = '<div class="anom-empty">Nothing live right now — check back shortly.</div>';
 }
 function loadAnomalies() {
   fetch('/api/signals')
@@ -182,7 +198,7 @@ function loadAnomalies() {
         if (s.whale_count) meta.push(s.whale_count + ' whales');
         if (s.capital) meta.push(fmtUsd(s.capital));
         var url = s.slug ? '/market/' + esc(s.slug) : '#';
-        return '<a class="anom-card" href="' + url + '">'
+        return '<a class="anom-card" style="--accent:' + colors[1] + '" href="' + url + '">'
           + '<div class="anom-badge-row"><span class="anom-badge" style="background:' + colors[0] + ';color:' + colors[1] + '">' + esc(label) + '</span><span class="anom-age">' + esc(tAgo(s.detected_at)) + '</span></div>'
           + '<div class="anom-market">' + esc(s.market || '') + '</div>'
           + '<div class="anom-meta">' + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '') + (meta.length ? '<span class="anom-extra">' + esc(meta.join(' · ')) + '</span>' : '') + '</div>'
@@ -195,7 +211,7 @@ function loadAnomalies() {
 // ── CATEGORY WIN ROWS: /api/feed/category-wins, most-liquid category first,
 // each row a scrolling wall of real winning trades. Score+n always travel
 // with the win (rule 3) — never a naked win rate. ──
-function winCardHtml(e) {
+function winCardHtml(e, accent) {
   var handle = handleOf(e);
   var win = e.win;
   var verb = win.side === 'SELL' ? 'Sold' : 'Bought';
@@ -203,11 +219,15 @@ function winCardHtml(e) {
   var multText = win.multiplier != null ? win.multiplier + 'x' : fmtPct(win.roi_pct);
   var scorePositive = (e.score_pct != null ? e.score_pct : 0) >= 0;
   var href = e.user_id ? '/trader/' + esc(e.user_id) : '#';
-  return '<a class="wcard" href="' + href + '">'
-    + '<div class="wcard-top"><div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div><div class="wcard-handle">' + esc(handle) + '</div></div>'
-    + '<div class="wcard-line">' + esc(verb) + (entryC ? ' at ' + entryC : '') + ' → <span class="won">WON ' + esc(multText) + '</span></div>'
-    + '<div class="wcard-q">' + esc((win.question || '').slice(0, 90)) + '</div>'
-    + '<div class="wcard-score"><span class="pct ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + '</span><span class="n">n=' + esc(e.n) + '</span></div>'
+  return '<a class="wcard" style="--accent:' + accent + '" href="' + href + '">'
+    + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
+    + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
+    + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
+    + '<div class="wcard-foot">'
+      + '<div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div>'
+      + '<div class="wcard-handle">' + esc(handle) + '</div>'
+      + '<div class="wcard-score ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + ' <span class="n">n=' + esc(e.n) + '</span></div>'
+    + '</div>'
     + '</a>';
 }
 
@@ -219,9 +239,10 @@ function loadCategoryRows() {
       var cats = (d && d.categories) || [];
       if (!cats.length) { wrap.innerHTML = '<div class="empty-state">No category has enough verified wins yet to show a wall.</div>'; return; }
       wrap.innerHTML = cats.map(function(c) {
+        var accent = CAT_COLORS[c.category] || '#c9920d';
         return '<div class="cat-row">'
-          + '<div class="cat-row-head"><h2>' + esc(c.label) + '</h2><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span></div>'
-          + '<div class="win-scroll">' + c.entries.map(winCardHtml).join('') + '</div>'
+          + '<div class="cat-row-head"><span class="dot" style="--accent:' + accent + '"></span><h2>' + esc(c.label) + '</h2><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span></div>'
+          + '<div class="win-scroll fade-row">' + c.entries.map(function(e) { return winCardHtml(e, accent); }).join('') + '</div>'
           + '</div>';
       }).join('');
     })
