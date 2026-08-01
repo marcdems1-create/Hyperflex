@@ -59,12 +59,11 @@ body {
 .anom-badge-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .anom-badge { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 800; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px; }
 .anom-age { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
-.anom-market { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #f0f0f5; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.anom-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.anom-side { font-family: 'JetBrains Mono', monospace; font-weight: 800; padding: 2px 7px; border-radius: 4px; }
+.anom-market { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #f0f0f5; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.anom-reason { font-size: 11.5px; color: rgba(240,240,245,.6); line-height: 1.4; margin-bottom: 10px; }
+.anom-side { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 4px; }
 .anom-side.yes { color: var(--green); background: rgba(0,230,138,.1); }
 .anom-side.no  { color: var(--red); background: rgba(255,77,106,.1); }
-.anom-extra { color: var(--muted); font-size: 11px; }
 .anom-empty { padding: 20px 16px; color: var(--muted); font-size: 12.5px; }
 
 /* ── CATEGORY WIN ROWS (score wall) ── */
@@ -174,12 +173,35 @@ var CAT_COLORS = {
   crypto: '#f59e0b', commodities: '#d97706', tech: '#38bdf8', entertainment: '#ff4d6a', weather: '#6b7280',
 };
 
-// ── ANOMALIES: reuse /api/signals — the existing whale-cluster / momentum /
-// arbitrage / volume-surge / new-entry detectors (Alpha Engine). No score or
-// hit-rate number is shown here (that's gated separately) — just the raw,
-// observable fact: N whales on a side, or a live price move. ──
-var ANOM_COLORS = { whale_cluster: ['rgba(168,85,247,.12)', '#a855f7'], momentum: ['rgba(77,159,255,.12)', '#4d9fff'], arbitrage: ['rgba(245,158,11,.12)', '#f59e0b'], volume_surge: ['rgba(255,77,106,.12)', '#ff4d6a'], new_entry: ['rgba(0,230,138,.12)', '#00e68a'] };
-var ANOM_LABELS = { whale_cluster: 'WHALE CLUSTER', momentum: 'MOMENTUM', arbitrage: 'ARB', volume_surge: 'VOLUME SURGE', new_entry: 'NEW ENTRY' };
+// ── LIVE FEED: reuse /api/signals — the existing whale-cluster / momentum /
+// volume-surge / new-entry detectors (Alpha Engine; cross-platform arbitrage
+// was removed 2026-05-10 when Kalshi was dropped, so that type never fires
+// here and isn't in the map below). No score or hit-rate number is shown
+// (that's gated separately) — just the raw, observable fact, PLUS a plain
+// reason line built from that signal's own real fields (whale_count,
+// consensus_pct, change_pct, etc.) so it's never just a badge with no
+// explanation of why the market is on the list. ──
+var ANOM_COLORS = { whale_cluster: ['rgba(168,85,247,.12)', '#a855f7'], momentum: ['rgba(77,159,255,.12)', '#4d9fff'], volume_surge: ['rgba(255,77,106,.12)', '#ff4d6a'], new_entry: ['rgba(0,230,138,.12)', '#00e68a'] };
+var ANOM_LABELS = { whale_cluster: 'WHALE CLUSTER', momentum: 'MOMENTUM', volume_surge: 'VOLUME SURGE', new_entry: 'NEW ENTRY' };
+
+function reasonFor(s) {
+  if (s.type === 'whale_cluster') {
+    var pct = s.consensus_pct != null ? ' · ' + Math.round(s.consensus_pct) + '% consensus' : '';
+    return (s.whale_count || 0) + ' whales on ' + (s.side || 'one side') + pct;
+  }
+  if (s.type === 'momentum') {
+    var from = s.start_price != null ? s.start_price + '¢' : '?';
+    var to = s.odds_price != null ? s.odds_price + '¢' : '?';
+    return 'Odds moved ' + from + ' → ' + to + ' in 24h';
+  }
+  if (s.type === 'new_entry') {
+    return 'New ' + (s.capital ? fmtUsd(s.capital) + ' ' : '') + (s.side || '') + ' position just opened';
+  }
+  if (s.type === 'volume_surge') {
+    return s.action || 'Unusual activity detected';
+  }
+  return s.action || '';
+}
 
 function renderAnomEmpty() {
   document.getElementById('anomScroll').innerHTML = '<div class="anom-empty">Nothing live right now — check back shortly.</div>';
@@ -194,14 +216,12 @@ function loadAnomalies() {
         var colors = ANOM_COLORS[s.type] || ['rgba(201,146,13,.12)', '#c9920d'];
         var label = ANOM_LABELS[s.type] || String(s.type || '').toUpperCase();
         var side = (s.side || '').toUpperCase();
-        var meta = [];
-        if (s.whale_count) meta.push(s.whale_count + ' whales');
-        if (s.capital) meta.push(fmtUsd(s.capital));
         var url = s.slug ? '/market/' + esc(s.slug) : '#';
         return '<a class="anom-card" style="--accent:' + colors[1] + '" href="' + url + '">'
           + '<div class="anom-badge-row"><span class="anom-badge" style="background:' + colors[0] + ';color:' + colors[1] + '">' + esc(label) + '</span><span class="anom-age">' + esc(tAgo(s.detected_at)) + '</span></div>'
           + '<div class="anom-market">' + esc(s.market || '') + '</div>'
-          + '<div class="anom-meta">' + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '') + (meta.length ? '<span class="anom-extra">' + esc(meta.join(' · ')) + '</span>' : '') + '</div>'
+          + '<div class="anom-reason">' + esc(reasonFor(s)) + '</div>'
+          + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '')
           + '</a>';
       }).join('');
     })
