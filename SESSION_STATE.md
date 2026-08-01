@@ -49,6 +49,23 @@
 
 ## Chronological log (newest first)
 
+## 2026-07-31b (✅ SHIPPED — /feed follow-up: reason lines, "See all" into filtered /traders, auto-refresh, new-signal flash, volume rollup)
+
+Marc asked "any more value we can pump out with this feed" after the visual pass (2026-07-30/31 entries below); proposed 4 ranked ideas, he said "start with 2 then do them in order" (See-all link → auto-refresh → new-signal flash → volume rollup). Also fixed, mid-thread, that Live Feed cards showed a badge + market with no explanation of *why* (added `reasonFor()` using each signal's own real fields) and dropped a dead `arbitrage` map entry (that detector was removed 2026-05-10 with Kalshi).
+
+**Shipped, one commit per item (`511d18b` → `ef66711` on `main`):**
+1. **Reason lines** (`511d18b`): "7 whales on YES · 82% consensus", "Odds moved 40¢ → 58¢ in 24h", etc. — built from fields the signals already carried but weren't rendering.
+2. **"See all →"** (`339bc7a`, backed by new `GET /api/category-leaderboard` in `d468f43`): each category row links to `/traders?category=X`; `home-traders-preview.html` reads that param, swaps its data source, rewrites the header so the filtered view is obvious. Caught and fixed a real mobile overflow bug on `.cat-row-head` in the process (verified via actual DOM `getBoundingClientRect()`, not just screenshots — a headless-Chrome screenshot was giving a false-positive "clipped" read that the real browser tool's DOM measurement disproved).
+3. **Auto-refresh category rows** (`d7518b7`): 3-min interval (Live Feed strip already had 2-min).
+4. **New-signal flash** (`c838cfa`): fingerprints signals by `type+market+detected_at` across polls, one-shot CSS glow (no JS cleanup) on anything not in the previous set; first load seeded without flashing so all 10 cards don't light up at once. Verified live by overriding `fetch()` in-browser to inject a fabricated new signal and confirming exactly one card flashed.
+5. **Volume rollup** (`ef66711`): "$11.0M tracked across N categories" under the LIVE badge — sums data already being fetched, no new query.
+
+**New public endpoint:** `GET /api/category-leaderboard?category=X&limit=N` — reuses `_computeCategoryRoiLeaderboards()` + `_buildTraderCards()`, same pipeline as everything else, no new scoring.
+
+**Process note — concurrent-session collision, handled cleanly:** mid-thread, another Claude session was actively committing to this same repo (a resolution archive + score-predictiveness backtest, unrelated). Hit their live `HEAD.lock` mid-push (waited it out, confirmed 19h-stale before clearing — see 2026-07-30/31 entry below for the first occurrence), and separately had to commit `server.js` changes while their +110-line addition sat staged-but-uncommitted: isolated via `git diff`/`git diff --cached` into two patches, reset the file to HEAD, applied+committed only mine, then reapplied+restaged theirs and byte-diffed to confirm their patch was restored identically (only line-number offsets changed, zero content drift). No work lost on either side.
+
+**Active blockers:** (none)
+
 ## 2026-07-31 (verification arc part 2 — permanent resolution archive + score-predictiveness backtest; strategic reframe)
 
 **Built the "verified → permanent → predictive" stack. Shipped (origin/main):**
