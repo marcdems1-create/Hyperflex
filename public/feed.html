@@ -68,10 +68,12 @@ body {
 
 /* ── CATEGORY WIN ROWS (score wall) ── */
 .cat-row { margin-bottom: 34px; }
-.cat-row-head { display: flex; align-items: center; gap: 9px; padding: 0 16px; margin-bottom: 12px; }
+.cat-row-head { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; gap: 9px; padding: 0 16px; margin-bottom: 12px; }
 .cat-row-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent, var(--gold)); flex-shrink: 0; }
 .cat-row-head h2 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
 .cat-row-vol { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--muted); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; margin-left: auto; }
+.cat-row-see { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--muted); text-decoration: none; white-space: nowrap; transition: color .12s; }
+.cat-row-see:hover { color: var(--ink); }
 .win-scroll { display: flex; gap: 12px; overflow-x: auto; padding: 2px 16px 10px; scrollbar-width: none; }
 .win-scroll::-webkit-scrollbar { display: none; }
 .wcard {
@@ -261,7 +263,7 @@ function loadCategoryRows() {
       wrap.innerHTML = cats.map(function(c) {
         var accent = CAT_COLORS[c.category] || '#c9920d';
         return '<div class="cat-row">'
-          + '<div class="cat-row-head"><span class="dot" style="--accent:' + accent + '"></span><h2>' + esc(c.label) + '</h2><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span></div>'
+          + '<div class="cat-row-head"><span class="dot" style="--accent:' + accent + '"></span><h2>' + esc(c.label) + '</h2><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span><a class="cat-row-see" href="/traders?category=' + esc(c.category) + '">See all →</a></div>'
           + '<div class="win-scroll fade-row">' + c.entries.map(function(e) { return winCardHtml(e, accent); }).join('') + '</div>'
           + '</div>';
       }).join('');

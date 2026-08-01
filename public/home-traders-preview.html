@@ -74,8 +74,8 @@
 <script src="/nav.js?v=25"></script>
 
 <header>
-  <h1>Traders</h1>
-  <p>We track and score traders; markets appear only as evidence of a call. Every card carries score and n together — a win never appears naked. Ranked on durable markets — resolving weeks or months out, hand-verified against real Polymarket profiles.</p>
+  <h1 id="pageH1">Traders</h1>
+  <p id="pageSub">We track and score traders; markets appear only as evidence of a call. Every card carries score and n together — a win never appears naked. Ranked on durable markets — resolving weeks or months out, hand-verified against real Polymarket profiles.</p>
 </header>
 
 <main>
@@ -85,7 +85,7 @@
   </section>
 
   <section>
-    <div class="section-head"><h2>Movers</h2><a href="/predictors?tab=roi">Full leaderboard →</a></div>
+    <div class="section-head"><h2>Movers</h2><a href="/predictors?tab=roi" id="moversFullLink">Full leaderboard →</a></div>
     <div class="scroll-row" id="moversRow"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
   </section>
 
@@ -97,12 +97,32 @@
 
 <script src="/trader-card.js"></script>
 <script>
-fetch('/api/trader-cards?limit=12')
+// ?category=X switches the data source to the category-scoped leaderboard
+// (backing the "See all →" links from /feed's category rows) instead of the
+// global board. Same page, same three sections, just a different source
+// and header copy so it's clear the list is filtered, not silently wrong.
+var _category = new URLSearchParams(location.search).get('category');
+var _dataUrl = _category
+  ? '/api/category-leaderboard?category=' + encodeURIComponent(_category) + '&limit=20'
+  : '/api/trader-cards?limit=12';
+
+if (_category) {
+  var _label = _category.charAt(0).toUpperCase() + _category.slice(1);
+  document.getElementById('pageH1').textContent = _label + ' traders';
+  document.getElementById('pageSub').innerHTML = 'Ranked on durable ' + _label.toLowerCase() + ' markets — resolving weeks or months out. Score and n always travel together. <a href="/traders" style="color:var(--muted);">← All traders</a>';
+  var _moversLink = document.getElementById('moversFullLink');
+  if (_moversLink) _moversLink.style.display = 'none'; // global-board link doesn't apply to a category-filtered view
+}
+
+fetch(_dataUrl)
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(d){
     var cards = (d && d.cards) || [];
     if (!cards.length) {
-      document.getElementById('heroRow').innerHTML = '<div class="empty">No wallets currently meet the minimum sample size (n≥10 durable resolved trades) for a card.</div>';
+      var emptyMsg = _category
+        ? 'No wallet has enough qualifying trades in this category yet.'
+        : 'No wallets currently meet the minimum sample size (n≥10 durable resolved trades) for a card.';
+      document.getElementById('heroRow').innerHTML = '<div class="empty">' + emptyMsg + '</div>';
       document.getElementById('moversRow').innerHTML = '';
       document.getElementById('callsList').innerHTML = '<div class="empty">Nothing to show yet.</div>';
       return;
