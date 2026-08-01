@@ -13452,6 +13452,39 @@ app.get('/api/feed/category-wins', async (req, res) => {
   }
 });
 
+// ── GET /api/category-leaderboard ────────────────────────────────────────
+// Public, no auth — backs the "See all →" link from each /feed category row
+// into /traders?category=X. Reuses _computeCategoryRoiLeaderboards() (the
+// exact same per-category computation /api/kings already draws its single
+// category king from) for the ranked list, then runs the SAME
+// _buildTraderCards() every other trader surface uses to get full cards
+// (verdict/evidence/form/streak) rather than inventing a second, thinner
+// card shape just for this view.
+app.get('/api/category-leaderboard', async (req, res) => {
+  try {
+    const category = String(req.query.category || '').toLowerCase();
+    if (!category || category === 'other') return res.status(400).json({ error: 'invalid category' });
+
+    const byCategory = await _computeCategoryRoiLeaderboards();
+    if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
+    const cat = byCategory[category];
+    if (!cat) return res.json({ category, label: category.charAt(0).toUpperCase() + category.slice(1), qualifying_count: 0, cards: [] });
+
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const rows = cat.leaderboard.slice(0, limit);
+    const cards = rows.length ? await _buildTraderCards(rows) : [];
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+
+    res.json({
+      category, label: category.charAt(0).toUpperCase() + category.slice(1),
+      qualifying_count: cat.qualifying_count, cards,
+    });
+  } catch (e) {
+    console.error('[category-leaderboard]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TRADER PROFILE ───────────────────────────────────────────────────────
 // Deep surface behind every trader card: full receipts (headline stats,
 // best/worst call side by side, per-category specialty breakdown, complete
