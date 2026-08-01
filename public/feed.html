@@ -56,6 +56,9 @@ body {
   transition: border-color .15s, transform .15s, box-shadow .15s;
 }
 .anom-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(0,0,0,.5); }
+@keyframes flashIn { 0% { box-shadow: 0 0 0 2px var(--accent), 0 0 24px -2px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; } }
+.anom-card.flash { animation: flashIn 3s ease-out; }
+@media (prefers-reduced-motion: reduce) { .anom-card.flash { animation: none; } }
 .anom-badge-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .anom-badge { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 800; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px; }
 .anom-age { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
@@ -208,24 +211,34 @@ function reasonFor(s) {
 function renderAnomEmpty() {
   document.getElementById('anomScroll').innerHTML = '<div class="anom-empty">Nothing live right now — check back shortly.</div>';
 }
+function signalKey(s) { return s.type + '|' + s.market + '|' + s.detected_at; }
+
+// Seeded on the first successful load (so the initial 10 cards don't all
+// flash at once) — only signals that appear on a LATER poll and weren't in
+// the previous set get the flash treatment, i.e. "new since you were last
+// looking at this page," same idea as the old ticker's leader-change flash.
+var _anomSeenKeys = null;
 function loadAnomalies() {
   fetch('/api/signals')
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(d) {
       var list = ((d && (d.signals || d)) || []).slice(0, 10);
       if (!list.length) { renderAnomEmpty(); return; }
+      var prevKeys = _anomSeenKeys;
       document.getElementById('anomScroll').innerHTML = list.map(function(s) {
         var colors = ANOM_COLORS[s.type] || ['rgba(201,146,13,.12)', '#c9920d'];
         var label = ANOM_LABELS[s.type] || String(s.type || '').toUpperCase();
         var side = (s.side || '').toUpperCase();
         var url = s.slug ? '/market/' + esc(s.slug) : '#';
-        return '<a class="anom-card" style="--accent:' + colors[1] + '" href="' + url + '">'
+        var isNew = prevKeys && !prevKeys.has(signalKey(s));
+        return '<a class="anom-card' + (isNew ? ' flash' : '') + '" style="--accent:' + colors[1] + '" href="' + url + '">'
           + '<div class="anom-badge-row"><span class="anom-badge" style="background:' + colors[0] + ';color:' + colors[1] + '">' + esc(label) + '</span><span class="anom-age">' + esc(tAgo(s.detected_at)) + '</span></div>'
           + '<div class="anom-market">' + esc(s.market || '') + '</div>'
           + '<div class="anom-reason">' + esc(reasonFor(s)) + '</div>'
           + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '')
           + '</a>';
       }).join('');
+      _anomSeenKeys = new Set(list.map(signalKey));
     })
     .catch(renderAnomEmpty);
 }
