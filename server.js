@@ -63879,73 +63879,119 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
 // a wallet's score silently blank waiting for a lazy re-trigger on next
 // profile view.
 //
-// Dry-run by default (?confirm=1 to execute). ?user_id=X targets one
-// wallet. ?limit=N caps how many wallets one call processes (default 15 —
-// backfillRealizedTrades makes real Polymarket API calls per wallet, so a
-// large batch in one request risks timing out); re-callable — already-
-// migrated wallets (no more pm-act:% sold rows) drop out of the WHERE
-// clause each time, so repeated calls drain the backlog without
-// reprocessing finished wallets.
-//
-//   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                    (dry run — counts only)
-//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1"  (execute — next 15 wallets)
-app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) => {
+// Dry-run by default (?confirm=1 to execute one batch synchronously — handy
+// for ?user_id=X to fix a single wallet on demand). The BULK backlog (1,576
+// wallets / 41,356 rows, measured live 2026-08-03) drains automatically via
+// a cron below — reprocessing that by hand would mean ~105 manual curls at
+// the old default batch size, which is exactly the kind of repetitive
+// terminal grind this project's own operating rules say to avoid. Same
+// self-driving-batch shape as runWhaleBackfillBatch a few hundred lines up
+// (run/status split, single in-memory "is it running" flag, cron tick).
+const SOLD_RESYNC_BATCH = 25;
+const SOLD_RESYNC_THROTTLE_MS = 400;
+let _soldResyncRunning = false;
+let _soldResyncLastRun = null;
+
+async function runSoldTradesResyncBatch(limit, targetUserId) {
+  if (!pool) return { skipped: 'no_pool' };
+  limit = Math.min(50, Math.max(1, limit || SOLD_RESYNC_BATCH));
+  const startedAt = new Date().toISOString();
+
+  const affected = await dbQuery(`
+    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
+    FROM realized_trades rt
+    JOIN users u ON u.id = rt.user_id::text
+    WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
+    ORDER BY user_id
+    ${targetUserId ? '' : 'LIMIT ' + limit}
+  `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
+  if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
+
+  const results = [];
+  let fixed = 0, failed = 0, oldRowsDeleted = 0;
+  for (const u of affected) {
+    if (!u.polymarket_address) { results.push({ user_id: u.user_id.slice(0, 8), skipped: 'no_proxy_address' }); continue; }
+    try {
+      const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
+      oldRowsDeleted += deleted.length;
+      const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
+      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); failed++; continue; }
+      const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
+      fixed++;
+      results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, backfill: backfillResult });
+    } catch (e) {
+      failed++;
+      results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
+    }
+    await new Promise(r => setTimeout(r, SOLD_RESYNC_THROTTLE_MS));
+  }
+  return { startedAt, finishedAt: new Date().toISOString(), wallets_processed: affected.length, fixed, failed, old_rows_deleted: oldRowsDeleted, results };
+}
+
+// Every 15 min, 25 wallets/tick — 1,576-wallet backlog clears in
+// ~16 hours (63 ticks) without anyone running a single curl. Subsequent
+// ticks only pick up wallets that traded again after this fix shipped
+// (i.e. the same wallet can re-appear in the WHERE clause if it hits the
+// pre-fix code path again before the cron catches it — harmless, DELETE +
+// resync is idempotent).
+cron.schedule('*/15 * * * *', () => {
+  if (_soldResyncRunning) return;
+  console.log(`[sold-resync] cron fired at ${new Date().toISOString()}`);
+  _soldResyncRunning = true;
+  runSoldTradesResyncBatch(SOLD_RESYNC_BATCH, null)
+    .then(r => { _soldResyncLastRun = r; console.log(`[sold-resync] tick done — fixed=${r.fixed} failed=${r.failed} old_rows_deleted=${r.old_rows_deleted}`); })
+    .catch(e => { _soldResyncLastRun = { error: e.message, finishedAt: new Date().toISOString() }; })
+    .finally(() => { _soldResyncRunning = false; });
+});
+
+//   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
+//   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                              (dry run — counts only)
+//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1"            (execute one batch now, next 25)
+//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1&user_id=X"  (execute for one specific wallet)
+app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.json({ error: 'no_pool' });
-    const confirm = req.query.confirm === '1';
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 15));
-    const targetUserId = req.query.user_id ? String(req.query.user_id) : null;
-
     const totalsRows = await dbQuery(`
       SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
       FROM realized_trades rt
       WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
-    `).catch(e => { console.error('[resync-sold-trades] totals error:', e.message); return null; });
-    if (totalsRows == null) return res.status(500).json({ error: 'totals query failed' });
+    `).catch(() => []);
+    res.json({
+      running: _soldResyncRunning,
+      last_run: _soldResyncLastRun,
+      wallets_remaining: totalsRows[0] ? totalsRows[0].wallets : null,
+      old_format_rows_remaining: totalsRows[0] ? totalsRows[0].rows : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-    const affected = await dbQuery(`
-      SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
-      FROM realized_trades rt
-      JOIN users u ON u.id = rt.user_id::text
-      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
-        ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-      ORDER BY user_id
-      ${targetUserId ? '' : 'LIMIT ' + limit}
-    `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[resync-sold-trades] scan error:', e.message); return null; });
-    if (affected == null) return res.status(500).json({ error: 'scan query failed' });
+app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const confirm = req.query.confirm === '1';
+    const limit = parseInt(req.query.limit, 10) || undefined;
+    const targetUserId = req.query.user_id ? String(req.query.user_id) : null;
 
     if (!confirm) {
+      const totalsRows = await dbQuery(`
+        SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
+        FROM realized_trades rt
+        WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      `).catch(e => { console.error('[resync-sold-trades] totals error:', e.message); return null; });
+      if (totalsRows == null) return res.status(500).json({ error: 'totals query failed' });
       return res.json({
         dry_run: true,
         wallets_affected_total: totalsRows[0] ? totalsRows[0].wallets : null,
         old_format_rows_total: totalsRows[0] ? totalsRows[0].rows : null,
-        wallets_in_next_batch: affected.length,
-        note: 'Add &confirm=1 to delete this batch\'s old-format rows and immediately re-run backfillRealizedTrades per wallet so correct per-segment rows repopulate in the same request. Re-callable — already-fixed wallets drop out of the WHERE clause.',
+        note: 'A cron already drains this backlog automatically (25 wallets/15min — see /api/admin/resync-sold-trades/status for progress). Add &confirm=1 here only if you want to force one batch right now instead of waiting for the next tick.',
       });
     }
 
-    const results = [];
-    for (const u of affected) {
-      if (!u.polymarket_address) { results.push({ user_id: u.user_id.slice(0, 8), skipped: 'no_proxy_address' }); continue; }
-      try {
-        const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
-        const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
-        const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
-        if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); continue; }
-        const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
-        const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
-        results.push({
-          user_id: u.user_id.slice(0, 8),
-          sold_rows_before: before[0] ? before[0].n : null,
-          old_format_deleted: deleted.length,
-          sold_rows_after: after[0] ? after[0].n : null,
-          backfill: backfillResult,
-        });
-      } catch (e) {
-        results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
-      }
-    }
-    res.json({ dry_run: false, wallets_processed: results.length, results });
+    const result = await runSoldTradesResyncBatch(limit, targetUserId);
+    res.json({ dry_run: false, ...result });
   } catch (e) {
     console.error('[resync-sold-trades]', e.message);
     res.status(500).json({ error: e.message });
