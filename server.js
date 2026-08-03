@@ -63906,7 +63906,7 @@ app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) =>
     const affected = await dbQuery(`
       SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
       FROM realized_trades rt
-      JOIN users u ON u.id = rt.user_id
+      JOIN users u ON u.id = rt.user_id::text
       WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
         ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
       ORDER BY rt.user_id
