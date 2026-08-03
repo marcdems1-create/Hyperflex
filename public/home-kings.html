@@ -55,8 +55,16 @@
   .king-row{display:flex;justify-content:center;}
   .cat-kings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
   .cat-kings-note{font-size:13.5px;line-height:1.6;color:var(--muted,rgba(240,240,245,.62));max-width:760px;margin:-4px 0 18px;}
+  .cat-king-item{display:flex;flex-direction:column;gap:8px;}
+  .cat-king-see{align-self:flex-end;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);text-decoration:none;transition:color .12s;}
+  .cat-king-see:hover{color:var(--ink);}
   .scroll-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;}
   .scroll-row > a{scroll-snap-align:start;}
+
+  /* ── same "new since last poll" flash used on /feed ── */
+  @keyframes flashIn{0%{box-shadow:0 0 0 2px var(--accent,var(--gold)),0 0 24px -2px var(--accent,var(--gold));}100%{box-shadow:0 0 0 0 transparent,0 0 0 0 transparent;}}
+  .tcard.flash{animation:flashIn 3s ease-out;}
+  @media (prefers-reduced-motion: reduce){.tcard.flash{animation:none;}}
 
   .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:14px;height:220px;width:100%;max-width:420px;}
@@ -140,44 +148,75 @@ document.getElementById('pasteBtn').addEventListener('click', function(){
 });
 document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('pasteBtn').click(); });
 
-fetch('/api/kings')
-  .then(function(r){ return r.ok ? r.json() : null; })
-  .then(function(d){
-    d = d || { overall: [], categories: [] };
+// Per-category accent — same palette as /feed's category rows, for the
+// flash glow and (implicitly) visual continuity between the two surfaces.
+var CAT_COLORS = {
+  world: '#a855f7', politics: '#4d9fff', macro: '#c9920d', sports: '#00e68a',
+  crypto: '#f59e0b', commodities: '#d97706', tech: '#38bdf8', entertainment: '#ff4d6a', weather: '#6b7280',
+};
+// Injects the flash class + accent color into a rendered .tcard string —
+// render() always opens with `<a class="tcard ...`, so a targeted replace
+// is simpler than teaching HFXTraderCard about a flash variant it has no
+// other use for.
+function flashify(html, isNew, color) {
+  if (!isNew) return html;
+  return html.replace('<a class="tcard', '<a style="--accent:' + color + '" class="tcard flash');
+}
 
-    var kingRow = document.getElementById('kingRow');
-    if (d.overall && d.overall.length) {
-      kingRow.innerHTML = HFXTraderCard.render(d.overall[0], 'hero');
-    } else {
-      kingRow.innerHTML = '<div class="empty">No wallet currently meets the minimum sample size (n&ge;10 durable resolved trades) to hold the #1 spot. Connect yours to be the first.</div>';
-    }
+var _prevKingId = null;
+var _prevCatKingIds = null; // category -> user_id, from the previous poll
 
-    var catSection = document.getElementById('catKingsSection');
-    var catGrid = document.getElementById('catKingsGrid');
-    if (d.categories && d.categories.length) {
-      catSection.style.display = '';
+function loadKings(){
+  fetch('/api/kings')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      d = d || { overall: [], categories: [] };
 
-      var note = document.getElementById('catKingsNote');
-      if (note) {
-        var cats = d.categories.length;
-        var pool = d.categories.reduce(function(s,k){ return s + (k.qualifying_count || 0); }, 0);
-        note.textContent = '#1 by return in each of ' + cats + ' categories, drawn from '
-          + pool + ' qualifying wallets. Ranked on realized return, not win rate — '
-          + 'a trader buying longshots can be well ahead while winning a minority of '
-          + 'their calls, so some category leaders hold a losing record. Every card shows its '
-          + 'W-L and sample size.';
+      var kingRow = document.getElementById('kingRow');
+      if (d.overall && d.overall.length) {
+        var kingId = d.overall[0].user_id;
+        var kingIsNew = _prevKingId !== null && kingId !== _prevKingId;
+        kingRow.innerHTML = flashify(HFXTraderCard.render(d.overall[0], 'hero'), kingIsNew, '#c9920d');
+        _prevKingId = kingId;
+      } else {
+        kingRow.innerHTML = '<div class="empty">No wallet currently meets the minimum sample size (n&ge;10 durable resolved trades) to hold the #1 spot. Connect yours to be the first.</div>';
       }
 
-      catGrid.innerHTML = d.categories.map(function(k){
-        var c = Object.assign({}, k.card);
-        c.verdict = k.label + ' · ' + c.wins + 'W-' + c.losses + 'L';
-        return HFXTraderCard.render(c, 'compact');
-      }).join('');
-    }
-  })
-  .catch(function(){
-    document.getElementById('kingRow').innerHTML = '<div class="empty">Could not load the current #1.</div>';
-  });
+      var catSection = document.getElementById('catKingsSection');
+      var catGrid = document.getElementById('catKingsGrid');
+      if (d.categories && d.categories.length) {
+        catSection.style.display = '';
+
+        var note = document.getElementById('catKingsNote');
+        if (note) {
+          var cats = d.categories.length;
+          var pool = d.categories.reduce(function(s,k){ return s + (k.qualifying_count || 0); }, 0);
+          note.textContent = '#1 by return in each of ' + cats + ' categories, drawn from '
+            + pool + ' qualifying wallets. Ranked on realized return, not win rate — '
+            + 'a trader buying longshots can be well ahead while winning a minority of '
+            + 'their calls, so some category leaders hold a losing record. Every card shows its '
+            + 'W-L and sample size.';
+        }
+
+        var newCatIds = {};
+        catGrid.innerHTML = d.categories.map(function(k){
+          var c = Object.assign({}, k.card);
+          c.verdict = k.label + ' · ' + c.wins + 'W-' + c.losses + 'L';
+          var color = CAT_COLORS[k.category] || '#c9920d';
+          var isNew = _prevCatKingIds && _prevCatKingIds[k.category] !== c.user_id;
+          newCatIds[k.category] = c.user_id;
+          var cardHtml = flashify(HFXTraderCard.render(c, 'compact'), isNew, color);
+          return '<div class="cat-king-item">' + cardHtml + '<a class="cat-king-see" href="/traders?category=' + encodeURIComponent(k.category) + '">See all →</a></div>';
+        }).join('');
+        _prevCatKingIds = newCatIds;
+      }
+    })
+    .catch(function(){
+      document.getElementById('kingRow').innerHTML = '<div class="empty">Could not load the current #1.</div>';
+    });
+}
+loadKings();
+setInterval(loadKings, 3 * 60 * 1000);
 
 /* ── hero proof rotator: same /api/trader-cards feed the Movers row uses
    below — real wins and losses, un-curated, so the hero can never show
@@ -202,19 +241,36 @@ function heroInitProof(cards){
   }
 }
 
-fetch('/api/trader-cards?limit=10')
-  .then(function(r){ return r.ok ? r.json() : null; })
-  .then(function(d){
-    var cards = (d && d.cards) || [];
-    document.getElementById('moversRow').innerHTML = cards.length
-      ? cards.map(function(c){ return HFXTraderCard.render(c, 'feed'); }).join('')
-      : '<div class="empty">No wallets currently meet the minimum sample size (n&ge;10 durable resolved trades) for a card.</div>';
-    heroInitProof(cards.filter(function(c){ return c.n >= 10; }));
-  })
-  .catch(function(){
-    document.getElementById('moversRow').innerHTML = '<div class="empty">Could not load the leaderboard.</div>';
-    heroProofEmpty();
-  });
+var _prevMoverIds = null; // Set of user_id, from the previous poll
+var _moversFirstLoad = true; // hero-proof rotator is seeded once, not re-armed on every refresh
+
+function loadMovers(){
+  fetch('/api/trader-cards?limit=10')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var cards = (d && d.cards) || [];
+      if (cards.length) {
+        var newIds = new Set(cards.map(function(c){ return c.user_id; }));
+        document.getElementById('moversRow').innerHTML = cards.map(function(c){
+          var isNew = _prevMoverIds && !_prevMoverIds.has(c.user_id);
+          return flashify(HFXTraderCard.render(c, 'feed'), isNew, '#4d9fff');
+        }).join('');
+        _prevMoverIds = newIds;
+      } else {
+        document.getElementById('moversRow').innerHTML = '<div class="empty">No wallets currently meet the minimum sample size (n&ge;10 durable resolved trades) for a card.</div>';
+      }
+      if (_moversFirstLoad) {
+        _moversFirstLoad = false;
+        heroInitProof(cards.filter(function(c){ return c.n >= 10; }));
+      }
+    })
+    .catch(function(){
+      document.getElementById('moversRow').innerHTML = '<div class="empty">Could not load the leaderboard.</div>';
+      if (_moversFirstLoad) { _moversFirstLoad = false; heroProofEmpty(); }
+    });
+}
+loadMovers();
+setInterval(loadMovers, 3 * 60 * 1000);
 </script>
 </body>
 </html>
