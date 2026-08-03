@@ -63909,7 +63909,7 @@ app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) =>
       JOIN users u ON u.id = rt.user_id::text
       WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
         ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-      ORDER BY rt.user_id
+      ORDER BY user_id
       ${targetUserId ? '' : 'LIMIT ' + limit}
     `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[resync-sold-trades] scan error:', e.message); return null; });
     if (affected == null) return res.status(500).json({ error: 'scan query failed' });
