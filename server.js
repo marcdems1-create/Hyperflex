@@ -63954,9 +63954,9 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
 // can re-appear in the WHERE clause if it hits the pre-fix code path
 // again before the cron catches it — harmless, DELETE + resync is
 // idempotent).
-cron.schedule('*/5 * * * *', () => {
+function fireSoldResyncTick(source) {
   if (_soldResyncRunning) return;
-  console.log(`[sold-resync] cron fired at ${new Date().toISOString()}`);
+  console.log(`[sold-resync] ${source} fired at ${new Date().toISOString()}`);
   _soldResyncRunning = true;
   runSoldTradesResyncBatch(SOLD_RESYNC_BATCH, null)
     .then(r => {
@@ -63967,11 +63967,22 @@ cron.schedule('*/5 * * * *', () => {
       _soldResyncCumulative.wallets_failed += r.failed || 0;
       _soldResyncCumulative.old_rows_deleted += r.old_rows_deleted || 0;
       _soldResyncCumulative.n_gained += r.n_gained || 0;
-      console.log(`[sold-resync] tick done — fixed=${r.fixed} failed=${r.failed} n_gained=${r.n_gained} (cumulative n_gained=${_soldResyncCumulative.n_gained})`);
+      console.log(`[sold-resync] tick done (${source}) — fixed=${r.fixed} failed=${r.failed} n_gained=${r.n_gained} (cumulative n_gained=${_soldResyncCumulative.n_gained})`);
     })
     .catch(e => { _soldResyncLastRun = { error: e.message, finishedAt: new Date().toISOString() }; })
     .finally(() => { _soldResyncRunning = false; });
-});
+}
+cron.schedule('*/5 * * * *', () => fireSoldResyncTick('cron'));
+// Also fire once immediately on boot rather than waiting for the next
+// clock-aligned */5 mark (node-cron ticks at :00/:05/:10..., not "5 min
+// after process start") — every Railway redeploy restarts this process,
+// so without this a deploy landing at :01 sits idle until :05 for zero
+// reason, and worse, a run of several deploys in quick succession (as
+// happened shipping this exact fix) can leave the cron looking like it
+// "never fires" when it's really just never survived long enough to hit
+// its own mark. 5s delay, not 0, so this doesn't compete with whatever
+// else fires synchronously at boot.
+setTimeout(() => fireSoldResyncTick('boot'), 5000);
 
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                              (dry run — counts only)
