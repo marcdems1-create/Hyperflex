@@ -49,6 +49,22 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-03c (✅ SHIPPED — resync-sold-trades: two real query bugs found live, fixed, then made self-driving. Confirmed real scale: 1,576 wallets / 41,356 old-format rows.)
+
+Follow-up to 2026-08-03b's audit finding. Marc ran the dry-run curl and hit two SEPARATE real bugs in my own new endpoint, one at a time:
+
+1. **`{"error":"scan query failed"}` (1st)** — the scan query joined `u.id = rt.user_id` with no cast. Postgres has no implicit text=uuid operator; `users.id` is TEXT in this schema (documented gotcha already on record at `/api/admin/durable-market-scope`, server.js:63644). Fixed to `ON u.id = rt.user_id::text`, matching that endpoint's exact working idiom. Shipped (`a307a15`) — **did not fix it.**
+2. **`{"error":"scan query failed"}` (2nd, same message)** — a second, independent bug: `SELECT DISTINCT rt.user_id::text AS user_id ... ORDER BY rt.user_id` — Postgres requires ORDER BY expressions in a DISTINCT query to match a select-list item exactly, and `rt.user_id` (raw uuid) ≠ `rt.user_id::text` (cast). Fixed to `ORDER BY user_id` (the output alias). **This time verified before shipping, not just reasoned about**: installed a real local Postgres 16 via Homebrew (libpq only ships client tools — had to `brew install postgresql@16`, hit two more real obstacles getting it running locally: a macOS fork-safety crash worked around via `LC_ALL=C`, and a Unix-socket-path-length limit worked around by using `/tmp` instead of the scratchpad path), built a throwaway schema matching the real column types, and ran the literal query text copied from server.js. All 5 queries (totals, both scan-query branches, delete, after-count) ran clean. Shipped (`ceeb50c`) — this one held.
+
+**Real prevalence, confirmed via the now-working dry run: 1,576 wallets, 41,356 old-format sold-path rows platform-wide.** This is not a rare edge case — validates the 2026-08-03b finding at real scale.
+
+**Made it self-driving (`173e50e`)** rather than requiring ~105 manual batch curls to drain: extracted `runSoldTradesResyncBatch()`, wired a cron (every 15 min, 25 wallets/tick, ~16h to fully clear — same shape as the existing `runWhaleBackfillBatch` pattern a few hundred lines up in the same file), added `GET /api/admin/resync-sold-trades/status` for progress checks. The original endpoint still works for on-demand single-wallet fixes (`?confirm=1&user_id=X`).
+
+**Lesson for next time this shape of fix comes up:** two misses in a row on hand-reasoned SQL was the signal to stop guessing and actually run it. A local Postgres is available in this environment (not by default, but `brew install postgresql@16` works, ~90s) — worth reaching for earlier when a query is non-trivial (DISTINCT/ORDER BY interactions, type casts across a schema with known quirks like `users.id` being TEXT) rather than after two failed live attempts.
+
+**Active blockers:**
+- Cron is now draining the backlog automatically (started ~2026-08-03, should clear by ~2026-08-04). Check `GET /api/admin/resync-sold-trades/status` to confirm it's progressing / eventually reaches `wallets_remaining: 0`. Scores for affected wallets will shift as this runs (upward for n, mixed for score_pct/durability) — expected, not a regression.
+
 ## 2026-08-03b (⛔ REAL BUG FOUND + FIXED — sold-path round-trip aggregation silently dropped repeat trades on the same market forever. Marc: "AUDIT THE SCORING MECHANISM SEE IF THERES any bugs.")
 
 **Read the whole scoring pipeline top to bottom** (`_computeRoiLeaderboard`, `_buildTraderCards`, `_computeCategoryRoiLeaderboards`, `classifyMarketDurability`, the redeemed-path settlement verification, and `backfillRealizedTrades` — the sold-path ingestion, 98% of platform volume). The redeemed path checked out clean (already hardened by the 2026-07-28/29 fixes — `_parseOutcomeSettlement` correctly requires gamma's `closed===true`, `market_settlement_cache` has exactly one writer and it's properly gated, the retired `regradeRedeemedTrades` is genuinely dead code behind an early `return`). The sold path had a real, previously-undiscovered bug.
