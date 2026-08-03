@@ -90,6 +90,27 @@
   .category-stub a{color:var(--blue);text-decoration:none;}
   .category-stub a:hover{text-decoration:underline;}
 
+  /* ── category browse: rule 4's "never a dead end" for non-qualifying
+     wallets — real live markets, grouped by topic, so there's an actual
+     next action instead of a paragraph pointing at the leaderboard. ── */
+  .cat-browse{margin-top:20px;}
+  .cat-browse-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:4px;}
+  .cat-browse-sub{font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;}
+  .cat-browse-hint{font-size:13px;color:#4d9fff;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);border-radius:10px;padding:12px 16px;margin-bottom:14px;line-height:1.5;}
+  .cat-chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:none;}
+  .cat-chips::-webkit-scrollbar{display:none;}
+  .cat-chip{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:#111118;border:1px solid var(--border);border-radius:20px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:color .12s,border-color .12s,background .12s;}
+  .cat-chip:hover{color:var(--ink);border-color:rgba(240,240,245,.3);}
+  .cat-chip.active{color:#0e0e15;background:#fff;border-color:#fff;}
+  .cat-market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+  .cat-market-card{display:block;background:#111118;border:1px solid var(--border);border-radius:10px;overflow:hidden;text-decoration:none;color:var(--ink);transition:border-color .15s,transform .15s;}
+  .cat-market-card:hover{border-color:rgba(240,240,245,.3);transform:translateY(-2px);}
+  .cmc-img{height:84px;background-size:cover;background-position:center;background-color:#1a1a22;}
+  .cmc-body{padding:10px 12px;}
+  .cmc-q{font-size:12.5px;font-weight:600;line-height:1.35;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:33px;}
+  .cmc-meta{display:flex;justify-content:space-between;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .cmc-price{font-weight:700;color:var(--green);}
+
   .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:10px;height:80px;}
   @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -614,11 +635,10 @@ function renderVerified(p){
   }
 
   // Non-qualifying wallets get a pointed next step per CLAUDE.md rule 4 —
-  // never a dead end. Category-filtered market discovery itself (which
-  // durable-market categories to surface, layout) is a separate build not
-  // done in this pass — this is an honest placeholder, not a silent gap.
+  // never a dead end. Real live markets, grouped by topic, loaded async
+  // below (loadCategoryBrowse) so the rest of the record paints first.
   if (!eligible) {
-    html += '<div class="category-stub">Building toward 10 durable resolved trades? Durable markets — politics, macro, geopolitical, long-horizon futures — are the ones that count toward your score. Browse the current leaderboard at <a href="/traders">/traders</a> to see what a qualifying record looks like. A dedicated by-category market browse for non-qualifying wallets is next up, not yet built.</div>';
+    html += '<div id="categoryBrowse"></div>';
   }
 
   html += '<div class="p-section"><div class="p-section-title">Full trade history</div>'
@@ -690,6 +710,77 @@ function renderVerified(p){
   renderHistory();
 
   loadSimilarTraders(p.username || p.polymarket_address || p.user_id);
+  if (!eligible) loadCategoryBrowse(p);
+}
+
+// ── Category browse (rule 4) ──────────────────────────────────────────
+// /api/topics is the SAME already-live grouping (hot-markets topic
+// classifier) that powers /explore's topic dashboard — reused as-is
+// rather than inventing a second live-market taxonomy alongside it.
+function loadCategoryBrowse(p){
+  var el = document.getElementById('categoryBrowse');
+  if (!el) return;
+  el.innerHTML = '<div class="cat-browse"><div class="skel" style="height:160px;"></div></div>';
+
+  fetch('/api/topics?limit=60')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var topics = (d && d.topics) || [];
+      if (!topics.length) { el.innerHTML = '<div class="category-stub">Markets are warming up — check back shortly, or browse the current leaderboard at <a href="/traders">/traders</a>.</div>'; return; }
+
+      // Personalization: if the wallet already has open positions, the
+      // topic they show up in most is the default tab — "you're already
+      // here" beats a cold "pick a topic" prompt. Works even at ZERO
+      // resolved trades (the common non-qualifying case) because this
+      // reads open_positions[].topic, not the resolved-trade history.
+      var topicCounts = {};
+      (p.open_positions || []).forEach(function(o){ if (o.topic) topicCounts[o.topic] = (topicCounts[o.topic] || 0) + 1; });
+      var topWalletTopic = Object.keys(topicCounts).sort(function(a,b){ return topicCounts[b]-topicCounts[a]; })[0] || null;
+      var defaultTopic = topics.some(function(t){ return t.topic === topWalletTopic; }) ? topWalletTopic : topics[0].topic;
+
+      function renderGrid(topic){
+        var group = topics.filter(function(t){ return t.topic === topic; })[0];
+        var markets = (group ? group.markets : []).slice(0, 8);
+        document.getElementById('catMarketGrid').innerHTML = markets.length
+          ? markets.map(function(m){
+              var q = m.market_question || m.event_title || '';
+              var price = m.yes_price != null ? Math.round(m.yes_price * 100) + '¢' : null;
+              var img = m.image || m.event_image_url;
+              return '<a class="cat-market-card" href="'+esc(m.cta_href || ('/market/'+m.slug))+'">'
+                + '<div class="cmc-img" style="'+(img ? 'background-image:url('+JSON.stringify(img)+')' : '')+'"></div>'
+                + '<div class="cmc-body"><div class="cmc-q">'+esc(q.slice(0,90))+'</div>'
+                + '<div class="cmc-meta"><span>'+esc(m.volume_24h_label || '')+'</span>'+(price ? '<span class="cmc-price">'+esc(price)+' YES</span>' : '')+'</div></div>'
+              + '</a>';
+            }).join('')
+          : '<div class="hist-count">No live markets in this topic right now.</div>';
+      }
+
+      var hint = topWalletTopic
+        ? '<div class="cat-browse-hint">You already have open positions in <b>'+esc(topWalletTopic)+'</b> — more below.</div>'
+        : '';
+
+      el.innerHTML = '<div class="cat-browse">'
+        + '<div class="cat-browse-title">Build toward a ranked record</div>'
+        + '<div class="cat-browse-sub">Durable markets — resolving weeks or months out — are what count toward your score. Browse by topic and place a trade to start building yours.</div>'
+        + hint
+        + '<div class="cat-chips" id="catChips">' + topics.map(function(t){
+            return '<button class="cat-chip'+(t.topic===defaultTopic?' active':'')+'" data-topic="'+esc(t.topic)+'">'+esc(t.topic)+' ('+t.count+')</button>';
+          }).join('') + '</div>'
+        + '<div class="cat-market-grid" id="catMarketGrid"></div>'
+      + '</div>';
+
+      renderGrid(defaultTopic);
+      document.getElementById('catChips').addEventListener('click', function(e){
+        var btn = e.target.closest('.cat-chip');
+        if (!btn) return;
+        document.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderGrid(btn.dataset.topic);
+      });
+    })
+    .catch(function(){
+      el.innerHTML = '<div class="category-stub">Couldn\'t load live markets right now. Browse the current leaderboard at <a href="/traders">/traders</a> instead.</div>';
+    });
 }
 
 // ── Equity curve ───────────────────────────────────────────────────────
