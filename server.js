@@ -46941,9 +46941,23 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       return ta - tb;
     });
 
-    const lots = []; // { shares, price }
-    let totalCost = 0, totalProceeds = 0, totalSharesClosed = 0;
-    let firstOpenAt = null, lastCloseAt = null;
+    // ── Split into per-round-trip SEGMENTS, not one aggregate for the whole
+    // group. Bug found 2026-08-03 auditing the scoring pipeline: a group is
+    // every event ever seen for this (condId, outcome), with no time
+    // scoping. The old code ran ONE FIFO pass over the whole group and
+    // inserted ONE row — two independent round-trips (buy/sell/buy/sell)
+    // silently blended into a single blended trade, understating n (which
+    // feeds the n>=10 qualifying floor and the n/(n+K) shrinkage weight)
+    // and computing market_durability off the AGGREGATE first-buy-to-
+    // last-sell span instead of each round-trip's real (often much
+    // shorter) duration — a wallet doing genuinely rapid, ephemeral-style
+    // round-trips on one market over months could show a multi-month span
+    // and get misclassified 'durable'. A segment boundary is "lots
+    // returned to flat" — the next BUY after that starts a fresh segment. ──
+    let lots = []; // { shares, price }
+    const segments = [];
+    let seg = null;
+    function freshSeg() { return { totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null }; }
 
     for (const t of group.events) {
       const side = String(t.side || '').toUpperCase();
@@ -46953,61 +46967,69 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       if (shares <= 0) continue;
 
       if (side === 'BUY') {
-        if (!firstOpenAt) firstOpenAt = ts;
+        if (!seg) seg = freshSeg();
+        if (!seg.firstOpenAt) seg.firstOpenAt = ts;
         lots.push({ shares, price });
       } else if (side === 'SELL') {
+        if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
         let remaining = shares;
         while (remaining > 0 && lots.length > 0) {
           const lot = lots[0];
           const take = Math.min(lot.shares, remaining);
-          totalCost += take * lot.price;
-          totalProceeds += take * price;
-          totalSharesClosed += take;
+          seg.totalCost += take * lot.price;
+          seg.totalProceeds += take * price;
+          seg.totalSharesClosed += take;
           remaining -= take;
           lot.shares -= take;
           if (lot.shares <= 0.0000001) lots.shift();
         }
-        lastCloseAt = ts;
+        seg.lastCloseAt = ts;
+        if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
       }
     }
 
-    if (totalSharesClosed <= 0) continue;
-    resolvedCount++;
+    for (const s of segments) {
+      if (s.totalSharesClosed <= 0) continue;
+      resolvedCount++;
 
-    const realizedPnl = +(totalProceeds - totalCost).toFixed(4);
-    const realizedRoi = totalCost > 0 ? +(realizedPnl / totalCost).toFixed(6) : null;
-    const avgEntryPrice = +(totalCost / totalSharesClosed).toFixed(4);
-    const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
-    const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
-    // external_sync_id must be scoped per user — it was 'pm-act:<condId>:<outcome>'
-    // with NO user component, but the UNIQUE constraint on this column is
-    // table-wide, not per-user. Any two users who both traded the same
-    // market+outcome collided: whoever inserted first silently "owned" that
-    // slot forever via ON CONFLICT DO NOTHING, and every other user's real
-    // trade on that same market+outcome was dropped with zero error. Found
-    // 2026-07-23 investigating a wallet with 59 resolved sold-path groups
-    // and 0 imported — see /api/admin/migrate-external-sync-id-scope for the
-    // one-time backfill that fixes already-collided rows.
-    const externalSyncId = `pm-act:${userId}:${group.condId}:${group.outcome}`;
-    const marketDurability = classifyMarketDurability(group.question, firstOpenAt, lastCloseAt);
+      const realizedPnl = +(s.totalProceeds - s.totalCost).toFixed(4);
+      const realizedRoi = s.totalCost > 0 ? +(realizedPnl / s.totalCost).toFixed(6) : null;
+      const avgEntryPrice = +(s.totalCost / s.totalSharesClosed).toFixed(4);
+      const avgExitPrice = +(s.totalProceeds / s.totalSharesClosed).toFixed(4);
+      const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
+      // 'pm-act2:' (not 'pm-act:') — deliberately a new prefix, not a new
+      // suffix on the old key shape. The old key (`pm-act:user:cond:
+      // outcome`, no per-segment component) still exists in the DB for
+      // every wallet backfilled before this fix; reusing its prefix with
+      // an added suffix risks an old aggregate row and new segment rows
+      // silently double-counting the same underlying trades if both keys
+      // ever coexist. A distinct prefix makes old-format rows trivially
+      // identifiable (LIKE 'pm-act:%') for the one-time corrective
+      // resync (/api/admin/resync-sold-trades) rather than requiring
+      // fragile parsing to tell old 4-part keys from new 5-part ones —
+      // especially since the new suffix is an ISO timestamp, which
+      // contains colons itself.
+      const externalSyncId = `pm-act2:${userId}:${group.condId}:${group.outcome}:${s.lastCloseAt}`;
+      const marketDurability = classifyMarketDurability(group.question, s.firstOpenAt, s.lastCloseAt);
 
-    try {
-      const result = await dbQuery(
-        `INSERT INTO realized_trades (
-          user_id, polymarket_address, condition_id, token_id, market_question, side,
-          shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
-          realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-        ON CONFLICT (external_sync_id) DO NOTHING
-        RETURNING id`,
-        [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
-         +totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
-         +totalCost.toFixed(4), +totalProceeds.toFixed(4),
-         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId, marketDurability]
-      );
-      if (result.length) imported++;
-    } catch (e) {
-      console.warn('[backfillRealizedTrades] insert', externalSyncId, e.message);
+      try {
+        const result = await dbQuery(
+          `INSERT INTO realized_trades (
+            user_id, polymarket_address, condition_id, token_id, market_question, side,
+            shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          ON CONFLICT (external_sync_id) DO NOTHING
+          RETURNING id`,
+          [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
+           +s.totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
+           +s.totalCost.toFixed(4), +s.totalProceeds.toFixed(4),
+           realizedPnl, realizedRoi, s.firstOpenAt, s.lastCloseAt, closeReason, externalSyncId, marketDurability]
+        );
+        if (result.length) imported++;
+      } catch (e) {
+        console.warn('[backfillRealizedTrades] insert', externalSyncId, e.message);
+      }
     }
   }
 
@@ -63827,6 +63849,105 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
     });
   } catch (e) {
     console.error('[migrate-external-sync-id-scope]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── FIX: POST /api/admin/resync-sold-trades ──────────────────────────────
+// One-time repair for the round-trip-aggregation bug found 2026-08-03
+// auditing the scoring pipeline: backfillRealizedTrades used to run ONE
+// FIFO pass over EVERY buy/sell event ever seen for a (condition_id,
+// outcome) pair and insert ONE aggregate row under a non-time-scoped
+// external_sync_id ('pm-act:user:cond:outcome') — so a wallet's SECOND
+// (and any later) round-trip on a market it had already traded was
+// silently dropped forever via ON CONFLICT DO NOTHING. This understated n
+// (which feeds both the n>=10 qualifying floor and the n/(n+K) shrinkage
+// weight) and computed market_durability off the aggregate first-buy-to-
+// last-sell span instead of each round-trip's real duration — a wallet
+// doing genuinely rapid, ephemeral-style round-trips on one market over
+// months could show a multi-month span and get misclassified 'durable'.
+//
+// The code fix (same commit) splits each group into per-round-trip
+// segments under a new 'pm-act2:' prefixed key (distinct prefix, not a
+// suffix on the old shape — the old key has no per-segment component, and
+// the new suffix is an ISO timestamp which itself contains colons, so
+// reliably telling old 4-part keys from new ones by parsing would be
+// fragile; a different prefix makes it unambiguous). This endpoint finds
+// every wallet still carrying OLD-format ('pm-act:%') sold-path rows,
+// deletes them, and immediately re-runs backfillRealizedTrades so the
+// correct per-segment rows repopulate in the SAME request — never leaves
+// a wallet's score silently blank waiting for a lazy re-trigger on next
+// profile view.
+//
+// Dry-run by default (?confirm=1 to execute). ?user_id=X targets one
+// wallet. ?limit=N caps how many wallets one call processes (default 15 —
+// backfillRealizedTrades makes real Polymarket API calls per wallet, so a
+// large batch in one request risks timing out); re-callable — already-
+// migrated wallets (no more pm-act:% sold rows) drop out of the WHERE
+// clause each time, so repeated calls drain the backlog without
+// reprocessing finished wallets.
+//
+//   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                    (dry run — counts only)
+//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1"  (execute — next 15 wallets)
+app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const confirm = req.query.confirm === '1';
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 15));
+    const targetUserId = req.query.user_id ? String(req.query.user_id) : null;
+
+    const totalsRows = await dbQuery(`
+      SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
+      FROM realized_trades rt
+      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+    `).catch(e => { console.error('[resync-sold-trades] totals error:', e.message); return null; });
+    if (totalsRows == null) return res.status(500).json({ error: 'totals query failed' });
+
+    const affected = await dbQuery(`
+      SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
+      FROM realized_trades rt
+      JOIN users u ON u.id = rt.user_id
+      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+        ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
+      ORDER BY rt.user_id
+      ${targetUserId ? '' : 'LIMIT ' + limit}
+    `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[resync-sold-trades] scan error:', e.message); return null; });
+    if (affected == null) return res.status(500).json({ error: 'scan query failed' });
+
+    if (!confirm) {
+      return res.json({
+        dry_run: true,
+        wallets_affected_total: totalsRows[0] ? totalsRows[0].wallets : null,
+        old_format_rows_total: totalsRows[0] ? totalsRows[0].rows : null,
+        wallets_in_next_batch: affected.length,
+        note: 'Add &confirm=1 to delete this batch\'s old-format rows and immediately re-run backfillRealizedTrades per wallet so correct per-segment rows repopulate in the same request. Re-callable — already-fixed wallets drop out of the WHERE clause.',
+      });
+    }
+
+    const results = [];
+    for (const u of affected) {
+      if (!u.polymarket_address) { results.push({ user_id: u.user_id.slice(0, 8), skipped: 'no_proxy_address' }); continue; }
+      try {
+        const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
+        const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
+        const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
+        if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); continue; }
+        const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
+        const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
+        results.push({
+          user_id: u.user_id.slice(0, 8),
+          sold_rows_before: before[0] ? before[0].n : null,
+          old_format_deleted: deleted.length,
+          sold_rows_after: after[0] ? after[0].n : null,
+          backfill: backfillResult,
+        });
+      } catch (e) {
+        results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
+      }
+    }
+    res.json({ dry_run: false, wallets_processed: results.length, results });
+  } catch (e) {
+    console.error('[resync-sold-trades]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
