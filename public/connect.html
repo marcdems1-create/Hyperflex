@@ -107,6 +107,10 @@
   .cat-market-card:hover{border-color:rgba(240,240,245,.3);transform:translateY(-2px);}
   .cmc-img{height:84px;background-size:cover;background-position:center;background-color:#1a1a22;}
   .cmc-body{padding:10px 12px;}
+  .cmc-why{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.03em;color:var(--muted);margin-bottom:6px;}
+  .cmc-why.is-positive{color:var(--green);}
+  .cmc-why.is-negative{color:var(--red);}
+  .cmc-why.is-warn{color:var(--amber);}
   .cmc-q{font-size:12.5px;font-weight:600;line-height:1.35;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:33px;}
   .cmc-meta{display:flex;justify-content:space-between;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
   .cmc-price{font-weight:700;color:var(--green);}
@@ -738,6 +742,24 @@ function loadCategoryBrowse(p){
       var topWalletTopic = Object.keys(topicCounts).sort(function(a,b){ return topicCounts[b]-topicCounts[a]; })[0] || null;
       var defaultTopic = topics.some(function(t){ return t.topic === topWalletTopic; }) ? topWalletTopic : topics[0].topic;
 
+      // A raw, factual reason to look twice — NOT a prediction or an edge
+      // score (that stays behind Gate 3 until it clears the accuracy bar).
+      // Price movement and time-to-resolution are observable facts already
+      // sitting unused on this same /api/topics tile, same discipline as
+      // /feed's Live Feed reasonFor().
+      function whyFor(m){
+        var chg = m.yes_price_change_7d != null ? Math.round(m.yes_price_change_7d * 100) : null;
+        if (chg != null && Math.abs(chg) >= 3) {
+          return { text: (chg > 0 ? '↑ Moved +' : '↓ Moved ') + chg + 'pt' + (Math.abs(chg) === 1 ? '' : 's') + ' this week', cls: chg > 0 ? 'is-positive' : 'is-negative' };
+        }
+        if (m.days_until_end != null && m.days_until_end <= 3) {
+          return { text: 'Closing soon — ' + m.days_until_end + 'd left', cls: 'is-warn' };
+        }
+        if (m.days_until_end != null) {
+          return { text: 'Resolves in ' + m.days_until_end + 'd', cls: '' };
+        }
+        return null;
+      }
       function renderGrid(topic){
         var group = topics.filter(function(t){ return t.topic === topic; })[0];
         var markets = (group ? group.markets : []).slice(0, 8);
@@ -746,9 +768,12 @@ function loadCategoryBrowse(p){
               var q = m.market_question || m.event_title || '';
               var price = m.yes_price != null ? Math.round(m.yes_price * 100) + '¢' : null;
               var img = m.image || m.event_image_url;
+              var why = whyFor(m);
               return '<a class="cat-market-card" href="'+esc(m.cta_href || ('/market/'+m.slug))+'">'
                 + '<div class="cmc-img" style="'+(img ? 'background-image:url('+JSON.stringify(img)+')' : '')+'"></div>'
-                + '<div class="cmc-body"><div class="cmc-q">'+esc(q.slice(0,90))+'</div>'
+                + '<div class="cmc-body">'
+                + (why ? '<div class="cmc-why '+esc(why.cls)+'">'+esc(why.text)+'</div>' : '')
+                + '<div class="cmc-q">'+esc(q.slice(0,90))+'</div>'
                 + '<div class="cmc-meta"><span>'+esc(m.volume_24h_label || '')+'</span>'+(price ? '<span class="cmc-price">'+esc(price)+' YES</span>' : '')+'</div></div>'
               + '</a>';
             }).join('')
