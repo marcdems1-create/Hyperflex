@@ -13721,7 +13721,12 @@ async function _buildTraderProfile(user) {
     ephemeral_excluded_note: ephemeralExcludedCount > 0
       ? ephemeralExcludedCount + ' ephemeral-market trade' + (ephemeralExcludedCount === 1 ? '' : 's') + ' (5-min recurring binaries, parlays — cannot be independently verified against gamma) shown in the history below but excluded from the score above.'
       : null,
-    open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null })),
+    // topic (not classifyCardCategory's resolved-trade taxonomy) — same
+    // classifier /api/topics and /explore already use for LIVE markets, so
+    // a wallet with open-but-unresolved positions (the common case for a
+    // brand-new connect, per rule 4) still gets a real "you're already in
+    // X" signal even with zero durable resolved trades to draw on.
+    open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null, topic: hotMarkets.classifyTopic({ market_question: p.market_title }) })),
     open_positions_count: (openCountRow[0] && openCountRow[0].n) || openRows.length,
     void_note: 'Positions that could not be independently verified against Polymarket settlement data are excluded from this record rather than guessed at (see the redeemed-win correction fix, 2026-07-18). A wallet’s total on-chain activity may exceed the resolved-trade count shown here.',
   };
