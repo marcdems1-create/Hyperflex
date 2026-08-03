@@ -13350,6 +13350,141 @@ app.get('/api/kings', async (req, res) => {
   }
 });
 
+// ── GET /api/feed/category-wins ──────────────────────────────────────────
+// Public, no auth — the /feed page's "score wall": one row per market
+// category, most-liquid category first, each row a wall of real winning
+// trades. "Winning trades" means the specific WIN evidence line (bought at
+// X -> WON Yx) for a qualifying wallet's best trade IN THAT CATEGORY — not
+// the wallet's single overall best/worst trade _buildTraderCards already
+// picks (that can be a loss, or in a different category). Score+n still
+// travel with every entry (rule 3, non-negotiable) via the SAME
+// _buildTraderCards() call every other trader surface uses, so this can
+// never show a number the leaderboard/profile wouldn't back up.
+//
+// "Liquidity" here means total durable-trade capital (entry_cost_usd, win
+// AND loss) our own tracked wallets have deployed in that category — the
+// only real signal available without a separate live Polymarket
+// category-volume integration. Documented assumption, not Polymarket's own
+// category volume.
+app.get('/api/feed/category-wins', async (req, res) => {
+  try {
+    if (!pool) return res.json({ categories: [] });
+
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
+             entry_cost_usd, realized_pnl, realized_roi, closed_at
+      FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+    `).catch(e => { console.warn('[feed/category-wins] trade fetch error:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'trade query failed' });
+
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    const qualifyingIds = new Set(computed.rows.map(r => r.user_id));
+    const cards = await _buildTraderCards(computed.rows);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+    const cardByUser = new Map(cards.map(c => [c.user_id, c]));
+
+    // liquidity totals — every durable trade, win or loss, all wallets (not
+    // just qualifying ones) so a thin qualifying-set doesn't understate a
+    // category's real depth.
+    const liquidityByCat = new Map();
+    // best win per (category, user) among QUALIFYING wallets only.
+    const bestWinByCat = new Map(); // cat -> Map(user_id -> row)
+
+    for (const t of rows) {
+      const cat = classifyCardCategory(t.market_question);
+      if (cat === 'other') continue;
+      liquidityByCat.set(cat, (liquidityByCat.get(cat) || 0) + Number(t.entry_cost_usd));
+
+      const pnl = Number(t.realized_pnl);
+      if (pnl <= 0) continue;
+      if (!qualifyingIds.has(t.user_id)) continue;
+      if (!bestWinByCat.has(cat)) bestWinByCat.set(cat, new Map());
+      const byUser = bestWinByCat.get(cat);
+      const existing = byUser.get(t.user_id);
+      if (!existing || pnl > Number(existing.realized_pnl)) byUser.set(t.user_id, t);
+    }
+
+    const limit = Math.min(30, parseInt(req.query.limit, 10) || 16);
+    const categories = [...liquidityByCat.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, totalVolume]) => {
+        const byUser = bestWinByCat.get(cat);
+        const entries = byUser ? [...byUser.entries()]
+          .map(([userId, t]) => {
+            const card = cardByUser.get(userId);
+            if (!card) return null;
+            const pnl = Number(t.realized_pnl);
+            const roi = t.realized_roi != null ? Number(t.realized_roi) : null;
+            return {
+              user_id: userId, display_name: card.display_name, username: card.username,
+              polymarket_address: card.polymarket_address,
+              score_pct: card.score_pct, n: card.n, scope_label: card.scope_label,
+              win: {
+                question: t.market_question, side: (t.side || '').toUpperCase(),
+                entry_price: t.entry_price != null ? Number(t.entry_price) : null,
+                exit_price: t.exit_price != null ? Number(t.exit_price) : null,
+                roi_pct: roi != null ? Math.round(roi * 1000) / 10 : null,
+                multiplier: roi != null && roi >= 1 ? Math.round((1 + roi) * 10) / 10 : null,
+                pnl_usd: Math.round(pnl * 100) / 100,
+                closed_at: t.closed_at,
+              },
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => b.win.pnl_usd - a.win.pnl_usd)
+          .slice(0, limit) : [];
+        return {
+          category: cat,
+          label: cat.charAt(0).toUpperCase() + cat.slice(1),
+          total_volume_usd: Math.round(totalVolume),
+          entries,
+        };
+      })
+      .filter(c => c.entries.length >= 3); // thin categories with <3 real wins aren't a "wall"
+
+    res.json({ categories });
+  } catch (e) {
+    console.error('[feed/category-wins]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/category-leaderboard ────────────────────────────────────────
+// Public, no auth — backs the "See all →" link from each /feed category row
+// into /traders?category=X. Reuses _computeCategoryRoiLeaderboards() (the
+// exact same per-category computation /api/kings already draws its single
+// category king from) for the ranked list, then runs the SAME
+// _buildTraderCards() every other trader surface uses to get full cards
+// (verdict/evidence/form/streak) rather than inventing a second, thinner
+// card shape just for this view.
+app.get('/api/category-leaderboard', async (req, res) => {
+  try {
+    const category = String(req.query.category || '').toLowerCase();
+    if (!category || category === 'other') return res.status(400).json({ error: 'invalid category' });
+
+    const byCategory = await _computeCategoryRoiLeaderboards();
+    if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
+    const cat = byCategory[category];
+    if (!cat) return res.json({ category, label: category.charAt(0).toUpperCase() + category.slice(1), qualifying_count: 0, cards: [] });
+
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const rows = cat.leaderboard.slice(0, limit);
+    const cards = rows.length ? await _buildTraderCards(rows) : [];
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+
+    res.json({
+      category, label: category.charAt(0).toUpperCase() + category.slice(1),
+      qualifying_count: cat.qualifying_count, cards,
+    });
+  } catch (e) {
+    console.error('[category-leaderboard]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TRADER PROFILE ───────────────────────────────────────────────────────
 // Deep surface behind every trader card: full receipts (headline stats,
 // best/worst call side by side, per-category specialty breakdown, complete
@@ -13586,7 +13721,12 @@ async function _buildTraderProfile(user) {
     ephemeral_excluded_note: ephemeralExcludedCount > 0
       ? ephemeralExcludedCount + ' ephemeral-market trade' + (ephemeralExcludedCount === 1 ? '' : 's') + ' (5-min recurring binaries, parlays — cannot be independently verified against gamma) shown in the history below but excluded from the score above.'
       : null,
-    open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null })),
+    // topic (not classifyCardCategory's resolved-trade taxonomy) — same
+    // classifier /api/topics and /explore already use for LIVE markets, so
+    // a wallet with open-but-unresolved positions (the common case for a
+    // brand-new connect, per rule 4) still gets a real "you're already in
+    // X" signal even with zero durable resolved trades to draw on.
+    open_positions: openRows.map(p => ({ question: p.market_title, side: (p.side || '').toUpperCase(), probability: p.probability != null ? Number(p.probability) : null, topic: hotMarkets.classifyTopic({ market_question: p.market_title }) })),
     open_positions_count: (openCountRow[0] && openCountRow[0].n) || openRows.length,
     void_note: 'Positions that could not be independently verified against Polymarket settlement data are excluded from this record rather than guessed at (see the redeemed-win correction fix, 2026-07-18). A wallet’s total on-chain activity may exceed the resolved-trade count shown here.',
   };
@@ -46801,9 +46941,23 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       return ta - tb;
     });
 
-    const lots = []; // { shares, price }
-    let totalCost = 0, totalProceeds = 0, totalSharesClosed = 0;
-    let firstOpenAt = null, lastCloseAt = null;
+    // ── Split into per-round-trip SEGMENTS, not one aggregate for the whole
+    // group. Bug found 2026-08-03 auditing the scoring pipeline: a group is
+    // every event ever seen for this (condId, outcome), with no time
+    // scoping. The old code ran ONE FIFO pass over the whole group and
+    // inserted ONE row — two independent round-trips (buy/sell/buy/sell)
+    // silently blended into a single blended trade, understating n (which
+    // feeds the n>=10 qualifying floor and the n/(n+K) shrinkage weight)
+    // and computing market_durability off the AGGREGATE first-buy-to-
+    // last-sell span instead of each round-trip's real (often much
+    // shorter) duration — a wallet doing genuinely rapid, ephemeral-style
+    // round-trips on one market over months could show a multi-month span
+    // and get misclassified 'durable'. A segment boundary is "lots
+    // returned to flat" — the next BUY after that starts a fresh segment. ──
+    let lots = []; // { shares, price }
+    const segments = [];
+    let seg = null;
+    function freshSeg() { return { totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null }; }
 
     for (const t of group.events) {
       const side = String(t.side || '').toUpperCase();
@@ -46813,61 +46967,69 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       if (shares <= 0) continue;
 
       if (side === 'BUY') {
-        if (!firstOpenAt) firstOpenAt = ts;
+        if (!seg) seg = freshSeg();
+        if (!seg.firstOpenAt) seg.firstOpenAt = ts;
         lots.push({ shares, price });
       } else if (side === 'SELL') {
+        if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
         let remaining = shares;
         while (remaining > 0 && lots.length > 0) {
           const lot = lots[0];
           const take = Math.min(lot.shares, remaining);
-          totalCost += take * lot.price;
-          totalProceeds += take * price;
-          totalSharesClosed += take;
+          seg.totalCost += take * lot.price;
+          seg.totalProceeds += take * price;
+          seg.totalSharesClosed += take;
           remaining -= take;
           lot.shares -= take;
           if (lot.shares <= 0.0000001) lots.shift();
         }
-        lastCloseAt = ts;
+        seg.lastCloseAt = ts;
+        if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
       }
     }
 
-    if (totalSharesClosed <= 0) continue;
-    resolvedCount++;
+    for (const s of segments) {
+      if (s.totalSharesClosed <= 0) continue;
+      resolvedCount++;
 
-    const realizedPnl = +(totalProceeds - totalCost).toFixed(4);
-    const realizedRoi = totalCost > 0 ? +(realizedPnl / totalCost).toFixed(6) : null;
-    const avgEntryPrice = +(totalCost / totalSharesClosed).toFixed(4);
-    const avgExitPrice = +(totalProceeds / totalSharesClosed).toFixed(4);
-    const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
-    // external_sync_id must be scoped per user — it was 'pm-act:<condId>:<outcome>'
-    // with NO user component, but the UNIQUE constraint on this column is
-    // table-wide, not per-user. Any two users who both traded the same
-    // market+outcome collided: whoever inserted first silently "owned" that
-    // slot forever via ON CONFLICT DO NOTHING, and every other user's real
-    // trade on that same market+outcome was dropped with zero error. Found
-    // 2026-07-23 investigating a wallet with 59 resolved sold-path groups
-    // and 0 imported — see /api/admin/migrate-external-sync-id-scope for the
-    // one-time backfill that fixes already-collided rows.
-    const externalSyncId = `pm-act:${userId}:${group.condId}:${group.outcome}`;
-    const marketDurability = classifyMarketDurability(group.question, firstOpenAt, lastCloseAt);
+      const realizedPnl = +(s.totalProceeds - s.totalCost).toFixed(4);
+      const realizedRoi = s.totalCost > 0 ? +(realizedPnl / s.totalCost).toFixed(6) : null;
+      const avgEntryPrice = +(s.totalCost / s.totalSharesClosed).toFixed(4);
+      const avgExitPrice = +(s.totalProceeds / s.totalSharesClosed).toFixed(4);
+      const closeReason = realizedPnl > 0 ? 'sold-profit' : 'sold-loss';
+      // 'pm-act2:' (not 'pm-act:') — deliberately a new prefix, not a new
+      // suffix on the old key shape. The old key (`pm-act:user:cond:
+      // outcome`, no per-segment component) still exists in the DB for
+      // every wallet backfilled before this fix; reusing its prefix with
+      // an added suffix risks an old aggregate row and new segment rows
+      // silently double-counting the same underlying trades if both keys
+      // ever coexist. A distinct prefix makes old-format rows trivially
+      // identifiable (LIKE 'pm-act:%') for the one-time corrective
+      // resync (/api/admin/resync-sold-trades) rather than requiring
+      // fragile parsing to tell old 4-part keys from new 5-part ones —
+      // especially since the new suffix is an ISO timestamp, which
+      // contains colons itself.
+      const externalSyncId = `pm-act2:${userId}:${group.condId}:${group.outcome}:${s.lastCloseAt}`;
+      const marketDurability = classifyMarketDurability(group.question, s.firstOpenAt, s.lastCloseAt);
 
-    try {
-      const result = await dbQuery(
-        `INSERT INTO realized_trades (
-          user_id, polymarket_address, condition_id, token_id, market_question, side,
-          shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
-          realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-        ON CONFLICT (external_sync_id) DO NOTHING
-        RETURNING id`,
-        [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
-         +totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
-         +totalCost.toFixed(4), +totalProceeds.toFixed(4),
-         realizedPnl, realizedRoi, firstOpenAt, lastCloseAt, closeReason, externalSyncId, marketDurability]
-      );
-      if (result.length) imported++;
-    } catch (e) {
-      console.warn('[backfillRealizedTrades] insert', externalSyncId, e.message);
+      try {
+        const result = await dbQuery(
+          `INSERT INTO realized_trades (
+            user_id, polymarket_address, condition_id, token_id, market_question, side,
+            shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
+            realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          ON CONFLICT (external_sync_id) DO NOTHING
+          RETURNING id`,
+          [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
+           +s.totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
+           +s.totalCost.toFixed(4), +s.totalProceeds.toFixed(4),
+           realizedPnl, realizedRoi, s.firstOpenAt, s.lastCloseAt, closeReason, externalSyncId, marketDurability]
+        );
+        if (result.length) imported++;
+      } catch (e) {
+        console.warn('[backfillRealizedTrades] insert', externalSyncId, e.message);
+      }
     }
   }
 
@@ -61740,6 +61902,34 @@ if (pool) {
         winner_name TEXT,
         verified_at TIMESTAMPTZ DEFAULT now()
       )`).catch(() => {});
+
+      // ── PERMANENT RESOLUTION ARCHIVE ──────────────────────────────────
+      // Our own immutable record of every market's ACTUAL resolution,
+      // captured the moment we see gamma report it closed with a decisive
+      // winner. Built 2026-07-31 after the redeemed-fabrication audit found
+      // 341 of 534 conditions had AGED OUT of gamma's retention — meaning
+      // our ability to verify a trade decays over time because it depends
+      // on a third party keeping the data. This table removes that
+      // dependency: once a resolution is archived it's ours forever, so
+      // verification never again hits an "unverifiable — aged out" wall.
+      //
+      // Distinct from market_settlement_cache (which was poisoned by the
+      // pre-guard parser and got purged): this is written ONLY when gamma's
+      // own closed flag is true AND a decisive winner is parseable, and it
+      // is IMMUTABLE — first correct write wins, never overwritten. It is a
+      // record of truth, not a speculative cache.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_resolutions (
+        condition_id     TEXT PRIMARY KEY,
+        question         TEXT,
+        winner_name      TEXT,
+        winner_index     INTEGER,
+        winner_price     NUMERIC(8,6),
+        outcome_prices   TEXT,
+        gamma_closed     BOOLEAN,
+        first_archived_at TIMESTAMPTZ DEFAULT now(),
+        source           TEXT DEFAULT 'gamma'
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_market_resolutions_archived ON market_resolutions(first_archived_at DESC)`).catch(() => {});
       // users columns needed by backfill aggregate refresh
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_trade_count INTEGER DEFAULT 0`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS realized_roi_median NUMERIC`).catch(() => {});
@@ -62207,6 +62397,66 @@ function _parseOutcomeSettlement(m) {
     }
     return { price: price0, winnerName };
   } catch { return null; }
+}
+
+// ── Permanent resolution archive: capture + read ─────────────────────────
+// _archiveResolution is called on every gamma market object we already
+// fetch, so building the archive costs ZERO extra requests — it piggybacks
+// on reads the reconcilers/verifiers/backfill do anyway. Writes only a
+// gamma-closed, decisively-won market, immutably (ON CONFLICT DO NOTHING).
+// This is the mechanism that makes verification permanent: once here, a
+// resolution survives even after gamma drops it from retention.
+function _archiveResolution(conditionId, m) {
+  try {
+    if (!pool || !conditionId || !m || m.closed !== true) return;
+    const st = _parseOutcomeSettlement(m); // already requires closed===true + decisive
+    if (!st || !st.winnerName) return;
+    let winnerIndex = null;
+    try {
+      const prices = (typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices).map(parseFloat);
+      winnerIndex = prices.findIndex(p => !isNaN(p) && p > 0.95);
+    } catch {}
+    const pricesStr = typeof m.outcomePrices === 'string' ? m.outcomePrices : JSON.stringify(m.outcomePrices || null);
+    dbQuery(
+      `INSERT INTO market_resolutions
+         (condition_id, question, winner_name, winner_index, winner_price, outcome_prices, gamma_closed)
+       VALUES ($1,$2,$3,$4,$5,$6,true)
+       ON CONFLICT (condition_id) DO NOTHING`,
+      [String(conditionId).toLowerCase(), String(m.question || '').slice(0, 500),
+       st.winnerName, winnerIndex != null && winnerIndex >= 0 ? winnerIndex : null,
+       st.price, pricesStr]
+    ).catch(() => {});
+  } catch {}
+}
+
+// Flat gamma markets endpoint — measurably better retention than the
+// keyset endpoint (confirmed 2026-07-31: reached resolutions keyset had
+// already dropped). Returns the market object or null. Used by the archive
+// sweep so we capture as much as gamma still holds before it ages out.
+async function _fetchGammaFlatMarket(conditionId) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch('https://gamma-api.polymarket.com/markets?condition_ids=' + encodeURIComponent(conditionId),
+      { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const a = Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []);
+    return a.length ? a[0] : null;
+  } catch { return null; }
+}
+
+// Read the permanent archive first. Returns { winnerName, price } or null.
+// Verification/grading should prefer this over a live gamma fetch — it's
+// faster and, crucially, still answers for markets gamma has since dropped.
+async function getArchivedResolution(conditionId) {
+  if (!pool || !conditionId) return null;
+  const rows = await dbQuery(
+    `SELECT winner_name, winner_price FROM market_resolutions WHERE condition_id = $1`,
+    [String(conditionId).toLowerCase()]
+  ).catch(() => []);
+  if (!rows.length) return null;
+  return { winnerName: rows[0].winner_name, price: rows[0].winner_price != null ? Number(rows[0].winner_price) : null };
 }
 
 // Independently verifies a market's actual winning outcome via gamma before
@@ -63613,6 +63863,191 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
   }
 });
 
+// ── FIX: POST /api/admin/resync-sold-trades ──────────────────────────────
+// One-time repair for the round-trip-aggregation bug found 2026-08-03
+// auditing the scoring pipeline: backfillRealizedTrades used to run ONE
+// FIFO pass over EVERY buy/sell event ever seen for a (condition_id,
+// outcome) pair and insert ONE aggregate row under a non-time-scoped
+// external_sync_id ('pm-act:user:cond:outcome') — so a wallet's SECOND
+// (and any later) round-trip on a market it had already traded was
+// silently dropped forever via ON CONFLICT DO NOTHING. This understated n
+// (which feeds both the n>=10 qualifying floor and the n/(n+K) shrinkage
+// weight) and computed market_durability off the aggregate first-buy-to-
+// last-sell span instead of each round-trip's real duration — a wallet
+// doing genuinely rapid, ephemeral-style round-trips on one market over
+// months could show a multi-month span and get misclassified 'durable'.
+//
+// The code fix (same commit) splits each group into per-round-trip
+// segments under a new 'pm-act2:' prefixed key (distinct prefix, not a
+// suffix on the old shape — the old key has no per-segment component, and
+// the new suffix is an ISO timestamp which itself contains colons, so
+// reliably telling old 4-part keys from new ones by parsing would be
+// fragile; a different prefix makes it unambiguous). This endpoint finds
+// every wallet still carrying OLD-format ('pm-act:%') sold-path rows,
+// deletes them, and immediately re-runs backfillRealizedTrades so the
+// correct per-segment rows repopulate in the SAME request — never leaves
+// a wallet's score silently blank waiting for a lazy re-trigger on next
+// profile view.
+//
+// Dry-run by default (?confirm=1 to execute one batch synchronously — handy
+// for ?user_id=X to fix a single wallet on demand). The BULK backlog (1,576
+// wallets / 41,356 rows, measured live 2026-08-03) drains automatically via
+// a cron below — reprocessing that by hand would mean ~105 manual curls at
+// the old default batch size, which is exactly the kind of repetitive
+// terminal grind this project's own operating rules say to avoid. Same
+// self-driving-batch shape as runWhaleBackfillBatch a few hundred lines up
+// (run/status split, single in-memory "is it running" flag, cron tick).
+const SOLD_RESYNC_BATCH = 50;
+const SOLD_RESYNC_THROTTLE_MS = 400;
+let _soldResyncRunning = false;
+let _soldResyncLastRun = null;
+// Cumulative across every tick since this process booted — in-memory only,
+// resets on deploy/restart (the WHERE clause itself is the real source of
+// truth for "is the backlog drained," this is just a running scoreboard so
+// the fix's real impact — n actually going UP — is visible without having
+// to sum every tick's log line by hand).
+let _soldResyncCumulative = { started_at: null, ticks: 0, wallets_fixed: 0, wallets_failed: 0, old_rows_deleted: 0, n_gained: 0 };
+
+async function runSoldTradesResyncBatch(limit, targetUserId) {
+  if (!pool) return { skipped: 'no_pool' };
+  limit = Math.min(50, Math.max(1, limit || SOLD_RESYNC_BATCH));
+  const startedAt = new Date().toISOString();
+
+  const affected = await dbQuery(`
+    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
+    FROM realized_trades rt
+    JOIN users u ON u.id = rt.user_id::text
+    WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
+    ORDER BY user_id
+    ${targetUserId ? '' : 'LIMIT ' + limit}
+  `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
+  if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
+
+  const results = [];
+  let fixed = 0, failed = 0, oldRowsDeleted = 0, nGained = 0;
+  for (const u of affected) {
+    if (!u.polymarket_address) { results.push({ user_id: u.user_id.slice(0, 8), skipped: 'no_proxy_address' }); continue; }
+    try {
+      // Before/after n on THIS wallet's sold-path rows — the direct,
+      // provable measure of whether this actually fixed anything (n can
+      // only go up: segments split an aggregate, never merge one).
+      const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
+      const beforeN = before[0] ? before[0].n : 0;
+      const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
+      oldRowsDeleted += deleted.length;
+      const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
+      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); failed++; continue; }
+      const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
+      const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
+      const afterN = after[0] ? after[0].n : 0;
+      const gained = afterN - beforeN;
+      nGained += gained;
+      fixed++;
+      results.push({ user_id: u.user_id.slice(0, 8), sold_rows_before: beforeN, old_format_deleted: deleted.length, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
+    } catch (e) {
+      failed++;
+      results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
+    }
+    await new Promise(r => setTimeout(r, SOLD_RESYNC_THROTTLE_MS));
+  }
+  return { startedAt, finishedAt: new Date().toISOString(), wallets_processed: affected.length, fixed, failed, old_rows_deleted: oldRowsDeleted, n_gained: nGained, results };
+}
+
+// Every 5 min, 50 wallets/tick — 1,576-wallet backlog clears in
+// ~5.3 hours (32 ticks). Bumped from the initial 15min/25 once the real
+// scale was known (1,576 wallets / 41,356 rows, measured live
+// 2026-08-03) — bottleneck is Polymarket API latency per wallet, not our
+// DB, so this isn't meaningfully more aggressive against them, just less
+// idle time between ticks on our side. Subsequent ticks only pick up
+// wallets that traded again after this fix shipped (i.e. the same wallet
+// can re-appear in the WHERE clause if it hits the pre-fix code path
+// again before the cron catches it — harmless, DELETE + resync is
+// idempotent).
+function fireSoldResyncTick(source) {
+  if (_soldResyncRunning) return;
+  console.log(`[sold-resync] ${source} fired at ${new Date().toISOString()}`);
+  _soldResyncRunning = true;
+  runSoldTradesResyncBatch(SOLD_RESYNC_BATCH, null)
+    .then(r => {
+      _soldResyncLastRun = r;
+      if (!_soldResyncCumulative.started_at) _soldResyncCumulative.started_at = r.startedAt;
+      _soldResyncCumulative.ticks += 1;
+      _soldResyncCumulative.wallets_fixed += r.fixed || 0;
+      _soldResyncCumulative.wallets_failed += r.failed || 0;
+      _soldResyncCumulative.old_rows_deleted += r.old_rows_deleted || 0;
+      _soldResyncCumulative.n_gained += r.n_gained || 0;
+      console.log(`[sold-resync] tick done (${source}) — fixed=${r.fixed} failed=${r.failed} n_gained=${r.n_gained} (cumulative n_gained=${_soldResyncCumulative.n_gained})`);
+    })
+    .catch(e => { _soldResyncLastRun = { error: e.message, finishedAt: new Date().toISOString() }; })
+    .finally(() => { _soldResyncRunning = false; });
+}
+cron.schedule('*/5 * * * *', () => fireSoldResyncTick('cron'));
+// Also fire once immediately on boot rather than waiting for the next
+// clock-aligned */5 mark (node-cron ticks at :00/:05/:10..., not "5 min
+// after process start") — every Railway redeploy restarts this process,
+// so without this a deploy landing at :01 sits idle until :05 for zero
+// reason, and worse, a run of several deploys in quick succession (as
+// happened shipping this exact fix) can leave the cron looking like it
+// "never fires" when it's really just never survived long enough to hit
+// its own mark. 5s delay, not 0, so this doesn't compete with whatever
+// else fires synchronously at boot.
+setTimeout(() => fireSoldResyncTick('boot'), 5000);
+
+//   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
+//   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                              (dry run — counts only)
+//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1"            (execute one batch now, next 50)
+//   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1&user_id=X"  (execute for one specific wallet)
+app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const totalsRows = await dbQuery(`
+      SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
+      FROM realized_trades rt
+      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+    `).catch(() => []);
+    res.json({
+      running: _soldResyncRunning,
+      last_run: _soldResyncLastRun,
+      cumulative_since_boot: _soldResyncCumulative,
+      wallets_remaining: totalsRows[0] ? totalsRows[0].wallets : null,
+      old_format_rows_remaining: totalsRows[0] ? totalsRows[0].rows : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.all('/api/admin/resync-sold-trades', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const confirm = req.query.confirm === '1';
+    const limit = parseInt(req.query.limit, 10) || undefined;
+    const targetUserId = req.query.user_id ? String(req.query.user_id) : null;
+
+    if (!confirm) {
+      const totalsRows = await dbQuery(`
+        SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
+        FROM realized_trades rt
+        WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      `).catch(e => { console.error('[resync-sold-trades] totals error:', e.message); return null; });
+      if (totalsRows == null) return res.status(500).json({ error: 'totals query failed' });
+      return res.json({
+        dry_run: true,
+        wallets_affected_total: totalsRows[0] ? totalsRows[0].wallets : null,
+        old_format_rows_total: totalsRows[0] ? totalsRows[0].rows : null,
+        note: 'A cron already drains this backlog automatically (25 wallets/15min — see /api/admin/resync-sold-trades/status for progress). Add &confirm=1 here only if you want to force one batch right now instead of waiting for the next tick.',
+      });
+    }
+
+    const result = await runSoldTradesResyncBatch(limit, targetUserId);
+    res.json({ dry_run: false, ...result });
+  } catch (e) {
+    console.error('[resync-sold-trades]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/admin/durable-leaderboard-top10 ─────────────────────────────────
 // Minimal, read-only pull of the current durable leaderboard for hand-
 // verification against polymarket.com — same purpose as the 2026-07-21
@@ -63825,6 +64260,7 @@ app.post('/api/admin/fix-future-dated-trades', requireAdminSecret, async (req, r
 
     const del = await dbQuery(`DELETE FROM realized_trades WHERE closed_at > NOW() RETURNING id`);
 
+    _roiLbCache.clear(); // corrected board visible immediately, not after 120s TTL
     const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
     const afterIds = after ? new Set(after.rows.map(r => r.user_id)) : new Set();
 
@@ -63906,6 +64342,140 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[record-integrity]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── SCORE PREDICTIVENESS BACKTEST (the third act) ────────────────────────
+// Verified says the score is REAL. Permanent says we can always prove it.
+// This asks the only question that makes the score worth money: does it
+// PREDICT? If we rank traders by their score as of a past date T — using
+// ONLY trades that had closed before T — do the top-ranked ones actually
+// out-earn the bottom-ranked ones in the period AFTER T, on trades the
+// score never saw?
+//
+// The entire validity rests on no lookahead, enforced structurally:
+//   • score-at-T uses only trades with closed_at < T (weight decays toward
+//     T, not now — the exact _computeRoiLeaderboard formula, evaluated as
+//     of T).
+//   • forward return uses only trades with T ≤ closed_at < T+forward, a
+//     DISJOINT set the score at T could not have contained.
+//   • no survivorship filter — any wallet with enough before-trades to
+//     have a score AND enough after-trades to measure gets included, even
+//     if it later went quiet.
+//
+// Output: Spearman rank correlation (score-at-T vs forward ROI) and the
+// top-quartile-minus-bottom-quartile forward-return spread. Positive and
+// material ⇒ the score is forward-predictive ⇒ alpha, not a trophy.
+app.get('/api/admin/score-backtest', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const cutoffDays  = Math.min(365, Math.max(30, parseInt(req.query.cutoff_days, 10)  || 90));
+    const forwardDays = Math.min(365, Math.max(14, parseInt(req.query.forward_days, 10) || 90));
+    const minBefore   = Math.max(5,  parseInt(req.query.min_before, 10) || ROI_MIN_N_FLOOR);
+    const minAfter    = Math.max(3,  parseInt(req.query.min_after, 10)  || 5);
+
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, closed_at, entry_cost_usd, realized_roi
+      FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_roi IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0 AND closed_at IS NOT NULL
+    `).catch(e => { console.warn('[score-backtest] query:', e.message); return null; });
+    if (rows == null) return res.status(500).json({ error: 'query failed' });
+
+    const now = Date.now();
+    const T    = now - cutoffDays  * 86400000;   // scoring cutoff
+    const Tend = T   + forwardDays * 86400000;   // end of forward window
+    const cap = v => Math.min(Math.max(v, -1.0), ROI_CAP);
+
+    // Population weighted-ROI prior, computed ONLY from before-T trades
+    // (the shrinkage target the as-of-T score would have used).
+    let popNum = 0, popDen = 0;
+    const before = new Map(); // user -> { n, wnum, wden }
+    const after  = new Map(); // user -> { cost, num } (capital-weighted fwd ROI)
+    for (const r of rows) {
+      const ts = new Date(r.closed_at).getTime();
+      const cost = Number(r.entry_cost_usd);
+      const roi  = Number(r.realized_roi);
+      if (ts < T) {
+        const w = cost * Math.pow(0.5, ((T - ts) / 86400000) / ROI_HALF_LIFE_DAYS);
+        popNum += cap(roi) * w; popDen += w;
+        if (!before.has(r.user_id)) before.set(r.user_id, { n: 0, wnum: 0, wden: 0 });
+        const b = before.get(r.user_id); b.n++; b.wnum += cap(roi) * w; b.wden += w;
+      } else if (ts < Tend) {
+        if (!after.has(r.user_id)) after.set(r.user_id, { cost: 0, num: 0, n: 0 });
+        const a = after.get(r.user_id); a.cost += cost; a.num += roi * cost; a.n++;
+      }
+    }
+    const popWroi = popDen > 0 ? popNum / popDen : 0;
+
+    // Wallets with both a real as-of-T score and a measurable forward return.
+    const pts = [];
+    for (const [uid, b] of before) {
+      if (b.n < minBefore) continue;
+      const a = after.get(uid);
+      if (!a || a.n < minAfter || a.cost <= 0) continue;
+      const wroi   = b.wden > 0 ? b.wnum / b.wden : 0;
+      const shrunk = (b.n / (b.n + ROI_SHRINK_K)) * wroi + (ROI_SHRINK_K / (b.n + ROI_SHRINK_K)) * popWroi;
+      pts.push({ user_id: uid, score: shrunk, forward_roi: a.num / a.cost, n_before: b.n, n_after: a.n });
+    }
+
+    if (pts.length < 8) {
+      return res.json({ n_wallets: pts.length, note: 'Too few wallets with both a pre-T score and post-T trades at these thresholds to measure predictiveness. Try smaller cutoff_days/forward_days or lower min_before/min_after.' });
+    }
+
+    // Spearman = Pearson on average ranks.
+    const avgRanks = (key) => {
+      const idx = pts.map((p, i) => i).sort((x, y) => pts[x][key] - pts[y][key]);
+      const rank = new Array(pts.length);
+      let i = 0;
+      while (i < idx.length) {
+        let j = i; while (j + 1 < idx.length && pts[idx[j + 1]][key] === pts[idx[i]][key]) j++;
+        const r = (i + j) / 2 + 1;
+        for (let k = i; k <= j; k++) rank[idx[k]] = r;
+        i = j + 1;
+      }
+      return rank;
+    };
+    const rs = avgRanks('score'), rf = avgRanks('forward_roi');
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const ms = mean(rs), mf = mean(rf);
+    let num = 0, ds = 0, df = 0;
+    for (let i = 0; i < pts.length; i++) { const a = rs[i] - ms, b = rf[i] - mf; num += a * b; ds += a * a; df += b * b; }
+    const spearman = (ds > 0 && df > 0) ? num / Math.sqrt(ds * df) : 0;
+
+    // Quartile spread: mean forward ROI of top-score quartile vs bottom.
+    const byScore = [...pts].sort((a, b) => a.score - b.score);
+    const q = Math.max(1, Math.floor(byScore.length / 4));
+    const botFwd = mean(byScore.slice(0, q).map(p => p.forward_roi));
+    const topFwd = mean(byScore.slice(-q).map(p => p.forward_roi));
+    const allFwd = mean(pts.map(p => p.forward_roi));
+
+    const pct = x => Math.round(x * 1000) / 10;
+    res.json({
+      cutoff_days: cutoffDays, forward_days: forwardDays, min_before: minBefore, min_after: minAfter,
+      n_wallets: pts.length,
+      spearman_score_vs_forward_roi: Math.round(spearman * 1000) / 1000,
+      top_quartile_forward_roi_pct: pct(topFwd),
+      bottom_quartile_forward_roi_pct: pct(botFwd),
+      quartile_spread_pct: pct(topFwd - botFwd),
+      all_wallet_avg_forward_roi_pct: pct(allFwd),
+      // n<30 is UNDERSAMPLED — never call it predictive, however pretty the
+      // correlation. A high Spearman on a dozen wallets is exactly the
+      // small-sample mirage this project's Gate 3 discipline exists to
+      // resist ("internal consistency is not truth"). Direction is reported;
+      // a verdict is withheld until the sample can support one.
+      interpretation: pts.length < 30
+        ? 'UNDERSAMPLED (n=' + pts.length + ') — direction is ' + (spearman > 0.05 ? 'positive' : (spearman < -0.05 ? 'negative' : 'flat')) + ' but n<30 cannot support a verdict. Lower min_before/min_after or widen windows to grow the sample, and check sign-stability across cutoff_days before believing it.'
+        : (spearman >= 0.2 && (topFwd - botFwd) > 0
+          ? 'PREDICTIVE — higher score-at-T tracks higher forward ROI across n=' + pts.length + '. The score forecasts, not just describes.'
+          : (spearman <= 0.05 || (topFwd - botFwd) <= 0
+            ? 'NOT PREDICTIVE — score-at-T does not forecast forward ROI. Honest but not yet actionable; the ranking model needs work before it is copy-trade alpha.'
+            : 'WEAK — some signal but not decisive. Widen the sample or windows and re-run.')),
+      note: 'No lookahead: score-at-T uses only trades closed before T (decay toward T); forward ROI uses only trades closed in [T, T+forward_days), a disjoint set. No survivorship filter. Spearman is rank correlation of score-at-T vs forward ROI across ' + pts.length + ' wallets. Run multiple cutoff_days to check stability.',
+    });
+  } catch (e) {
+    console.error('[score-backtest]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -64168,6 +64738,7 @@ async function _reconcileWalletRedeemed(userId) {
       for (const r of group) fabricatedResolution.push({ condition_id: cond, question: q, our: r.close_reason });
       return;
     }
+    _archiveResolution(cond, m); // permanent capture — piggybacks on this read
     const settle = _parseOutcomeSettlement(m);
     if (!settle || !settle.winnerName) { unverifiable += group.length; return; }
     const winner = settle.winnerName.toLowerCase().trim();
@@ -64323,6 +64894,13 @@ app.post('/api/admin/purge-fabricated-redeemed', requireAdminSecret, async (req,
     ).catch(e => { console.error('[purge-fab-redeemed] delete:', e.message); return null; });
     if (del == null) return res.status(500).json({ error: 'delete failed after snapshot — check realized_trades_quarantine' });
 
+    // Invalidate the leaderboard cache immediately so the corrected board is
+    // visible NOW, not after the 120s TTL. Without this, a logged-out
+    // /traders visitor in the 2-minute window after a purge would see the
+    // pre-purge board including wallets that were just dropped. The next
+    // _computeRoiLeaderboard below repopulates it with the post-delete rows.
+    _roiLbCache.clear();
+
     const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
     const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
     const droppedOff = [...beforeIds].filter(u => !afterIds.has(u));
@@ -64375,6 +64953,7 @@ app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) =
       const { ok, markets } = await _fetchGammaKeysetChecked(url);
       const m = markets && markets[0];
       if (!ok || !m) { unreachable++; return; }
+      _archiveResolution(cond, m); // capture while we have it
       if (m.closed !== true) {
         open++;
         if (openSamples.length < 20) openSamples.push({ condition_id: cond, question: String(m.question || '').slice(0, 80) });
@@ -64400,6 +64979,152 @@ app.get('/api/admin/audit-redeemed-open', requireAdminSecret, async (req, res) =
     });
   } catch (e) {
     console.error('[audit-redeemed-open]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── RESOLUTION-ARCHIVE SWEEP (proactive capture) ─────────────────────────
+// The read-hooks above capture resolutions only for markets we happen to
+// re-check. This sweep is the proactive engine: it walks distinct
+// condition_ids from realized_trades that are NOT yet archived, fetches
+// gamma once each, and archives the closed ones — so a market's resolution
+// lands in our permanent store while gamma still has it, BEFORE it ages out.
+// Bounded per run; runs hourly. This is what turns "we can verify what we
+// happened to look at" into "we will always be able to verify everything we
+// have a trade on."
+let _resolutionSweepRunning = false;
+async function _sweepResolutionArchive(limit) {
+  if (!pool || _resolutionSweepRunning) return { archived: 0, checked: 0, skipped: true };
+  _resolutionSweepRunning = true;
+  try {
+    const cap = Math.min(1500, Math.max(50, limit || 500));
+    // Prioritise the MOST RECENTLY closed trades. Recent resolutions are the
+    // ones gamma still holds and that are about to age out — capturing those
+    // is where the archive actually gains ground. Walking oldest-first (the
+    // bug in the first version: LIMIT with no ORDER BY) spends every request
+    // on markets gamma dropped long ago (489/500 unreachable on run 1).
+    const conds = await dbQuery(`
+      SELECT rt.condition_id, MAX(rt.closed_at) AS last_closed
+      FROM realized_trades rt
+      LEFT JOIN market_resolutions mr ON mr.condition_id = LOWER(rt.condition_id)
+      WHERE rt.condition_id IS NOT NULL AND rt.closed_at IS NOT NULL AND mr.condition_id IS NULL
+      GROUP BY rt.condition_id
+      ORDER BY MAX(rt.closed_at) DESC
+      LIMIT $1
+    `, [cap]).catch(() => []);
+    if (!conds.length) return { archived: 0, checked: 0 };
+
+    let archived = 0, checked = 0, stillOpen = 0, unreachable = 0;
+    await _mapLimit(conds, 6, async (row) => {
+      const cond = String(row.condition_id || '').toLowerCase();
+      if (!cond) return;
+      checked++;
+      // Flat endpoint — better retention than keyset (2026-07-31).
+      const m = await _fetchGammaFlatMarket(cond);
+      if (!m) { unreachable++; return; }
+      if (m.closed !== true) { stillOpen++; return; }
+      const before = await getArchivedResolution(cond);
+      _archiveResolution(cond, m);
+      if (!before) archived++;
+    });
+    return { archived, checked, still_open: stillOpen, unreachable };
+  } finally {
+    _resolutionSweepRunning = false;
+  }
+}
+// ── The real archive engine: gamma's resolution STREAM ───────────────────
+// Driving capture off our own trades barely works — trade timestamps are
+// sell dates, not resolution dates, so they point at open markets (nothing
+// to archive) or long-resolved ones gamma already dropped (2nd sweep:
+// 440/500 unreachable, 0 archivable). The correct source is gamma's list of
+// CLOSED markets: page through it and archive every resolution while it's
+// fresh, independent of whether we hold a trade yet. Then the resolution is
+// already banked by the time any trade needs it. Idempotent (ON CONFLICT DO
+// NOTHING), so cycling the offset across runs steadily builds comprehensive,
+// permanent coverage of the entire resolution stream.
+let _streamOffset = 0;
+let _streamSweepRunning = false;
+async function _sweepClosedMarketStream(pages) {
+  if (!pool || _streamSweepRunning) return { archived: 0, scanned: 0, skipped: true };
+  _streamSweepRunning = true;
+  try {
+    const PAGE = 200;
+    const nPages = Math.min(20, Math.max(1, pages || 5));
+    let archived = 0, scanned = 0, decisiveClosed = 0;
+    for (let i = 0; i < nPages; i++) {
+      const url = 'https://gamma-api.polymarket.com/markets?closed=true&limit=' + PAGE
+        + '&offset=' + _streamOffset + '&order=endDate&ascending=false';
+      const m = await _fetchGammaFlatList(url);
+      if (!m || !m.length) { _streamOffset = 0; break; } // wrapped to end → restart next run
+      for (const mkt of m) {
+        scanned++;
+        const cond = String(mkt.conditionId || '').toLowerCase();
+        if (!cond || mkt.closed !== true) continue;
+        const st = _parseOutcomeSettlement(mkt);
+        if (!st || !st.winnerName) continue;
+        decisiveClosed++;
+        const before = await getArchivedResolution(cond);
+        _archiveResolution(cond, mkt);
+        if (!before) archived++;
+      }
+      _streamOffset += PAGE;
+    }
+    return { archived, scanned, decisive_closed: decisiveClosed, next_offset: _streamOffset };
+  } finally {
+    _streamSweepRunning = false;
+  }
+}
+
+// Fetch a flat gamma markets list (array). Separate from _fetchGammaFlatMarket
+// (single-condition) — this pages the closed-market stream.
+async function _fetchGammaFlatList(url) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 10000);
+    const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    return Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : null);
+  } catch { return null; }
+}
+
+setTimeout(() => { _sweepClosedMarketStream(5).then(r => r && console.log('[resolution-archive] stream sweep:', JSON.stringify(r))).catch(() => {}); }, 150 * 1000);
+setInterval(() => { _sweepClosedMarketStream(5).catch(() => {}); }, 30 * 60 * 1000);
+setInterval(() => { _sweepResolutionArchive(500).catch(() => {}); }, 60 * 60 * 1000);
+
+// GET /api/admin/resolution-archive — coverage + on-demand sweep. ?sweep=1
+// runs a bounded capture now (?limit= to size it); otherwise read-only stats.
+app.get('/api/admin/resolution-archive', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    let swept = null, streamed = null;
+    if (req.query.stream === '1') streamed = await _sweepClosedMarketStream(parseInt(req.query.pages, 10) || 10);
+    if (req.query.sweep === '1') swept = await _sweepResolutionArchive(parseInt(req.query.limit, 10) || 500);
+
+    const [arch, tradeConds] = await Promise.all([
+      dbQuery(`SELECT COUNT(*)::int AS archived FROM market_resolutions`).catch(() => []),
+      dbQuery(`SELECT COUNT(DISTINCT condition_id)::int AS trade_conditions FROM realized_trades WHERE condition_id IS NOT NULL`).catch(() => []),
+    ]);
+    const covered = await dbQuery(`
+      SELECT COUNT(*)::int AS covered FROM (
+        SELECT DISTINCT LOWER(rt.condition_id) AS c FROM realized_trades rt WHERE rt.condition_id IS NOT NULL
+      ) t JOIN market_resolutions mr ON mr.condition_id = t.c
+    `).catch(() => []);
+
+    const archived = arch[0] ? arch[0].archived : 0;
+    const tradeC = tradeConds[0] ? tradeConds[0].trade_conditions : 0;
+    const cov = covered[0] ? covered[0].covered : 0;
+    res.json({
+      archived_resolutions: archived,
+      trade_conditions_total: tradeC,
+      trade_conditions_archived: cov,
+      trade_coverage_pct: tradeC ? Math.round((cov / tradeC) * 1000) / 10 : null,
+      streamed,
+      swept,
+      note: 'Permanent, immutable archive of gamma-confirmed resolutions. The engine is the CLOSED-MARKET STREAM (?stream=1, ?pages=): pages gamma\'s closed markets and archives every decisive resolution while fresh, independent of our trades — runs every 30 min, offset cycles to build full coverage over time. ?sweep=1 is the secondary trade-driven capture. trade_coverage_pct = share of markets we hold a trade on whose resolution is captured forever. Removes the "aged out of gamma, unverifiable" wall for everything resolving from now on.',
+    });
+  } catch (e) {
+    console.error('[resolution-archive]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -64568,6 +65293,7 @@ app.post('/api/admin/purge-poisoned-settlement-cache', requireAdminSecret, async
         );
         tradesDeleted = del.length;
 
+        _roiLbCache.clear(); // corrected board visible immediately, not after 120s TTL
         const after = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
         const afterIds = new Set(after ? after.rows.map(r => r.user_id) : []);
         affectedWallets = [...beforeById.values()]

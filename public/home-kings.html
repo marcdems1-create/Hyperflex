@@ -11,6 +11,7 @@
   :root{
     --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff; --purple:#a855f7; --amber:#f59e0b;
     --paper:#0e0e15; --ink:#f0f0f5; --border:#1e1e2a; --muted:rgba(240,240,245,.45);
+    --card:#111118; --card2:#16161e;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',-apple-system,sans-serif;}
@@ -53,10 +54,47 @@
   .section-head a:hover{color:var(--ink);}
 
   .king-row{display:flex;justify-content:center;}
-  .cat-kings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
-  .cat-kings-note{font-size:13.5px;line-height:1.6;color:var(--muted,rgba(240,240,245,.62));max-width:760px;margin:-4px 0 18px;}
   .scroll-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;}
   .scroll-row > a{scroll-snap-align:start;}
+
+  /* ── same "new since last poll" flash used on /feed ── */
+  @keyframes flashIn{0%{box-shadow:0 0 0 2px var(--accent,var(--gold)),0 0 24px -2px var(--accent,var(--gold));}100%{box-shadow:0 0 0 0 transparent,0 0 0 0 transparent;}}
+  .tcard.flash,.wcard.flash{animation:flashIn 3s ease-out;}
+  @media (prefers-reduced-motion: reduce){.tcard.flash,.wcard.flash{animation:none;}}
+
+  /* ── category win rows — same "score wall" pattern as /feed, adapted to
+     this page's tokens/type scale. ── */
+  .cat-row{margin-top:28px;}
+  .cat-row:first-child{margin-top:0;}
+  .cat-row-head{display:flex;align-items:center;flex-wrap:wrap;row-gap:6px;gap:9px;margin-bottom:12px;}
+  .cat-row-head .dot{width:9px;height:9px;border-radius:50%;background:var(--accent,var(--gold));flex-shrink:0;}
+  .cat-row-head h3{font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.01em;margin:0;}
+  .cat-row-vol{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:20px;padding:2px 9px;margin-left:auto;}
+  .cat-row-see{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;color:var(--muted);text-decoration:none;white-space:nowrap;transition:color .12s;}
+  .cat-row-see:hover{color:var(--ink);}
+  .win-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;}
+  .wcard{
+    flex:0 0 auto;width:210px;scroll-snap-align:start;
+    background:linear-gradient(160deg,var(--card2),var(--card));
+    border:1px solid var(--border);border-left:3px solid var(--accent,var(--gold));
+    border-radius:4px 14px 14px 4px;padding:16px;text-decoration:none;color:var(--ink);
+    display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,box-shadow .15s;
+  }
+  .wcard:hover{transform:translateY(-3px);box-shadow:0 16px 36px -14px rgba(0,0,0,.55);}
+  .wcard-hero{display:flex;align-items:baseline;gap:6px;}
+  .wcard-hero .won-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+  .wcard-hero .mult{font-size:24px;font-weight:900;letter-spacing:-.02em;color:var(--green);font-variant-numeric:tabular-nums;}
+  .wcard-entry{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .wcard-q{font-size:12px;color:rgba(240,240,245,.72);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:33px;}
+  .wcard-foot{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--border);}
+  .wcard-avatar{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;color:#0a0a0f;}
+  .wcard-handle{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .wcard-score{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:800;white-space:nowrap;}
+  .wcard-score.positive{color:var(--green);}
+  .wcard-score.negative{color:var(--red);}
+  .wcard-score .n{font-weight:500;color:var(--muted);}
+  .feed-link{display:inline-block;margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--blue);text-decoration:none;}
+  .feed-link:hover{text-decoration:underline;}
 
   .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:14px;height:220px;width:100%;max-width:420px;}
@@ -105,27 +143,23 @@
     <div class="king-row" id="kingRow"><div class="skel"></div></div>
   </section>
 
-  <section id="catKingsSection" style="display:none;">
+  <section>
     <div class="section-head">
       <div>
-        <div class="section-kicker">Best in every category</div>
-        <h2>Category Leaders</h2>
+        <div class="section-kicker">The board, by category</div>
+        <h2>Winning Trades</h2>
       </div>
-      <a href="/traders">Full leaderboard →</a>
     </div>
-    <!-- Ranked on return, not hit rate. Stated up front because some kings
-         legitimately hold a losing W-L record — a trader entering at 10¢ can
-         be badly profitable while winning a minority of the time — and
-         without this line that card reads as a bug rather than as the
-         model working. The W-L stays visible either way (never hide the
-         losses). -->
-    <p class="cat-kings-note" id="catKingsNote"></p>
-    <div class="cat-kings-grid" id="catKingsGrid"></div>
-  </section>
-
-  <section>
-    <div class="section-head"><h2>Movers</h2><a href="/traders">Full leaderboard →</a></div>
-    <div class="scroll-row" id="moversRow"><div class="skel" style="width:300px;flex-shrink:0;"></div><div class="skel" style="width:300px;flex-shrink:0;"></div><div class="skel" style="width:300px;flex-shrink:0;"></div></div>
+    <!-- Same /api/feed/category-wins the full /feed page uses — real
+         winning trades, most-liquid category first, score+n always
+         attached (rule 3). Was "Category Leaders" (one king per category,
+         gated on a 5-qualifying-wallet-deep leaderboard) + a separate flat
+         "Movers" row — starved most of the time (often just 1 category
+         populated) since that leaderboard needed real depth to compute a
+         king at all. This endpoint only needs 3 real wins in a category,
+         so it actually has content. ── -->
+    <div id="catWinRows"><div class="scroll-row"><div class="skel" style="width:220px;flex-shrink:0;"></div><div class="skel" style="width:220px;flex-shrink:0;"></div><div class="skel" style="width:220px;flex-shrink:0;"></div></div></div>
+    <a class="feed-link" href="/feed">See the full feed →</a>
   </section>
 </main>
 
@@ -140,44 +174,126 @@ document.getElementById('pasteBtn').addEventListener('click', function(){
 });
 document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('pasteBtn').click(); });
 
-fetch('/api/kings')
-  .then(function(r){ return r.ok ? r.json() : null; })
-  .then(function(d){
-    d = d || { overall: [], categories: [] };
+// Per-category accent — same palette as /feed's category rows, for the
+// flash glow and (implicitly) visual continuity between the two surfaces.
+var CAT_COLORS = {
+  world: '#a855f7', politics: '#4d9fff', macro: '#c9920d', sports: '#00e68a',
+  crypto: '#f59e0b', commodities: '#d97706', tech: '#38bdf8', entertainment: '#ff4d6a', weather: '#6b7280',
+};
+// Injects the flash class + accent color into a rendered .tcard string —
+// render() always opens with `<a class="tcard ...`, so a targeted replace
+// is simpler than teaching HFXTraderCard about a flash variant it has no
+// other use for.
+function flashify(html, isNew, color) {
+  if (!isNew) return html;
+  return html.replace('<a class="tcard', '<a style="--accent:' + color + '" class="tcard flash');
+}
 
-    var kingRow = document.getElementById('kingRow');
-    if (d.overall && d.overall.length) {
-      kingRow.innerHTML = HFXTraderCard.render(d.overall[0], 'hero');
-    } else {
-      kingRow.innerHTML = '<div class="empty">No wallet currently meets the minimum sample size (n&ge;10 durable resolved trades) to hold the #1 spot. Connect yours to be the first.</div>';
-    }
+var _prevKingId = null;
 
-    var catSection = document.getElementById('catKingsSection');
-    var catGrid = document.getElementById('catKingsGrid');
-    if (d.categories && d.categories.length) {
-      catSection.style.display = '';
+function loadKings(){
+  fetch('/api/kings')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      d = d || { overall: [], categories: [] };
 
-      var note = document.getElementById('catKingsNote');
-      if (note) {
-        var cats = d.categories.length;
-        var pool = d.categories.reduce(function(s,k){ return s + (k.qualifying_count || 0); }, 0);
-        note.textContent = '#1 by return in each of ' + cats + ' categories, drawn from '
-          + pool + ' qualifying wallets. Ranked on realized return, not win rate — '
-          + 'a trader buying longshots can be well ahead while winning a minority of '
-          + 'their calls, so some category leaders hold a losing record. Every card shows its '
-          + 'W-L and sample size.';
+      var kingRow = document.getElementById('kingRow');
+      if (d.overall && d.overall.length) {
+        var kingId = d.overall[0].user_id;
+        var kingIsNew = _prevKingId !== null && kingId !== _prevKingId;
+        kingRow.innerHTML = flashify(HFXTraderCard.render(d.overall[0], 'hero'), kingIsNew, '#c9920d');
+        _prevKingId = kingId;
+      } else {
+        kingRow.innerHTML = '<div class="empty">No wallet currently meets the minimum sample size (n&ge;10 durable resolved trades) to hold the #1 spot. Connect yours to be the first.</div>';
       }
+    })
+    .catch(function(){
+      document.getElementById('kingRow').innerHTML = '<div class="empty">Could not load the current #1.</div>';
+    });
+}
+loadKings();
+setInterval(loadKings, 3 * 60 * 1000);
 
-      catGrid.innerHTML = d.categories.map(function(k){
-        var c = Object.assign({}, k.card);
-        c.verdict = k.label + ' · ' + c.wins + 'W-' + c.losses + 'L';
-        return HFXTraderCard.render(c, 'compact');
+// ── Category win rows — the SAME /api/feed/category-wins the full /feed
+// page uses (real winning trades, most-liquid category first, score+n
+// always attached). Replaces the old "Category Leaders" (one king per
+// category, gated on a 5-qualifying-wallet-deep per-category leaderboard —
+// starved most of the time) + a separate flat "Movers" row. ──
+function esc(s){ return HFXTraderCard.esc(s); }
+function fmtUsd(n){
+  if (n == null) return '—';
+  var v = Math.abs(n);
+  var s = v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v);
+  return (n < 0 ? '-' : '') + s;
+}
+function fmtPct(p){ if (p == null) return '—'; return (p >= 0 ? '+' : '') + p.toFixed(1) + '%'; }
+function initials(src){
+  src = String(src || '?').replace(/^0x/, '').trim();
+  var parts = src.split(/\s+/);
+  return (parts.length >= 2 ? (parts[0][0] + parts[1][0]) : src.slice(0, 2)).toUpperCase();
+}
+function avatarColor(seed){
+  var src = String(seed || 'x'); var hash = 0;
+  for (var i = 0; i < src.length; i++) hash = (hash * 31 + src.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (hash % 360) + ', 62%, 62%)';
+}
+function handleOf(c){
+  if (c.username) return '@' + c.username;
+  if (c.display_name) return c.display_name;
+  if (c.polymarket_address) return c.polymarket_address.slice(0, 6) + '…' + c.polymarket_address.slice(-4);
+  return 'Trader';
+}
+function winCardHtml(e, accent, isNew){
+  var handle = handleOf(e);
+  var win = e.win;
+  var verb = win.side === 'SELL' ? 'Sold' : 'Bought';
+  var entryC = win.entry_price != null ? Math.round(win.entry_price * 100) + '¢' : null;
+  var multText = win.multiplier != null ? win.multiplier + 'x' : fmtPct(win.roi_pct);
+  var scorePositive = (e.score_pct != null ? e.score_pct : 0) >= 0;
+  var href = e.user_id ? '/trader/' + esc(e.user_id) : '#';
+  return '<a class="wcard' + (isNew ? ' flash' : '') + '" style="--accent:' + accent + '" href="' + href + '">'
+    + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
+    + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
+    + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
+    + '<div class="wcard-foot">'
+      + '<div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div>'
+      + '<div class="wcard-handle">' + esc(handle) + '</div>'
+      + '<div class="wcard-score ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + ' <span class="n">n=' + esc(e.n) + '</span></div>'
+    + '</div>'
+    + '</a>';
+}
+
+var _prevWinIds = null; // "category|user_id" -> true, from the previous poll
+
+function loadCategoryWinRows(){
+  var wrap = document.getElementById('catWinRows');
+  fetch('/api/feed/category-wins?limit=5')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var cats = (d && d.categories) || [];
+      if (!cats.length) { wrap.innerHTML = '<div class="empty">No category has enough verified wins yet to show a wall.</div>'; return; }
+      var newIds = {};
+      wrap.innerHTML = cats.map(function(c){
+        var accent = CAT_COLORS[c.category] || '#c9920d';
+        var cardsHtml = c.entries.map(function(e){
+          var key = c.category + '|' + e.user_id;
+          var isNew = _prevWinIds && !_prevWinIds[key];
+          newIds[key] = true;
+          return winCardHtml(e, accent, isNew);
+        }).join('');
+        return '<div class="cat-row">'
+          + '<div class="cat-row-head"><span class="dot" style="--accent:' + accent + '"></span><h3>' + esc(c.label) + '</h3><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span><a class="cat-row-see" href="/traders?category=' + esc(c.category) + '">See all →</a></div>'
+          + '<div class="win-scroll">' + cardsHtml + '</div>'
+          + '</div>';
       }).join('');
-    }
-  })
-  .catch(function(){
-    document.getElementById('kingRow').innerHTML = '<div class="empty">Could not load the current #1.</div>';
-  });
+      _prevWinIds = newIds;
+    })
+    .catch(function(){
+      wrap.innerHTML = '<div class="empty">Could not load the category feed.</div>';
+    });
+}
+loadCategoryWinRows();
+setInterval(loadCategoryWinRows, 3 * 60 * 1000);
 
 /* ── hero proof rotator: same /api/trader-cards feed the Movers row uses
    below — real wins and losses, un-curated, so the hero can never show
@@ -202,19 +318,18 @@ function heroInitProof(cards){
   }
 }
 
+// Seeds the hero-proof rotator only — the visible "Movers" row is gone,
+// folded into the category win rows above (loadCategoryWinRows), which
+// cover the same "real recent trader cards" ground with more content.
+// One-shot fetch, not on the 3-min interval — nothing renders it after
+// the hero rotator is seeded, so re-fetching would be pure waste.
 fetch('/api/trader-cards?limit=10')
   .then(function(r){ return r.ok ? r.json() : null; })
   .then(function(d){
     var cards = (d && d.cards) || [];
-    document.getElementById('moversRow').innerHTML = cards.length
-      ? cards.map(function(c){ return HFXTraderCard.render(c, 'feed'); }).join('')
-      : '<div class="empty">No wallets currently meet the minimum sample size (n&ge;10 durable resolved trades) for a card.</div>';
     heroInitProof(cards.filter(function(c){ return c.n >= 10; }));
   })
-  .catch(function(){
-    document.getElementById('moversRow').innerHTML = '<div class="empty">Could not load the leaderboard.</div>';
-    heroProofEmpty();
-  });
+  .catch(heroProofEmpty);
 </script>
 </body>
 </html>

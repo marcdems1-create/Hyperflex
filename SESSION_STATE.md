@@ -49,9 +49,9 @@
 
 ## Chronological log (newest first)
 
-## 2026-08-03 (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
+## 2026-08-03e (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
 
-**Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-07-31 compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
+**Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-08-03d compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
 
 **Ask:** Marc asked for HYPERFLEX to "remember someone's wallet so they don't need to constantly sign in" — right after asking for a PR on the compliance fix.
 
@@ -69,7 +69,7 @@
 **Notes for next session:**
 - If `/connect`'s cache logic is touched again, keep the fast-path/full-refresh split (`FULL_REFRESH_INTERVAL_MS`, currently 15 min) — don't let a naive fix start calling `/api/connect` on every page load again.
 
-## 2026-07-31 (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
+## 2026-08-03d (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 **Shipped (with hashes):** pending push this session — see commit on this branch after this entry.
 
@@ -91,6 +91,104 @@
 **Notes for next session:**
 - Do not add any retry/fallback call to `/api/polymarket/order` or the CF Worker that triggers off a `"restricted"`/geo-block string match. Technical-failure fallback only.
 - Full official Polymarket ToS/Builder Code of Conduct text could not be fetched directly in this environment (403s across polymarket.com, help.polymarket.com, builders.polymarket.com) — findings here are from WebSearch snippets, not a full-document read. If precise legal text is ever needed verbatim, fetch from a machine without the proxy's bot-blocking issue.
+## 2026-08-03c (✅ SHIPPED — resync-sold-trades: two real query bugs found live, fixed, then made self-driving. Confirmed real scale: 1,576 wallets / 41,356 old-format rows.)
+
+Follow-up to 2026-08-03b's audit finding. Marc ran the dry-run curl and hit two SEPARATE real bugs in my own new endpoint, one at a time:
+
+1. **`{"error":"scan query failed"}` (1st)** — the scan query joined `u.id = rt.user_id` with no cast. Postgres has no implicit text=uuid operator; `users.id` is TEXT in this schema (documented gotcha already on record at `/api/admin/durable-market-scope`, server.js:63644). Fixed to `ON u.id = rt.user_id::text`, matching that endpoint's exact working idiom. Shipped (`a307a15`) — **did not fix it.**
+2. **`{"error":"scan query failed"}` (2nd, same message)** — a second, independent bug: `SELECT DISTINCT rt.user_id::text AS user_id ... ORDER BY rt.user_id` — Postgres requires ORDER BY expressions in a DISTINCT query to match a select-list item exactly, and `rt.user_id` (raw uuid) ≠ `rt.user_id::text` (cast). Fixed to `ORDER BY user_id` (the output alias). **This time verified before shipping, not just reasoned about**: installed a real local Postgres 16 via Homebrew (libpq only ships client tools — had to `brew install postgresql@16`, hit two more real obstacles getting it running locally: a macOS fork-safety crash worked around via `LC_ALL=C`, and a Unix-socket-path-length limit worked around by using `/tmp` instead of the scratchpad path), built a throwaway schema matching the real column types, and ran the literal query text copied from server.js. All 5 queries (totals, both scan-query branches, delete, after-count) ran clean. Shipped (`ceeb50c`) — this one held.
+
+**Real prevalence, confirmed via the now-working dry run: 1,576 wallets, 41,356 old-format sold-path rows platform-wide.** This is not a rare edge case — validates the 2026-08-03b finding at real scale.
+
+**Made it self-driving (`173e50e`)** rather than requiring ~105 manual batch curls to drain: extracted `runSoldTradesResyncBatch()`, wired a cron (every 15 min, 25 wallets/tick, ~16h to fully clear — same shape as the existing `runWhaleBackfillBatch` pattern a few hundred lines up in the same file), added `GET /api/admin/resync-sold-trades/status` for progress checks. The original endpoint still works for on-demand single-wallet fixes (`?confirm=1&user_id=X`).
+
+**Lesson for next time this shape of fix comes up:** two misses in a row on hand-reasoned SQL was the signal to stop guessing and actually run it. A local Postgres is available in this environment (not by default, but `brew install postgresql@16` works, ~90s) — worth reaching for earlier when a query is non-trivial (DISTINCT/ORDER BY interactions, type casts across a schema with known quirks like `users.id` being TEXT) rather than after two failed live attempts.
+
+**Active blockers:**
+- Cron is now draining the backlog automatically (started ~2026-08-03, should clear by ~2026-08-04). Check `GET /api/admin/resync-sold-trades/status` to confirm it's progressing / eventually reaches `wallets_remaining: 0`. Scores for affected wallets will shift as this runs (upward for n, mixed for score_pct/durability) — expected, not a regression.
+
+## 2026-08-03b (⛔ REAL BUG FOUND + FIXED — sold-path round-trip aggregation silently dropped repeat trades on the same market forever. Marc: "AUDIT THE SCORING MECHANISM SEE IF THERES any bugs.")
+
+**Read the whole scoring pipeline top to bottom** (`_computeRoiLeaderboard`, `_buildTraderCards`, `_computeCategoryRoiLeaderboards`, `classifyMarketDurability`, the redeemed-path settlement verification, and `backfillRealizedTrades` — the sold-path ingestion, 98% of platform volume). The redeemed path checked out clean (already hardened by the 2026-07-28/29 fixes — `_parseOutcomeSettlement` correctly requires gamma's `closed===true`, `market_settlement_cache` has exactly one writer and it's properly gated, the retired `regradeRedeemedTrades` is genuinely dead code behind an early `return`). The sold path had a real, previously-undiscovered bug.
+
+**The bug:** `backfillRealizedTrades` grouped every BUY/SELL event by `(condition_id, outcome)` with **no time scoping**, ran one FIFO pass over the entire group, and inserted **one aggregate row** keyed by `external_sync_id = 'pm-act:user:cond:outcome'` — no per-round-trip or time component. Since the insert is `ON CONFLICT DO NOTHING` and this function reruns on every profile view (`server.js:17507`) and every `/connect`, a wallet's **second and every later round-trip** on a market it had already traded was silently dropped forever after the first successful backfill. Not logged, not counted as skipped (unlike the redeemed path, which does track `redeemedUnverifiedSkipped`) — just gone.
+
+**Two concrete scoring consequences:** (1) `n` undercounted for repeat-market traders — directly hits the n>=10 qualifying floor and the `n/(n+K)` shrinkage weight (K=20); a wallet with 30 real round-trips across 10 markets could score as n=10. (2) `market_durability` computed off the *aggregate* first-buy-to-last-sell span rather than each round-trip's real duration — a wallet doing genuinely rapid, ephemeral-style round-trips on one market over months could show a multi-month aggregate span and get misclassified `'durable'`, letting trading that should be excluded by design count toward the score.
+
+**Shipped (`d8104ba` on `main`):**
+- Code fix: splits each `(condition_id, outcome)` group into per-round-trip **segments** (boundary = position returning fully flat), one `realized_trades` row per segment, keyed `pm-act2:user:cond:outcome:<segment close timestamp>` — deliberately a **new prefix**, not a suffix on the old key shape (the old key has no per-segment component, and the new suffix is an ISO timestamp which itself contains colons, so parsing old-vs-new reliably would be fragile — a distinct prefix makes it unambiguous and guarantees old aggregate rows and new segment rows can never silently coexist and double-count).
+- New `POST /api/admin/resync-sold-trades` (dry-run default, `?confirm=1` to execute, `?user_id=` to target one wallet, `?limit=` batch size) — follows the exact same pattern as the existing `migrate-external-sync-id-scope` fix from 2026-07-23 (a *different* external_sync_id bug, same shape of problem). For each affected wallet: deletes old-format (`pm-act:%`) sold rows, immediately re-runs `backfillRealizedTrades` in the same request so corrected rows repopulate right away — never leaves a wallet's score silently blank waiting for a lazy re-trigger. **Monotonic for qualification**: splitting an aggregate into segments can only increase a wallet's real n, never decrease it.
+
+**Not done / blocked on Marc:** could not verify real-world prevalence or run the dry-run against production from this sandbox — no `ADMIN_SECRET` here. The dry-run curl is read-only/safe:
+```
+curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"
+```
+Reports `wallets_affected_total` and `old_format_rows_total` platform-wide. Worth running before deciding how big a `confirm=1` sweep to do — some currently-qualifying wallets' scores may shift (not necessarily down — durability reclassification could go either way even though n can only go up).
+
+**Active blockers:**
+- Dry-run not yet run against production — real prevalence unknown. Recommend Marc runs the curl above next session start.
+
+## 2026-08-03 (✅ SHIPPED — homepage consistency pass + the rule-4 category-browse destination, finally built)
+
+Marc asked "what's next on homepage"; offered two options — (A) bring `/feed`'s freshness treatment (See-all, refresh, flash) to `home-kings.html`'s own rows, or (B) the rule-4 category-browse destination for non-qualifying `/connect` wallets, flagged as a real documented gap ("markets by category... /connect links to /traders as an honest placeholder, not a dead end, but the real browse surface is still a separate pass"). He said "both, start a."
+
+**A — shipped (`f300fc9`):** `home-kings.html`'s Top Trader / Category Leaders / Movers now poll every 3 min (were: once, on load), category leader cards got a "See all → /traders?category=X" link, and all three flash (same one-shot CSS glow as `/feed`) on a real change — new #1, new category leader, or a genuinely new Movers entry — fingerprinted by `user_id` across polls. Caught a real bug in my own first test: a stray `curl` during mock-server setup had already advanced the poll counter past the transition point, producing a false "flash isn't firing" read — restarted the mock clean and re-verified the transition fires correctly and a no-op re-poll doesn't.
+
+**B — shipped (`bc4c211` + `6ace9b9`):** Researched first (dedicated research pass, not assumed) — found **three incompatible category taxonomies** already in the codebase: `classifyCardCategory` (10 cats, resolved `realized_trades` only, never applied to live markets), `detectCategory` (6 cats, powers `/api/screener`'s live filter, unused by any UI), and `hotMarkets.classifyTopic`/`TOPIC_RULES` (7 topics, the ONLY one with a live, working, already-shipped UI — powers `/explore`'s topic dashboard). Standardized on the third rather than inventing a fourth: `/connect`'s non-qualifying path (`connect.html`'s old `.category-stub` placeholder, one static paragraph) is now real topic chips + a live market grid off `/api/topics`, reused as-is. Personalization: `_buildTraderProfile`'s `open_positions` now carry a `topic` (tagged via `hotMarkets.classifyTopic`, separate small commit `bc4c211`) so a wallet with zero resolved trades — the common case for a brand-new connect — still gets a "you already have open positions in X" pre-selected tab, since that reads open positions, not trade history.
+
+**Process note, second occurrence this week:** hit the exact same concurrent-session collision as 2026-07-30h/31 (see below) — the other Claude session's `server.js` work was staged-but-uncommitted again while I needed to add code to the same file. Same fix: `git diff`/`git diff --cached` → isolate → reset to HEAD → apply+commit mine → reapply+restage theirs → byte-diff to confirm zero drift. Did this cleanly twice in one session (once for the `open_positions` topic tag, once earlier this week for `/api/category-leaderboard`). This is now a proven, repeatable procedure — worth formalizing as a named routine if a third occurrence happens.
+
+Verified end-to-end for both via mock servers before shipping (home-kings.html: flash transitions confirmed programmatically; connect.html: full paste-address → raw → verified-non-qualifying flow, personalization hint + chip-switching + zero mobile overflow, all confirmed). Both confirmed live on production post-deploy (`loadKings`/`loadMovers` present in `/`'s served HTML; `loadCategoryBrowse` present in `/connect`'s).
+
+**Active blockers:** (none)
+
+## 2026-07-31b (✅ SHIPPED — /feed follow-up: reason lines, "See all" into filtered /traders, auto-refresh, new-signal flash, volume rollup)
+
+Marc asked "any more value we can pump out with this feed" after the visual pass (2026-07-30/31 entries below); proposed 4 ranked ideas, he said "start with 2 then do them in order" (See-all link → auto-refresh → new-signal flash → volume rollup). Also fixed, mid-thread, that Live Feed cards showed a badge + market with no explanation of *why* (added `reasonFor()` using each signal's own real fields) and dropped a dead `arbitrage` map entry (that detector was removed 2026-05-10 with Kalshi).
+
+**Shipped, one commit per item (`511d18b` → `ef66711` on `main`):**
+1. **Reason lines** (`511d18b`): "7 whales on YES · 82% consensus", "Odds moved 40¢ → 58¢ in 24h", etc. — built from fields the signals already carried but weren't rendering.
+2. **"See all →"** (`339bc7a`, backed by new `GET /api/category-leaderboard` in `d468f43`): each category row links to `/traders?category=X`; `home-traders-preview.html` reads that param, swaps its data source, rewrites the header so the filtered view is obvious. Caught and fixed a real mobile overflow bug on `.cat-row-head` in the process (verified via actual DOM `getBoundingClientRect()`, not just screenshots — a headless-Chrome screenshot was giving a false-positive "clipped" read that the real browser tool's DOM measurement disproved).
+3. **Auto-refresh category rows** (`d7518b7`): 3-min interval (Live Feed strip already had 2-min).
+4. **New-signal flash** (`c838cfa`): fingerprints signals by `type+market+detected_at` across polls, one-shot CSS glow (no JS cleanup) on anything not in the previous set; first load seeded without flashing so all 10 cards don't light up at once. Verified live by overriding `fetch()` in-browser to inject a fabricated new signal and confirming exactly one card flashed.
+5. **Volume rollup** (`ef66711`): "$11.0M tracked across N categories" under the LIVE badge — sums data already being fetched, no new query.
+
+**New public endpoint:** `GET /api/category-leaderboard?category=X&limit=N` — reuses `_computeCategoryRoiLeaderboards()` + `_buildTraderCards()`, same pipeline as everything else, no new scoring.
+
+**Process note — concurrent-session collision, handled cleanly:** mid-thread, another Claude session was actively committing to this same repo (a resolution archive + score-predictiveness backtest, unrelated). Hit their live `HEAD.lock` mid-push (waited it out, confirmed 19h-stale before clearing — see 2026-07-30/31 entry below for the first occurrence), and separately had to commit `server.js` changes while their +110-line addition sat staged-but-uncommitted: isolated via `git diff`/`git diff --cached` into two patches, reset the file to HEAD, applied+committed only mine, then reapplied+restaged theirs and byte-diffed to confirm their patch was restored identically (only line-number offsets changed, zero content drift). No work lost on either side.
+
+**Active blockers:** (none)
+
+## 2026-07-31 (verification arc part 2 — permanent resolution archive + score-predictiveness backtest; strategic reframe)
+
+**Built the "verified → permanent → predictive" stack. Shipped (origin/main):**
+- `ed7430c`, `7af4bbb`, `df412a5` — **permanent resolution archive.** New immutable `market_resolutions` table + capture engine. First design (drive off our trades) failed — trade timestamps are sell dates, so they point at open or long-aged-out markets (2 sweeps: ~440-489/500 unreachable, 0 archived). Correct engine is `_sweepClosedMarketStream`: pages gamma's `?closed=true` list and archives every decisive resolution while fresh, independent of our trades (idempotent, offset cycles, every 30 min). First stream run: **1000/1000 archived, 64 already matched our trade set.** This removes the "aged out of gamma, unverifiable" wall for everything resolving GOING FORWARD (can't recover deep history gamma already dropped — that's on-chain UMA/CTF, a future build). `getArchivedResolution()` lets grading read our store first, gamma second. `GET /api/admin/resolution-archive` (?stream=1 / ?sweep=1).
+- `df412a5`→`7fc1f09` — **score-predictiveness backtest.** `GET /api/admin/score-backtest`: point-in-time, no-lookahead. Scores each wallet as of past date T (only trades closed < T, exact _computeRoiLeaderboard formula), measures forward ROI on disjoint trades in [T, T+forward). Spearman impl self-tested (+1/-1/~0). n<30 guard added so it can't over-claim on tiny samples.
+
+**🔴 BACKTEST RESULT — the score is NOT demonstrably predictive.** Signal is unstable across windows: 90/90 → Spearman +0.62 (spread +65%); 120/90 → +0.04 (+25%); 150/120 → **−0.09 (−7.9%, sign flip).** n=15-21 throughout — too small to conclude, and the sign instability is the signature of noise, not forecasting. The opening 90/90 run's +0.776 was a small-sample mirage. **No predictive claim is supportable today.** The score describes the past honestly; it does not forecast the future at available sample sizes.
+
+**Strategic reframe (Marc: "then what's the point of a leaderboard?"):** past≠future is what an EFFICIENT market looks like — reliable forward-prediction would be arbitraged away. Same result every mutual-fund study finds; track records are TRUST INFRASTRUCTURE (like credit scores / audited financials), not crystal balls. The leaderboard's real, defensible value: (1) proof against fakes in a screenshot-and-delete space — we literally caught our own board promoting fabrications tonight; (2) permanent un-gameable reputation/credential; (3) accountability (surviving losses publicly). **Sell verification + reputation (real, ours now); treat predictive alpha as a RESEARCH BET, not a revenue foundation.** If copy-trading is built, frame it "copy a verified-real trader," never "copy a guaranteed winner."
+
+**Named next frontiers (not started):**
+- **Aggregate/basket predictiveness** — "does #1 predict" failed, but "does a top-decile BASKET beat the market on average" is a different, more robust question (top quartile beat bottom in 2/3 windows). Testable with the backtest instrument as data grows.
+- **Predictive model** — current score is time-decayed ROI shrunk to prior (a fair *description*). Making it *predict* needs better features (consistency, calibration, category skill, sizing) trained/validated out-of-sample against forward returns via score-backtest. Research project, gated on more longitudinal data (only 15-21 wallets have enough before+after trades — a DATA depth problem as much as a model one).
+- **On-chain resolution archive** (UMA/CTF) to recover the deep history gamma dropped — makes the archive complete, not just forward-complete.
+
+
+
+## 2026-07-30i (✅ SHIPPED — /feed rebuilt as a category "score wall"; "Kings" copy fully retired)
+
+**Shipped (`0eaa358` on `main`):**
+- `public/feed.html` fully rebuilt per Marc's direction: replaced the old News/Edge tab layout with (1) a top "Anomalies" row reusing the existing `/api/signals` whale_cluster/momentum/arbitrage/volume_surge/new_entry detectors — no score/hit-rate number shown (that stays behind Gate 3), just the raw fact (N whales, which side, capital); (2) category rows below, most-liquid-category first, each a horizontal scroll wall of real winning trades.
+- New `GET /api/feed/category-wins` (server.js, after `/api/kings`): per category, orders by total durable-trade capital our own tracked wallets have deployed there (documented as OUR tracked volume, not Polymarket's own category volume — no live Polymarket category-volume integration exists). For qualifying wallets (same n>=10 durable-board gate, same `_computeRoiLeaderboard`/`_buildTraderCards` pipeline every other trader surface uses), surfaces their single best WIN *in that category specifically* — deliberately NOT reusing `_buildTraderCards`'s wallet-wide `maxTrade` (that can be a loss, or from an unrelated category). Score_pct/n/scope_label still travel with every entry — rule 3 holds even in a "showcase wins" surface. Categories with <3 real qualifying wins are dropped rather than shown thin/empty.
+- **"Kings" copy fully retired**, closing the loop from 2026-07-30h: confirmed via `grep -rnE "\bKings?\b" public/*.html server.js` that the only remaining hits are real proper nouns (`fight.html`'s UFC fighter "King Green", the NHL's "Kings" in a team-name list) — both correctly left alone. Internal identifiers (`kingRow`, `/api/kings` route, `home-kings.html` filename) also deliberately left alone, same reasoning as 2026-07-30h: no user ever sees them.
+- Verified locally against a hand-written mock server (`/private/tmp/.../mock_feed_server.js`, not committed) standing in for both `/api/signals` and the new endpoint — this sandbox has no path to the real DB or hyperflex.network. Confirmed rendering at 375px (single-column, rows stack correctly) and 1440px (scaled, centered). **The real endpoint's behavior against live production data is unverified** — the SQL is copied from the same query shape `_buildTraderCards` already uses in production, but nobody has hit `/api/feed/category-wins` against the real Railway Postgres yet.
+
+**Active blockers:**
+- (none functionally, but see verification note above — worth a live hand-check of `/api/feed/category-wins` output once deployed, same discipline as every other trader-facing number in this project)
+
+**Notes for next session:**
+- The old News/Edge tabs (`/api/news-feed`, `/api/edge-feed`) are no longer linked from `/feed` — those endpoints are untouched and still live, just orphaned from this page. Flag if anyone wants that content back somewhere.
 
 ## 2026-07-30h (✅ SHIPPED, corrects 2026-07-30g — the homepage split-hero work actually landed; 2026-07-30g's target file was dead)
 

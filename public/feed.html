@@ -4,230 +4,113 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FLEX Feed — HYPERFLEX</title>
+<link rel="stylesheet" href="/trader-card.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root{
+  --paper:#0a0a0f; --card:#121218; --card2:#16161e; --border:#1e1e2a;
+  --ink:#f5f5fa; --muted:rgba(240,240,245,.42);
+  --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --cyan:#4d9fff; --purple:#a855f7; --amber:#f59e0b;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-  background: #0a0a0a;
-  color: #e0e0e6;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -8%, rgba(168,85,247,.05), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 85% 15%, rgba(0,230,138,.04), transparent 60%),
+    var(--paper);
+  color: var(--ink);
   min-height: 100vh;
 }
 
 #nav-root { position: sticky; top: 0; z-index: 100; }
 
-.page-wrap {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 20px 16px 80px;
-}
+/* ── mobile-first base: single column, edge-to-edge rows ── */
+.page-wrap { padding: 22px 0 80px; }
+.page-head { padding: 0 16px; margin-bottom: 22px; }
+.page-head h1 { font-size: 22px; font-weight: 900; letter-spacing: -.03em; color: #fff; }
+.page-head h1 span { background: linear-gradient(120deg, var(--purple), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.page-sub { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.5; max-width: 480px; }
+.live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 10px; }
+.page-stat { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
 
-/* ── HEADER ── */
-.feed-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.feed-header h1 {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  color: #f0f0f5;
-}
-.feed-header h1 span { color: #a78bfa; }
-.live-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: #555;
-  font-family: 'JetBrains Mono', monospace;
-}
-.live-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #00e68a;
-  animation: pulse 2s ease-in-out infinite;
-}
+/* row edge fade — hints there's more to scroll without a visible scrollbar */
+.fade-row { position: relative; }
+.fade-row::after { content: ''; position: absolute; top: 0; right: 0; bottom: 8px; width: 36px; background: linear-gradient(90deg, transparent, var(--paper)); pointer-events: none; }
+@media (min-width: 1024px) { .fade-row::after { display: none; } }
 
-/* ── EDGE TICKER ── */
-.edge-ticker {
-  display: none;
-  gap: 8px;
-  overflow-x: auto;
-  margin: 12px 0 0;
-  padding-bottom: 2px;
-  scrollbar-width: none;
+/* ── ANOMALIES ROW (top) ── */
+.anom-section { margin-bottom: 32px; }
+.anom-head { display: flex; align-items: center; gap: 8px; padding: 0 16px; margin-bottom: 12px; }
+.anom-head .live-swatch { width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.6s ease-in-out infinite; }
+.anom-head h2 { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
+.anom-head .kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.anom-scroll { display: flex; gap: 10px; overflow-x: auto; padding: 2px 16px 10px; scrollbar-width: none; }
+.anom-scroll::-webkit-scrollbar { display: none; }
+.anom-card {
+  flex: 0 0 auto; width: 220px; background: var(--card); border: 1px solid var(--border);
+  border-top: 2px solid var(--accent, var(--gold));
+  border-radius: 4px 4px 12px 12px; padding: 13px 14px; text-decoration: none; color: var(--ink);
+  transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.edge-ticker::-webkit-scrollbar { display: none; }
-.edge-ticker.show { display: flex; }
-.ticker-chip {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #111;
-  border: 1px solid #222;
-  border-radius: 8px;
-  padding: 7px 11px;
-  font-size: 12px;
-  color: #ccc;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: border-color .15s, box-shadow .4s;
-}
-.ticker-chip:hover { border-color: #444; }
-.ticker-chip .score {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  font-size: 13px;
-}
-.ticker-chip .score.high { color: #00e68a; }
-.ticker-chip .score.mid  { color: #4d9fff; }
-.ticker-chip .score.low  { color: #666; }
-.ticker-chip .px {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #666;
-}
-.ticker-chip.terminal-link { color: #a78bfa; border-color: rgba(167,139,250,.3); font-weight: 600; }
-.ticker-chip.terminal-link:hover { border-color: rgba(167,139,250,.6); }
-.ticker-chip.flash { box-shadow: 0 0 14px rgba(0,230,138,.35); border-color: rgba(0,230,138,.5); }
+.anom-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(0,0,0,.5); }
+@keyframes flashIn { 0% { box-shadow: 0 0 0 2px var(--accent), 0 0 24px -2px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; } }
+.anom-card.flash { animation: flashIn 3s ease-out; }
+@media (prefers-reduced-motion: reduce) { .anom-card.flash { animation: none; } }
+.anom-badge-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.anom-badge { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 800; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px; }
+.anom-age { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+.anom-market { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #f0f0f5; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.anom-reason { font-size: 11.5px; color: rgba(240,240,245,.6); line-height: 1.4; margin-bottom: 10px; }
+.anom-side { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 4px; }
+.anom-side.yes { color: var(--green); background: rgba(0,230,138,.1); }
+.anom-side.no  { color: var(--red); background: rgba(255,77,106,.1); }
+.anom-empty { padding: 20px 16px; color: var(--muted); font-size: 12.5px; }
 
-/* ── TABS ── */
-.feed-tabs {
-  display: flex;
-  gap: 8px;
-  margin: 16px 0;
-  position: sticky;
-  top: 0;
-  background: #0a0a0a;
-  padding: 12px 0;
-  z-index: 10;
+/* ── CATEGORY WIN ROWS (score wall) ── */
+.cat-row { margin-bottom: 34px; }
+.cat-row-head { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; gap: 9px; padding: 0 16px; margin-bottom: 12px; }
+.cat-row-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent, var(--gold)); flex-shrink: 0; }
+.cat-row-head h2 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
+.cat-row-vol { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--muted); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; margin-left: auto; }
+.cat-row-see { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--muted); text-decoration: none; white-space: nowrap; transition: color .12s; }
+.cat-row-see:hover { color: var(--ink); }
+.win-scroll { display: flex; gap: 12px; overflow-x: auto; padding: 2px 16px 10px; scrollbar-width: none; }
+.win-scroll::-webkit-scrollbar { display: none; }
+.wcard {
+  flex: 0 0 auto; width: 210px; background: linear-gradient(160deg, var(--card2), var(--card));
+  border: 1px solid var(--border); border-left: 3px solid var(--accent, var(--gold));
+  border-radius: 4px 14px 14px 4px; padding: 16px; text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.feed-tab {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: 99px;
-  cursor: pointer;
-  border: 1px solid #222;
-  background: #111;
-  color: #888;
-  transition: all .15s;
-}
-.feed-tab.active { background: #fff; color: #000; border-color: transparent; }
-.feed-tab:not(.active):hover { color: #bbb; border-color: #333; }
+.wcard:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -14px rgba(0,0,0,.55); }
+.wcard-hero { display: flex; align-items: baseline; gap: 6px; }
+.wcard-hero .won-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+.wcard-hero .mult { font-size: 26px; font-weight: 900; letter-spacing: -.02em; color: var(--green); font-variant-numeric: tabular-nums; }
+.wcard-entry { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.wcard-q { font-size: 12px; color: rgba(240,240,245,.72); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 33px; }
+.wcard-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.wcard-avatar { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800; color: #0a0a0f; }
+.wcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.wcard-score { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+.wcard-score.positive { color: var(--green); }
+.wcard-score.negative { color: var(--red); }
+.wcard-score .n { font-weight: 500; color: var(--muted); }
 
-/* ── PANES ── */
-.feed-pane {}
+.empty-state { padding: 24px 16px; color: var(--muted); font-size: 12.5px; }
 
-/* ── NEWS PANE ── */
-.feed-item { border-bottom: 1px solid #1e1e1e; padding: 20px 0; }
-.feed-item:last-child { border-bottom: none; }
-.headline-block { display: block; text-decoration: none; color: inherit; }
-.headline-block:hover .headline-text { color: #a78bfa; }
-.headline-source { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.headline-text { font-size: 17px; font-weight: 600; line-height: 1.35; margin: 0 0 10px; color: #e5e5e5; }
-.edge-sentence { font-size: 13px; color: #a78bfa; font-style: italic; margin: 0 0 12px; padding-left: 12px; border-left: 2px solid #a78bfa; line-height: 1.5; }
-
-/* ── MARKET CARD (shared) ── */
-.market-card, .edge-card {
-  background: #111;
-  border: 1px solid #222;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: border-color .15s, transform .15s;
+/* ── desktop scale-up (>=1024px) ── */
+@media (min-width: 1024px) {
+  .page-wrap { max-width: 1240px; margin: 0 auto; padding: 36px 0 88px; }
+  .page-head, .anom-head, .cat-row-head, .anom-scroll, .win-scroll, .anom-empty, .empty-state { padding-left: 32px; padding-right: 32px; }
+  .page-head h1 { font-size: 28px; }
+  .anom-card { width: 250px; }
+  .wcard { width: 226px; }
+  .wcard-hero .mult { font-size: 28px; }
 }
-.market-card:hover, .edge-card:hover { border-color: #444; transform: translateY(-1px); }
-.edge-card { margin-bottom: 16px; }
-.card-image-wrap {
-  position: relative;
-  height: 120px;
-  background: #1a1a2e;
-  overflow: hidden;
-}
-.card-image-wrap.img-fallback { background: linear-gradient(135deg, #1a1a2e, #16213e); }
-.card-image { width: 100%; height: 120px; object-fit: cover; display: block; }
-.card-probability {
-  position: absolute;
-  top: 8px; right: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  background: rgba(0,0,0,.55);
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.prob-yes  { color: #4ade80; }
-.prob-no   { color: #f87171; }
-.prob-even { color: #facc15; }
-.card-body { padding: 12px 14px; }
-.card-question { font-size: 14px; font-weight: 500; line-height: 1.4; margin: 0 0 8px; color: #e5e5e5; }
-.card-meta { display: flex; gap: 10px; font-size: 11px; color: #666; margin-top: 8px; }
-.card-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid #1e1e1e; }
-.btn-yes {
-  flex: 1;
-  background: rgba(74,222,128,.1);
-  border: 1px solid rgba(74,222,128,.3);
-  color: #4ade80;
-  border-radius: 6px;
-  padding: 7px 0;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-yes:hover { background: rgba(74,222,128,.2); }
-.btn-no {
-  flex: 1;
-  background: rgba(248,113,113,.1);
-  border: 1px solid rgba(248,113,113,.3);
-  color: #f87171;
-  border-radius: 6px;
-  padding: 7px 0;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-no:hover { background: rgba(248,113,113,.2); }
-
-/* ── EDGE PANE ── */
-.thesis { margin: 10px 0; }
-.thesis-label { display: block; font-size: 10px; font-weight: 700; color: #a78bfa; letter-spacing: .08em; margin-bottom: 6px; }
-.thesis-body { font-size: 13px; color: #ccc; line-height: 1.55; }
-.thesis-body p { margin: 0 0 8px; }
-.thesis-body p:last-child { margin-bottom: 0; }
-.thesis-body strong { color: #fff; font-weight: 700; }
-.edge-stale-banner {
-  padding: 8px 0;
-  font-size: 11px;
-  color: #f59e0b;
-  font-family: 'JetBrains Mono', monospace;
-  margin-bottom: 12px;
-}
-
-/* ── SKELETON ── */
-.skeleton-item { padding: 20px 0; border-bottom: 1px solid #1e1e1e; }
-.skel-line { background: #1a1a1e; border-radius: 4px; margin-bottom: 8px; }
-.skel-line.w60 { width: 60%; height: 10px; }
-.skel-line.w90 { width: 90%; height: 18px; }
-.skel-line.w75 { width: 75%; height: 18px; }
-.skel-card { background: #1a1a1e; border-radius: 12px; height: 80px; margin-top: 12px; }
-@keyframes shimmer { 0%,100% { opacity: .4; } 50% { opacity: .8; } }
-.skeleton-item .skel-line, .skeleton-item .skel-card { animation: shimmer 1.4s ease-in-out infinite; }
-
-/* ── EMPTY / ERROR ── */
-.empty-state { padding: 40px 20px; text-align: center; color: #666; font-size: 13px; }
-
-@media (max-width: 390px) {
-  .page-wrap { padding: 14px 12px 60px; }
-  .feed-header h1 { font-size: 17px; }
-}
-
-@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 </style>
 </head>
 <body>
@@ -237,349 +120,185 @@ body {
 
 <div class="page-wrap">
 
-  <div class="feed-header">
+  <div class="page-head">
     <h1>FLEX <span>Feed</span></h1>
-    <div class="live-badge">
-      <div class="live-dot"></div>
-      <span id="live-count">live</span>
-    </div>
+    <p class="page-sub">Live whale activity, and the largest verified wins on the durable board — grouped by category, most-traded first.</p>
+    <div class="live-badge"><div class="live-dot"></div><span id="live-count">live</span></div>
+    <div class="page-stat" id="pageStat"></div>
   </div>
 
-  <div class="edge-ticker" id="edge-ticker"></div>
-
-  <div class="feed-tabs">
-    <button class="feed-tab active" data-tab="news" onclick="switchTab('news')">News</button>
-    <button class="feed-tab" data-tab="edge" onclick="switchTab('edge')">Edge</button>
+  <div class="anom-section">
+    <div class="anom-head"><span class="live-swatch"></span><h2>Live Feed</h2></div>
+    <div class="anom-scroll fade-row" id="anomScroll"></div>
   </div>
 
-  <div id="news-feed" class="feed-pane"></div>
-  <div id="edge-feed" class="feed-pane" style="display:none"></div>
+  <div id="catRows"></div>
 
 </div>
 
+<script src="/trader-card.js"></script>
 <script>
 'use strict';
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+function esc(s) { return HFXTraderCard.esc(s); }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+function fmtUsd(n) {
+  if (n == null) return '—';
+  var v = Math.abs(n);
+  var s = v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v);
+  return (n < 0 ? '-' : '') + s;
 }
-
-function timeAgo(ts) {
+function fmtPct(p) { if (p == null) return '—'; return (p >= 0 ? '+' : '') + p.toFixed(1) + '%'; }
+function tAgo(ts) {
   if (!ts) return '';
-  const diff = Date.now() - new Date(ts).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return m + 'm ago';
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + 'h ago';
-  return Math.floor(h / 24) + 'd ago';
+  var ms = Date.now() - new Date(ts).getTime();
+  if (ms < 60000) return 'now';
+  if (ms < 3600000) return Math.floor(ms / 60000) + 'm';
+  if (ms < 86400000) return Math.floor(ms / 3600000) + 'h';
+  return Math.floor(ms / 86400000) + 'd';
+}
+function initials(src) {
+  src = String(src || '?').replace(/^0x/, '').trim();
+  var parts = src.split(/\s+/);
+  return (parts.length >= 2 ? (parts[0][0] + parts[1][0]) : src.slice(0, 2)).toUpperCase();
+}
+function avatarColor(seed) {
+  var src = String(seed || 'x'); var hash = 0;
+  for (var i = 0; i < src.length; i++) hash = (hash * 31 + src.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (hash % 360) + ', 62%, 62%)';
+}
+function handleOf(c) {
+  if (c.username) return '@' + c.username;
+  if (c.display_name) return c.display_name;
+  if (c.polymarket_address) return c.polymarket_address.slice(0, 6) + '…' + c.polymarket_address.slice(-4);
+  return 'Trader';
 }
 
-function formatVolume(v) {
-  if (!v || v < 1000) return '';
-  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-  return '$' + Math.round(v / 1000) + 'k';
-}
+// One accent per category — quick visual scanning as you scroll past rows.
+var CAT_COLORS = {
+  world: '#a855f7', politics: '#4d9fff', macro: '#c9920d', sports: '#00e68a',
+  crypto: '#f59e0b', commodities: '#d97706', tech: '#38bdf8', entertainment: '#ff4d6a', weather: '#6b7280',
+};
 
-function formatExpiry(endDate) {
-  if (!endDate) return '';
-  const d = new Date(endDate);
-  const days = Math.ceil((d - Date.now()) / 86400000);
-  if (days < 0) return 'expired';
-  if (days === 0) return 'today';
-  if (days === 1) return '1d left';
-  if (days < 30) return days + 'd left';
-  return Math.round(days / 30) + 'mo left';
-}
+// ── LIVE FEED: reuse /api/signals — the existing whale-cluster / momentum /
+// volume-surge / new-entry detectors (Alpha Engine; cross-platform arbitrage
+// was removed 2026-05-10 when Kalshi was dropped, so that type never fires
+// here and isn't in the map below). No score or hit-rate number is shown
+// (that's gated separately) — just the raw, observable fact, PLUS a plain
+// reason line built from that signal's own real fields (whale_count,
+// consensus_pct, change_pct, etc.) so it's never just a badge with no
+// explanation of why the market is on the list. ──
+var ANOM_COLORS = { whale_cluster: ['rgba(168,85,247,.12)', '#a855f7'], momentum: ['rgba(77,159,255,.12)', '#4d9fff'], volume_surge: ['rgba(255,77,106,.12)', '#ff4d6a'], new_entry: ['rgba(0,230,138,.12)', '#00e68a'] };
+var ANOM_LABELS = { whale_cluster: 'WHALE CLUSTER', momentum: 'MOMENTUM', volume_surge: 'VOLUME SURGE', new_entry: 'NEW ENTRY' };
 
-function getProbClass(market) {
-  const p = market && market.yes_price;
-  if (p == null) return 'prob-even';
-  if (p >= 0.65) return 'prob-yes';
-  if (p <= 0.35) return 'prob-no';
-  return 'prob-even';
-}
-
-function getProbDisplay(market) {
-  const p = market && market.yes_price;
-  if (p == null) return '—';
-  return Math.round(p * 100) + '%';
-}
-
-function getYesPrice(market) {
-  const p = market && market.yes_price;
-  return p != null ? Math.round(p * 100) + '¢' : '—';
-}
-
-function getNoPrice(market) {
-  const p = market && market.yes_price;
-  return p != null ? Math.round((1 - p) * 100) + '¢' : '—';
-}
-
-// Tiny markdown renderer — bold + paragraph breaks only (no library)
-function renderThesis(text) {
-  if (!text) return '';
-  return escapeHtml(text)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n\n+/g, '</p><p>')
-    .replace(/\n/g, '<br>');
-}
-
-function skeletonNews(n) {
-  return Array.from({length: n}, () => `
-<div class="skeleton-item">
-  <div class="skel-line w60"></div>
-  <div class="skel-line w90"></div>
-  <div class="skel-line w75"></div>
-  <div class="skel-card"></div>
-</div>`).join('');
-}
-
-function skeletonEdge(n) {
-  return Array.from({length: n}, () => `
-<div class="skeleton-item">
-  <div class="skel-card" style="height:200px;margin-top:0"></div>
-</div>`).join('');
-}
-
-// ── Tab switching ────────────────────────────────────────────────────────────
-
-let edgeLoaded = false;
-let edgeCache  = null;
-
-function switchTab(tab) {
-  document.querySelectorAll('.feed-tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.tab === tab));
-  document.getElementById('news-feed').style.display = tab === 'news' ? 'block' : 'none';
-  document.getElementById('edge-feed').style.display = tab === 'edge' ? 'block' : 'none';
-  if (tab === 'edge' && !edgeLoaded) { edgeLoaded = true; loadEdge(); }
-}
-
-// ── News tab ─────────────────────────────────────────────────────────────────
-
-function buildNewsItem(item) {
-  const m = item.market;
-  const slug = m && m.slug ? escapeHtml(m.slug) : '';
-
-  const imageHtml = m && (m.image || m.event_image_url)
-    ? `<img src="${escapeHtml(m.image || m.event_image_url)}" class="card-image" loading="lazy"
-         onerror="this.style.display='none';this.parentElement.classList.add('img-fallback')" alt="">`
-    : '';
-
-  const marketHtml = m ? `
-    ${item.edge ? `<div class="edge-sentence">${escapeHtml(item.edge)}</div>` : ''}
-    <div class="market-card" onclick="location.href='/market/${slug}'">
-      <div class="card-image-wrap">
-        ${imageHtml}
-        <div class="card-probability ${getProbClass(m)}">${getProbDisplay(m)}</div>
-      </div>
-      <div class="card-body">
-        <p class="card-question">${escapeHtml(m.question || '')}</p>
-        <div class="card-meta">
-          ${formatVolume(m.volume) ? `<span>${formatVolume(m.volume)}</span>` : ''}
-          ${formatExpiry(m.end_date || m.endDate) ? `<span>${formatExpiry(m.end_date || m.endDate)}</span>` : ''}
-        </div>
-      </div>
-      <div class="card-actions">
-        <button class="btn-yes" onclick="event.stopPropagation();location.href='/market/${slug}'">YES ${getYesPrice(m)}</button>
-        <button class="btn-no"  onclick="event.stopPropagation();location.href='/market/${slug}'">NO ${getNoPrice(m)}</button>
-      </div>
-    </div>` : '';
-
-  const src = item.source ? escapeHtml(item.source) : 'Google News';
-  const ago = item.publishedAt ? timeAgo(item.publishedAt) : '';
-  const sourceStr = ago ? `${src} · ${ago}` : src;
-
-  return `
-<div class="feed-item">
-  <a class="headline-block" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener">
-    <div class="headline-source">${sourceStr}</div>
-    <h3 class="headline-text">${escapeHtml(item.headline || '')}</h3>
-  </a>
-  ${marketHtml}
-</div>`;
-}
-
-// Fetch JSON with a per-attempt timeout + silent auto-retry (backoff between
-// tries). `warming(data)` returning true means "server cache isn't ready yet —
-// keep retrying", so a cold cache reads as loading, never as failure. Never throws.
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-async function fetchFeed(url, opts) {
-  opts = opts || {};
-  const attempts = opts.attempts || 3;             // initial + 2 retries
-  const backoff  = opts.backoff  || [1000, 2000];  // 1s, 2s
-  const timeout  = opts.timeout  || 8000;
-  let result = { ok: false };
-  for (let i = 0; i < attempts; i++) {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), timeout);
-    try {
-      const resp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
-      clearTimeout(tid);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const data = await resp.json();
-      result = { ok: true, data };
-      if (opts.warming && opts.warming(data) && i < attempts - 1) { await sleep(backoff[i] || 2000); continue; }
-      return result;
-    } catch (e) {
-      clearTimeout(tid);
-      result = { ok: false, error: e };
-      if (i < attempts - 1) await sleep(backoff[i] || 2000);
-    }
+function reasonFor(s) {
+  if (s.type === 'whale_cluster') {
+    var pct = s.consensus_pct != null ? ' · ' + Math.round(s.consensus_pct) + '% consensus' : '';
+    return (s.whale_count || 0) + ' whales on ' + (s.side || 'one side') + pct;
   }
-  return result;
-}
-
-async function loadNews() {
-  const pane = document.getElementById('news-feed');
-  pane.innerHTML = skeletonNews(6);
-
-  // A cold/warming cache (warming flag, or no items yet) is retryable, not a failure.
-  const res = await fetchFeed('/api/news-feed', {
-    warming: d => !!(d && (d.warming || !(d.items && d.items.length)))
-  });
-  const data = res.ok ? res.data : null;
-  const items = (data && data.items) || [];
-
-  if (items.length) {
-    const matched = items.filter(x => x.market).length;
-    document.getElementById('live-count').textContent = matched + ' matched';
-    pane.innerHTML = items.map(buildNewsItem).join('');
-    return;
+  if (s.type === 'momentum') {
+    var from = s.start_price != null ? s.start_price + '¢' : '?';
+    var to = s.odds_price != null ? s.odds_price + '¢' : '?';
+    return 'Odds moved ' + from + ' → ' + to + ' in 24h';
   }
-
-  // Retries exhausted with nothing to show — styled state with in-place retry,
-  // never a blank void, never a misleading "Failed" while the cache is warming.
-  const warming = res.ok && data && (data.warming || !items.length);
-  pane.innerHTML = '<div class="empty-state">' +
-    (warming ? 'Loading the latest news… ' : 'Couldn’t reach the feed. ') +
-    '<a href="javascript:void 0" onclick="loadNews();return false" style="color:#a78bfa">retry</a></div>';
-}
-
-// ── Edge tab ─────────────────────────────────────────────────────────────────
-
-function buildEdgeCard(e) {
-  const m = e.market || {};
-  const slug = m.slug ? escapeHtml(m.slug) : '';
-  const imageHtml = (m.image || m.event_image_url)
-    ? `<img src="${escapeHtml(m.image || m.event_image_url)}" class="card-image" loading="lazy"
-         onerror="this.style.display='none';this.parentElement.classList.add('img-fallback')" alt="">`
-    : '';
-
-  return `
-<div class="edge-card" onclick="location.href='/market/${slug}'">
-  <div class="card-image-wrap">
-    ${imageHtml}
-    <div class="card-probability ${getProbClass(m)}">${getProbDisplay(m)}</div>
-  </div>
-  <div class="card-body">
-    <p class="card-question">${escapeHtml(m.question || 'Market')}</p>
-    <div class="thesis">
-      <span class="thesis-label">THE EDGE</span>
-      <div class="thesis-body"><p>${renderThesis(e.thesis)}</p></div>
-    </div>
-    <div class="card-meta">
-      ${formatVolume(m.volume) ? `<span>${formatVolume(m.volume)}</span>` : ''}
-      ${formatExpiry(m.end_date || m.endDate) ? `<span>${formatExpiry(m.end_date || m.endDate)}</span>` : ''}
-    </div>
-  </div>
-</div>`;
-}
-
-async function loadEdge() {
-  if (edgeCache) {
-    renderEdge(edgeCache);
-    return;
+  if (s.type === 'new_entry') {
+    return 'New ' + (s.capital ? fmtUsd(s.capital) + ' ' : '') + (s.side || '') + ' position just opened';
   }
-
-  const pane = document.getElementById('edge-feed');
-  pane.innerHTML = skeletonEdge(5);
-
-  // Edge analysis can run AI on a cold cache — give each attempt a longer window
-  // and retry on transient failure. Valid empty/stale payloads render their own
-  // styled state via renderEdge, so we don't re-hit the (capped) AI endpoint for those.
-  const res = await fetchFeed('/api/edge-feed', { timeout: 15000, backoff: [1500, 3000] });
-  if (res.ok && res.data) {
-    edgeCache = res.data;
-    renderEdge(res.data);
-    return;
+  if (s.type === 'volume_surge') {
+    return s.action || 'Unusual activity detected';
   }
-  document.getElementById('edge-feed').innerHTML =
-    '<div class="empty-state">Couldn’t reach the edge feed. <a href="javascript:void 0" onclick="loadEdge();return false" style="color:#a78bfa">retry</a></div>';
+  return s.action || '';
 }
 
-function renderEdge(data) {
-  const pane = document.getElementById('edge-feed');
-  const edges = data.edges || [];
+function renderAnomEmpty() {
+  document.getElementById('anomScroll').innerHTML = '<div class="anom-empty">Nothing live right now — check back shortly.</div>';
+}
+function signalKey(s) { return s.type + '|' + s.market + '|' + s.detected_at; }
 
-  let html = '';
-  if (data.stale) {
-    html += '<div class="edge-stale-banner">Showing cached results — analysis updating</div>';
-  }
-  if (!edges.length) {
-    html += data.reason === 'cap_reached'
-      ? '<div class="empty-state">Daily edge analysis limit reached. Check back tomorrow.</div>'
-      : '<div class="empty-state">Edge analysis refreshing — check back shortly.</div>';
-    pane.innerHTML = html;
-    return;
-  }
-  html += edges.map(buildEdgeCard).join('');
-  pane.innerHTML = html;
+// Seeded on the first successful load (so the initial 10 cards don't all
+// flash at once) — only signals that appear on a LATER poll and weren't in
+// the previous set get the flash treatment, i.e. "new since you were last
+// looking at this page," same idea as the old ticker's leader-change flash.
+var _anomSeenKeys = null;
+function loadAnomalies() {
+  fetch('/api/signals')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var list = ((d && (d.signals || d)) || []).slice(0, 10);
+      if (!list.length) { renderAnomEmpty(); return; }
+      var prevKeys = _anomSeenKeys;
+      document.getElementById('anomScroll').innerHTML = list.map(function(s) {
+        var colors = ANOM_COLORS[s.type] || ['rgba(201,146,13,.12)', '#c9920d'];
+        var label = ANOM_LABELS[s.type] || String(s.type || '').toUpperCase();
+        var side = (s.side || '').toUpperCase();
+        var url = s.slug ? '/market/' + esc(s.slug) : '#';
+        var isNew = prevKeys && !prevKeys.has(signalKey(s));
+        return '<a class="anom-card' + (isNew ? ' flash' : '') + '" style="--accent:' + colors[1] + '" href="' + url + '">'
+          + '<div class="anom-badge-row"><span class="anom-badge" style="background:' + colors[0] + ';color:' + colors[1] + '">' + esc(label) + '</span><span class="anom-age">' + esc(tAgo(s.detected_at)) + '</span></div>'
+          + '<div class="anom-market">' + esc(s.market || '') + '</div>'
+          + '<div class="anom-reason">' + esc(reasonFor(s)) + '</div>'
+          + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '')
+          + '</a>';
+      }).join('');
+      _anomSeenKeys = new Set(list.map(signalKey));
+    })
+    .catch(renderAnomEmpty);
 }
 
-// ── Edge ticker — top live edges, auto-refreshed every 2 min ────────────────
-
-let _tickerTopSlug = null;
-
-function truncateQ(s, n) {
-  s = String(s || '');
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+// ── CATEGORY WIN ROWS: /api/feed/category-wins, most-liquid category first,
+// each row a scrolling wall of real winning trades. Score+n always travel
+// with the win (rule 3) — never a naked win rate. ──
+function winCardHtml(e, accent) {
+  var handle = handleOf(e);
+  var win = e.win;
+  var verb = win.side === 'SELL' ? 'Sold' : 'Bought';
+  var entryC = win.entry_price != null ? Math.round(win.entry_price * 100) + '¢' : null;
+  var multText = win.multiplier != null ? win.multiplier + 'x' : fmtPct(win.roi_pct);
+  var scorePositive = (e.score_pct != null ? e.score_pct : 0) >= 0;
+  var href = e.user_id ? '/trader/' + esc(e.user_id) : '#';
+  return '<a class="wcard" style="--accent:' + accent + '" href="' + href + '">'
+    + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
+    + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
+    + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
+    + '<div class="wcard-foot">'
+      + '<div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div>'
+      + '<div class="wcard-handle">' + esc(handle) + '</div>'
+      + '<div class="wcard-score ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + ' <span class="n">n=' + esc(e.n) + '</span></div>'
+    + '</div>'
+    + '</a>';
 }
 
-async function loadEdgeTicker(isRefresh) {
-  const strip = document.getElementById('edge-ticker');
-  if (!strip) return;
-  try {
-    const resp = await fetch('/api/alpha/top?n=8');
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const markets = (data.markets || []).filter(m => m.slug);
-    if (markets.length < 3) return; // no thin-supply ticker
-
-    const newLeader = isRefresh && markets[0] && markets[0].slug !== _tickerTopSlug;
-    _tickerTopSlug = markets[0] ? markets[0].slug : null;
-
-    strip.innerHTML = markets.map((m, i) => {
-      const score = m.edge_score || 0;
-      const cls = score >= 60 ? 'high' : score >= 35 ? 'mid' : 'low';
-      const px = m.yes_price != null ? Math.round(m.yes_price * 100) + '¢' : '';
-      return `<a class="ticker-chip${i === 0 && newLeader ? ' flash' : ''}" href="/market/${escapeHtml(m.slug)}">` +
-        `<span class="score ${cls}">${score}</span>` +
-        `<span>${escapeHtml(truncateQ(m.question, 48))}</span>` +
-        (px ? `<span class="px">${px}</span>` : '') +
-      `</a>`;
-    }).join('') +
-    `<a class="ticker-chip terminal-link" href="/alpha-live">Terminal →</a>`;
-
-    strip.classList.add('show');
-    if (newLeader) {
-      setTimeout(() => {
-        const first = strip.querySelector('.ticker-chip.flash');
-        if (first) first.classList.remove('flash');
-      }, 3000);
-    }
-  } catch (e) { /* ticker is optional — never block the feed */ }
+function loadCategoryRows() {
+  var wrap = document.getElementById('catRows');
+  fetch('/api/feed/category-wins?limit=16')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var cats = (d && d.categories) || [];
+      if (!cats.length) { wrap.innerHTML = '<div class="empty-state">No category has enough verified wins yet to show a wall.</div>'; return; }
+      var stat = document.getElementById('pageStat');
+      if (stat) {
+        var totalVol = cats.reduce(function(s, c) { return s + (c.total_volume_usd || 0); }, 0);
+        stat.textContent = fmtUsd(totalVol) + ' tracked across ' + cats.length + ' categor' + (cats.length === 1 ? 'y' : 'ies');
+      }
+      wrap.innerHTML = cats.map(function(c) {
+        var accent = CAT_COLORS[c.category] || '#c9920d';
+        return '<div class="cat-row">'
+          + '<div class="cat-row-head"><span class="dot" style="--accent:' + accent + '"></span><h2>' + esc(c.label) + '</h2><span class="cat-row-vol">' + esc(fmtUsd(c.total_volume_usd)) + ' tracked</span><a class="cat-row-see" href="/traders?category=' + esc(c.category) + '">See all →</a></div>'
+          + '<div class="win-scroll fade-row">' + c.entries.map(function(e) { return winCardHtml(e, accent); }).join('') + '</div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(function() { wrap.innerHTML = '<div class="empty-state">Could not load the category feed. <a href="javascript:void 0" onclick="loadCategoryRows();return false" style="color:#a78bfa">retry</a></div>'; });
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  loadNews();
-  loadEdgeTicker(false);
-  setInterval(() => loadEdgeTicker(true), 2 * 60 * 1000);
+document.addEventListener('DOMContentLoaded', function() {
+  loadAnomalies();
+  loadCategoryRows();
+  setInterval(loadAnomalies, 2 * 60 * 1000);
+  // Category wins change less often than live signals (a new qualifying
+  // win is a rarer event than a whale position), so a longer interval here
+  // is enough to keep "Live Feed" honest without hammering the endpoint.
+  setInterval(loadCategoryRows, 3 * 60 * 1000);
 });
 </script>
 </body>
