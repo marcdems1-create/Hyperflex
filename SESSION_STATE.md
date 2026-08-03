@@ -49,6 +49,20 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-03 (✅ SHIPPED — homepage consistency pass + the rule-4 category-browse destination, finally built)
+
+Marc asked "what's next on homepage"; offered two options — (A) bring `/feed`'s freshness treatment (See-all, refresh, flash) to `home-kings.html`'s own rows, or (B) the rule-4 category-browse destination for non-qualifying `/connect` wallets, flagged as a real documented gap ("markets by category... /connect links to /traders as an honest placeholder, not a dead end, but the real browse surface is still a separate pass"). He said "both, start a."
+
+**A — shipped (`f300fc9`):** `home-kings.html`'s Top Trader / Category Leaders / Movers now poll every 3 min (were: once, on load), category leader cards got a "See all → /traders?category=X" link, and all three flash (same one-shot CSS glow as `/feed`) on a real change — new #1, new category leader, or a genuinely new Movers entry — fingerprinted by `user_id` across polls. Caught a real bug in my own first test: a stray `curl` during mock-server setup had already advanced the poll counter past the transition point, producing a false "flash isn't firing" read — restarted the mock clean and re-verified the transition fires correctly and a no-op re-poll doesn't.
+
+**B — shipped (`bc4c211` + `6ace9b9`):** Researched first (dedicated research pass, not assumed) — found **three incompatible category taxonomies** already in the codebase: `classifyCardCategory` (10 cats, resolved `realized_trades` only, never applied to live markets), `detectCategory` (6 cats, powers `/api/screener`'s live filter, unused by any UI), and `hotMarkets.classifyTopic`/`TOPIC_RULES` (7 topics, the ONLY one with a live, working, already-shipped UI — powers `/explore`'s topic dashboard). Standardized on the third rather than inventing a fourth: `/connect`'s non-qualifying path (`connect.html`'s old `.category-stub` placeholder, one static paragraph) is now real topic chips + a live market grid off `/api/topics`, reused as-is. Personalization: `_buildTraderProfile`'s `open_positions` now carry a `topic` (tagged via `hotMarkets.classifyTopic`, separate small commit `bc4c211`) so a wallet with zero resolved trades — the common case for a brand-new connect — still gets a "you already have open positions in X" pre-selected tab, since that reads open positions, not trade history.
+
+**Process note, second occurrence this week:** hit the exact same concurrent-session collision as 2026-07-30h/31 (see below) — the other Claude session's `server.js` work was staged-but-uncommitted again while I needed to add code to the same file. Same fix: `git diff`/`git diff --cached` → isolate → reset to HEAD → apply+commit mine → reapply+restage theirs → byte-diff to confirm zero drift. Did this cleanly twice in one session (once for the `open_positions` topic tag, once earlier this week for `/api/category-leaderboard`). This is now a proven, repeatable procedure — worth formalizing as a named routine if a third occurrence happens.
+
+Verified end-to-end for both via mock servers before shipping (home-kings.html: flash transitions confirmed programmatically; connect.html: full paste-address → raw → verified-non-qualifying flow, personalization hint + chip-switching + zero mobile overflow, all confirmed). Both confirmed live on production post-deploy (`loadKings`/`loadMovers` present in `/`'s served HTML; `loadCategoryBrowse` present in `/connect`'s).
+
+**Active blockers:** (none)
+
 ## 2026-07-31b (✅ SHIPPED — /feed follow-up: reason lines, "See all" into filtered /traders, auto-refresh, new-signal flash, volume rollup)
 
 Marc asked "any more value we can pump out with this feed" after the visual pass (2026-07-30/31 entries below); proposed 4 ranked ideas, he said "start with 2 then do them in order" (See-all link → auto-refresh → new-signal flash → volume rollup). Also fixed, mid-thread, that Live Feed cards showed a badge + market with no explanation of *why* (added `reasonFor()` using each signal's own real fields) and dropped a dead `arbitrage` map entry (that detector was removed 2026-05-10 with Kalshi).
