@@ -49,6 +49,27 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-03b (⛔ REAL BUG FOUND + FIXED — sold-path round-trip aggregation silently dropped repeat trades on the same market forever. Marc: "AUDIT THE SCORING MECHANISM SEE IF THERES any bugs.")
+
+**Read the whole scoring pipeline top to bottom** (`_computeRoiLeaderboard`, `_buildTraderCards`, `_computeCategoryRoiLeaderboards`, `classifyMarketDurability`, the redeemed-path settlement verification, and `backfillRealizedTrades` — the sold-path ingestion, 98% of platform volume). The redeemed path checked out clean (already hardened by the 2026-07-28/29 fixes — `_parseOutcomeSettlement` correctly requires gamma's `closed===true`, `market_settlement_cache` has exactly one writer and it's properly gated, the retired `regradeRedeemedTrades` is genuinely dead code behind an early `return`). The sold path had a real, previously-undiscovered bug.
+
+**The bug:** `backfillRealizedTrades` grouped every BUY/SELL event by `(condition_id, outcome)` with **no time scoping**, ran one FIFO pass over the entire group, and inserted **one aggregate row** keyed by `external_sync_id = 'pm-act:user:cond:outcome'` — no per-round-trip or time component. Since the insert is `ON CONFLICT DO NOTHING` and this function reruns on every profile view (`server.js:17507`) and every `/connect`, a wallet's **second and every later round-trip** on a market it had already traded was silently dropped forever after the first successful backfill. Not logged, not counted as skipped (unlike the redeemed path, which does track `redeemedUnverifiedSkipped`) — just gone.
+
+**Two concrete scoring consequences:** (1) `n` undercounted for repeat-market traders — directly hits the n>=10 qualifying floor and the `n/(n+K)` shrinkage weight (K=20); a wallet with 30 real round-trips across 10 markets could score as n=10. (2) `market_durability` computed off the *aggregate* first-buy-to-last-sell span rather than each round-trip's real duration — a wallet doing genuinely rapid, ephemeral-style round-trips on one market over months could show a multi-month aggregate span and get misclassified `'durable'`, letting trading that should be excluded by design count toward the score.
+
+**Shipped (`d8104ba` on `main`):**
+- Code fix: splits each `(condition_id, outcome)` group into per-round-trip **segments** (boundary = position returning fully flat), one `realized_trades` row per segment, keyed `pm-act2:user:cond:outcome:<segment close timestamp>` — deliberately a **new prefix**, not a suffix on the old key shape (the old key has no per-segment component, and the new suffix is an ISO timestamp which itself contains colons, so parsing old-vs-new reliably would be fragile — a distinct prefix makes it unambiguous and guarantees old aggregate rows and new segment rows can never silently coexist and double-count).
+- New `POST /api/admin/resync-sold-trades` (dry-run default, `?confirm=1` to execute, `?user_id=` to target one wallet, `?limit=` batch size) — follows the exact same pattern as the existing `migrate-external-sync-id-scope` fix from 2026-07-23 (a *different* external_sync_id bug, same shape of problem). For each affected wallet: deletes old-format (`pm-act:%`) sold rows, immediately re-runs `backfillRealizedTrades` in the same request so corrected rows repopulate right away — never leaves a wallet's score silently blank waiting for a lazy re-trigger. **Monotonic for qualification**: splitting an aggregate into segments can only increase a wallet's real n, never decrease it.
+
+**Not done / blocked on Marc:** could not verify real-world prevalence or run the dry-run against production from this sandbox — no `ADMIN_SECRET` here. The dry-run curl is read-only/safe:
+```
+curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"
+```
+Reports `wallets_affected_total` and `old_format_rows_total` platform-wide. Worth running before deciding how big a `confirm=1` sweep to do — some currently-qualifying wallets' scores may shift (not necessarily down — durability reclassification could go either way even though n can only go up).
+
+**Active blockers:**
+- Dry-run not yet run against production — real prevalence unknown. Recommend Marc runs the curl above next session start.
+
 ## 2026-08-03 (✅ SHIPPED — homepage consistency pass + the rule-4 category-browse destination, finally built)
 
 Marc asked "what's next on homepage"; offered two options — (A) bring `/feed`'s freshness treatment (See-all, refresh, flash) to `home-kings.html`'s own rows, or (B) the rule-4 category-browse destination for non-qualifying `/connect` wallets, flagged as a real documented gap ("markets by category... /connect links to /traders as an honest placeholder, not a dead end, but the real browse surface is still a separate pass"). He said "both, start a."
