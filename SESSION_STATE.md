@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-03 (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
+
+**Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-07-31 compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
+
+**Ask:** Marc asked for HYPERFLEX to "remember someone's wallet so they don't need to constantly sign in" — right after asking for a PR on the compliance fix.
+
+**Finding:** `public/connect.html` (the wallet-first front door per CLAUDE.md's product definition) had no persistence at all. Every page load started from the "Connect Wallet" hero — no localStorage cache of a previously connected address, no silent `eth_accounts` check on load, nothing. A returning visitor had to click Connect and go through MetaMask again every single time, even seconds after their last visit.
+
+**Fix:** `connect.html` now caches `{user_id, address, has_signer, last_full_connect_ts}` in localStorage after every successful connect. On load, `autoResumeConnection()` tries a silent `eth_accounts` call first (no popup — only resolves if the site already has permission), falling back to the cache when no live wallet is available. A live wallet matching the cache within 15 minutes takes a fast path straight to `GET /api/trader-record/:userId` (the already-computed profile) instead of re-running `/api/connect`'s full activity refetch + backfill — that endpoint is expensive (paginated Polymarket activity fetch + a background gamma-verification backfill) and firing it on every page load would have been wasteful and hammered Polymarket's API for no reason. Anything else (new wallet, cache >15min old) does a real `/api/connect` refresh.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+1. Pre-existing, not touched by this fix: the opt-out checkbox on `/connect` always renders unchecked on load regardless of the wallet's real `leaderboard_opt_out` DB value — worth fixing so a previously-opted-out wallet doesn't look listed on reload.
+2. No live browser test of the silent-reconnect flow was possible in this environment (would need an actual MetaMask session across two page loads) — worth a manual check before/soon after this ships.
+
+**Notes for next session:**
+- If `/connect`'s cache logic is touched again, keep the fast-path/full-refresh split (`FULL_REFRESH_INTERVAL_MS`, currently 15 min) — don't let a naive fix start calling `/api/connect` on every page load again.
+
 ## 2026-07-31 (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 **Shipped (with hashes):** pending push this session — see commit on this branch after this entry.

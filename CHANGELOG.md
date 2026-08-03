@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-08-03 — feat(connect): remember a connected wallet across visits (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
+
+### feat(connect.html): auto-resume a remembered wallet instead of requiring "Connect Wallet" every visit
+- **Problem:** `/connect` (the front door per CLAUDE.md's product definition) had zero persistence — every page load showed the "Connect Wallet" hero from scratch, requiring a fresh click + MetaMask round trip even for a wallet that had already connected minutes earlier in the same browser.
+- **Fix:** `localStorage` now caches `{user_id, address, has_signer, last_full_connect_ts}` on every successful connect. On page load, `autoResumeConnection()` first tries a **silent** `eth_accounts` check (no MetaMask popup — only returns an address if this site already has permission from a prior visit) and falls back to the cache if no live wallet is available (extension locked/absent). A live wallet matching the cached address within the last 15 minutes takes the fast path (`loadRecordFast` → `GET /api/trader-record/:userId` directly); anything else (new wallet, stale cache) re-runs the full `/api/connect` flow, which also refreshes the cache.
+- **Why the fast path matters:** `/api/connect` re-fetches the wallet's full Polymarket activity history and kicks off a background gamma-verification backfill every time it's called. Auto-firing that on every single page load (as a naive "just re-call /api/connect on load" fix would) would hammer Polymarket's activity API and re-run backfills needlessly for a wallet whose data hasn't changed since the last visit. The fast path reads the already-computed profile instead (`_buildTraderProfile`, same endpoint the polling flow already uses) and only triggers a real refresh once per 15 minutes per wallet.
+- **Don't break:** `?address=` query-param handoff from the homepage's paste-to-preview input still takes priority over the cache (explicit intent). A cached `user_id` that 404s against `/api/trader-record` (e.g. after a DB reset) clears the cache and falls back to the normal hero rather than a dead skeleton.
+- **Not touched:** the opt-out checkbox still always renders unchecked on load regardless of the wallet's actual `leaderboard_opt_out` state in the DB — pre-existing gap, not introduced by this change, worth a follow-up.
+- **Verify:** inline `<script>` in `connect.html` parses via `new Function()`. No live browser test in this environment — would need an actual MetaMask session across two page loads to confirm the silent-reconnect UX end to end.
+
+---
+
 ## 2026-07-31 — fix(compliance): trade-routing fallback no longer auto-retries around Polymarket's geo-restriction (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 ### fix(polymarket): stop chaining CF Worker → Railway specifically when Polymarket returns a geo-restriction

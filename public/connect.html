@@ -360,6 +360,48 @@ var _currentUserId = null;
 var _currentAddress = null;
 var _hasSigner = false; // true only when the address came from an actual wallet connect, not a pasted preview
 
+// ── remembered wallet — so a returning visitor sees their score immediately
+// instead of clicking "Connect Wallet" and re-granting MetaMask every time.
+// Two sources feed this, live wallet wins over the cache: eth_accounts is a
+// SILENT check (no popup) that only returns an address if this site was
+// already granted permission in a prior visit — MetaMask persists that
+// grant itself, we just need to ask instead of only reacting to a click.
+var CONNECT_CACHE_USERID = 'hf_connect_user_id';
+var CONNECT_CACHE_ADDR   = 'hf_connect_address';
+var CONNECT_CACHE_SIGNER = 'hf_connect_has_signer';
+var CONNECT_CACHE_TS     = 'hf_connect_last_full_ts';
+var FULL_REFRESH_INTERVAL_MS = 15 * 60 * 1000; // don't re-run the full activity fetch + backfill more than once per 15 min per visit
+
+function saveConnectCache(userId, address, hasSigner){
+  try {
+    localStorage.setItem(CONNECT_CACHE_USERID, userId);
+    localStorage.setItem(CONNECT_CACHE_ADDR, address);
+    localStorage.setItem(CONNECT_CACHE_SIGNER, hasSigner ? '1' : '0');
+    localStorage.setItem(CONNECT_CACHE_TS, String(Date.now()));
+  } catch (e) {}
+}
+function readConnectCache(){
+  try {
+    var userId = localStorage.getItem(CONNECT_CACHE_USERID);
+    var address = localStorage.getItem(CONNECT_CACHE_ADDR);
+    if (!userId || !address) return null;
+    return {
+      userId: userId,
+      address: address,
+      hasSigner: localStorage.getItem(CONNECT_CACHE_SIGNER) === '1',
+      lastFullTs: parseInt(localStorage.getItem(CONNECT_CACHE_TS) || '0', 10),
+    };
+  } catch (e) { return null; }
+}
+function clearConnectCache(){
+  try {
+    localStorage.removeItem(CONNECT_CACHE_USERID);
+    localStorage.removeItem(CONNECT_CACHE_ADDR);
+    localStorage.removeItem(CONNECT_CACHE_SIGNER);
+    localStorage.removeItem(CONNECT_CACHE_TS);
+  } catch (e) {}
+}
+
 function showErr(msg){
   var e = document.getElementById('connectErr');
   e.textContent = msg;
@@ -390,13 +432,18 @@ document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if
 // Auto-run when arriving with ?address=0x… — the homepage's "paste to
 // preview" input hands off here instead of duplicating the whole connect
 // flow (wallet-connect + polling + verified-record render) on two pages.
+// Otherwise, try to resume a remembered wallet (live eth_accounts or the
+// localStorage cache) so a returning visitor isn't dropped back on the
+// "Connect Wallet" hero every time.
 (function(){
   var qAddr = new URLSearchParams(location.search).get('address');
   if (qAddr && /^0x[0-9a-fA-F]{40}$/.test(qAddr.trim())) {
     document.getElementById('pasteAddr').value = qAddr.trim();
     _hasSigner = false;
     handleAddress(qAddr.trim());
+    return;
   }
+  autoResumeConnection();
 })();
 
 async function handleAddress(addr){
@@ -420,8 +467,74 @@ async function handleAddress(addr){
 
   _currentUserId = res.user_id;
   _currentAddress = res.address;
+  saveConnectCache(res.user_id, res.address, _hasSigner);
   renderRaw(res);
   pollStatus();
+}
+
+// Fast path for a remembered wallet — loads the already-computed profile
+// directly (GET /api/trader-record/:userId) instead of re-running
+// /api/connect's raw-activity refetch + background backfill on every page
+// load. Used on return visits so a remembered wallet doesn't hammer
+// Polymarket's activity API just to redisplay a page.
+async function loadRecordFast(userId, address, hasSigner){
+  _currentUserId = userId;
+  _currentAddress = address;
+  _hasSigner = hasSigner;
+  document.getElementById('pasteAddr').value = address;
+  document.getElementById('connectBtn').disabled = true;
+  document.getElementById('pasteBtn').disabled = true;
+  document.getElementById('pageMain').classList.add('is-active');
+  document.getElementById('result').innerHTML = '<div class="skel"></div>';
+  try {
+    var r = await fetch('/api/trader-record/' + encodeURIComponent(userId));
+    if (!r.ok) throw new Error('stale_cache');
+    var p = await r.json();
+    document.getElementById('result').innerHTML = listingNoticeHtml();
+    wireOptOut();
+    renderVerified(p);
+  } catch (e) {
+    // Cached user_id no longer resolves (e.g. DB reset) — drop the cache
+    // and fall back to the normal connect hero instead of a dead skeleton.
+    clearConnectCache();
+    document.getElementById('connectBtn').disabled = false;
+    document.getElementById('pasteBtn').disabled = false;
+    document.getElementById('pageMain').classList.remove('is-active');
+    document.getElementById('result').innerHTML = '';
+  }
+}
+
+// Runs on every page load (after the ?address= handoff check below). Prefers
+// a live, currently-authorized wallet over the cache — so switching accounts
+// in MetaMask is picked up rather than stubbornly reloading the old one —
+// and falls back to the cache when no wallet extension is available/unlocked.
+async function autoResumeConnection(){
+  var cache = readConnectCache();
+  var liveAddr = null;
+  if (window.ethereum) {
+    try {
+      var accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts[0]) liveAddr = accounts[0].toLowerCase();
+    } catch (e) {}
+  }
+
+  if (liveAddr) {
+    _hasSigner = true;
+    if (cache && cache.address && cache.address.toLowerCase() === liveAddr
+        && (Date.now() - cache.lastFullTs) < FULL_REFRESH_INTERVAL_MS) {
+      loadRecordFast(cache.userId, cache.address, true);
+    } else {
+      // New wallet, or cache stale enough to be worth a real refresh.
+      handleAddress(liveAddr);
+    }
+    return;
+  }
+
+  // No live wallet permission (extension locked/absent/never granted this
+  // site) — fall back to whatever was remembered, signer or previewed alike.
+  if (cache && cache.address) {
+    loadRecordFast(cache.userId, cache.address, cache.hasSigner);
+  }
 }
 
 function listingNoticeHtml(){
