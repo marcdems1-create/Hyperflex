@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-08-04 — fix(trading): stop wiping the CLOB session when MetaMask is merely locked (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
+
+### fix(market.html, creator-dashboard.html): distinguish "MetaMask locked" from "wallet actually switched"
+- **Root cause:** `wallet.js`'s `syncCurrentAccount()` (runs on every page load and every tab focus/visibilitychange) calls `eth_accounts` and treats an empty result as a disconnect. But `eth_accounts` returns empty for three different reasons — a genuine disconnect, MetaMask simply being locked (auto-lock timeout, browser restart), or the extension not yet finished injecting on a fresh page load — and both trading pages' wallet-switch handlers treated all three identically: unconditionally wipe `poly_api_key`/`poly_api_secret`/`poly_api_passphrase` (market.html also wiped `poly_eoa_address`). Since re-deriving those keys requires a fresh EIP-712 `signTypedData` MetaMask signature, every returning visit with MetaMask locked silently destroyed a perfectly valid trading session and forced a full reconnect + new signature prompt.
+- **Second bug, `creator-dashboard.html` only:** a separate raw `accountsChanged` listener called the fully-destructive `disconnectBrowserWallet()` directly on any empty-accounts event, independent of the main handler — would have kept breaking this even after fixing the primary path.
+- **Fix:** when no account is reported, only clear the live in-memory signer/provider (genuinely unusable while locked) and show an informational status — never touch the persisted CLOB credentials. A genuine switch to a *different*, non-null address still clears and re-derives everything (unchanged). Removed the redundant raw listener in `creator-dashboard.html` entirely; `wallet.js`'s own listener already drives the fixed handler via `hfx_wallet_switched`.
+- **Don't break:** the explicit "Disconnect" button (`disconnectBrowserWallet()`) is untouched and still fully wipes credentials — that's a deliberate user action, not the automatic path this fix changed. Do not reintroduce a listener that clears `poly_api_key` et al. unconditionally on empty `eth_accounts`/`accountsChanged`.
+- **Verify:** inline `<script>` blocks in both files parse via `new Function()`. No live browser test in this environment — needs an actual MetaMask lock/unlock cycle across page loads to confirm end-to-end.
+- See SESSION_STATE.md 2026-08-04 for the full trace.
+
+---
+
 ## 2026-08-03 — feat(connect): remember a connected wallet across visits (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 ### feat(connect.html): auto-resume a remembered wallet instead of requiring "Connect Wallet" every visit

@@ -21533,12 +21533,27 @@ async function hfxDashHandleWalletSwitch(detail) {
   console.log('[dashboard] wallet switched:', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
 
   if (!newEoa) {
-    // User disconnected from MetaMask entirely
-    try { disconnectBrowserWallet(); } catch (e) {}
+    // eth_accounts reported no accounts. This fires both on a genuine
+    // disconnect AND on the far more common case of MetaMask simply being
+    // LOCKED (auto-lock timeout, browser restart) or not yet finished
+    // injecting on a fresh page load — indistinguishable from a real
+    // disconnect at this layer. Calling disconnectBrowserWallet() here used
+    // to wipe poly_api_key/secret/passphrase on every one of those, forcing
+    // a full reconnect + a brand new EIP-712 signature every time a
+    // returning user's MetaMask happened to be locked — exactly the "have
+    // to sign in constantly" complaint. Only drop the live signer/provider
+    // (genuinely unusable while locked); leave the persisted CLOB session
+    // alone so it resumes with zero extra signing once the SAME account
+    // reappears. Only a genuine switch to a DIFFERENT account (below)
+    // invalidates the cached keys.
+    window._walletSigner = null;
+    window._walletProvider = null;
+    updateWalletUI();
+    showToast('MetaMask locked or disconnected. Unlock MetaMask to resume trading.', 'info');
     return;
   }
 
-  // Clear stale wallet state
+  // Genuine switch to a DIFFERENT account — clear stale wallet state
   localStorage.removeItem('poly_api_key');
   localStorage.removeItem('poly_api_secret');
   localStorage.removeItem('poly_api_passphrase');
@@ -21617,16 +21632,16 @@ if (typeof HFXWallet !== 'undefined' && HFXWallet.syncCurrentAccount) {
   setTimeout(function() { HFXWallet.syncCurrentAccount().catch(function(){}); }, 800);
 }
 
-// Also keep a legacy accountsChanged listener as a belt-and-suspenders backup.
-// HFXWallet will handle most cases but this ensures we never miss an event.
-if (typeof window.ethereum !== 'undefined' && window.ethereum.on) {
-  window.ethereum.on('accountsChanged', function(accounts) {
-    if (!accounts || accounts.length === 0) {
-      try { disconnectBrowserWallet(); } catch (e) {}
-    }
-    // The actual reset logic is fired by HFXWallet via hfx_wallet_switched
-  });
-}
+// NOTE: no separate raw `accountsChanged` listener here — wallet.js already
+// registers one (invalidate() + syncCurrentAccount()), which drives
+// hfxDashHandleWalletSwitch above via the hfx_wallet_switched event. A prior
+// "belt-and-suspenders" listener here called disconnectBrowserWallet()
+// directly on every empty-accounts event, unconditionally wiping
+// poly_api_key/secret/passphrase — including the MetaMask-locked case
+// hfxDashHandleWalletSwitch was just fixed to NOT treat as a real
+// disconnect. That duplicate listener raced with wallet.js's and undid the
+// fix, forcing a full reconnect + re-sign every time. Removed rather than
+// patched — it was genuinely redundant with the HFXWallet-mediated path.
 
 // ── POLYMARKET CLOB API KEY DERIVATION ──────────────────────────────────────
 async function derivePolymarketApiKey() {
