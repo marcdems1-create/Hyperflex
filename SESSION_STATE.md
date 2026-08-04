@@ -49,6 +49,23 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-04e (⛔ REAL GAP FOUND + FIXED — category leaderboards / GET /api/kings' category-king promotion completely bypassed the anti-farming gate)
+
+**Ask:** "keep building" — continued auditing the same integrity surface for consistency after closing the profile-disclosure gap, rather than picking a new unrelated task.
+
+**Found:** `_computeCategoryRoiLeaderboards()` (server.js ~13327) is a fully independent eligibility computation — it does NOT call `_computeRoiLeaderboard()` and has never gone through `_computeIntegritySignals`. Its only gates were `n >= ROI_MIN_N_FLOOR` and `leaderboard_opt_out`. **This is not dead/unused code** — `GET /api/kings` reads straight from it for "category kings," and per that endpoint's own comment it's "the homepage's 'King of the Castle' hook," live. A wallet held off the main durable board by the integrity gate could still be promoted as a category king through this side door — exactly the promotion-bypass Gate 1 exists to prevent, just via a path the original integrity-gate work (this session, earlier entries) didn't check. 7 separate call sites read from this one function (`/api/kings`, category leaderboard endpoints, `/traders?category=X` support, others) — none of them had the gate either, since it lives at the source.
+
+**Fix:** added a single `heldUserIds` lookup via `_getCachedHeldWallets()` (built two entries ago) inside `_computeCategoryRoiLeaderboards()`, excluded alongside the existing `leaderboard_opt_out` check. Scoped as a GLOBAL wallet exclusion (if held on the overall board, held everywhere), not re-derived per category — the underlying concern (is this wallet's record farmed) doesn't change depending on which category is being viewed. One fix at the source, all 7 call sites patched simultaneously — did not touch any caller individually.
+
+**Verified:** `node --check server.js` passes. Not exercised against real data — 0 wallets held as of the last live scan, so this closes a real structural gap without changing any current output, same shape as several earlier findings this session (the hold-logic tightening, the profile-disclosure gap).
+
+**Active blockers:** none.
+
+**Queued:** none from this arc. `ADMIN_SECRET` rotation still the one standing item.
+
+**Notes for next session:**
+- Any FUTURE leaderboard/promotion surface that computes eligibility from `realized_trades` directly, rather than through `_computeRoiLeaderboard()`, needs its own `_getCachedHeldWallets()` cross-reference — it will NOT inherit the gate automatically just because `_computeIntegritySignals` exists elsewhere in the file. This is the second time in one session a parallel computation path was found not to have a protection the "main" path has (see 2026-08-04c's finding about `/@handle` vs `/trader/:handle` being two separate systems) — worth a deliberate grep for other `realized_trades`-direct queries computing eligibility before assuming the gate is universal.
+
 ## 2026-08-04d (Closed the held-wallet-profile-disclosure gap flagged twice in the last two entries)
 
 **Ask:** "keep building" — continuing the anti-farming/moat thread rather than starting something new, since it was the active context and the gap was already understood and queued.

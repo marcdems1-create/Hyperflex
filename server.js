@@ -13335,6 +13335,18 @@ async function _computeCategoryRoiLeaderboards() {
   `).catch(e => { console.warn('[category-leaderboard] query error:', e.message); return null; });
   if (rows == null) return null;
 
+  // Anti-farming gate (see _computeIntegritySignals) applies here too — found
+  // 2026-08-04: this function computes eligibility independently of
+  // _computeRoiLeaderboard, so a wallet held off the MAIN durable board could
+  // still be crowned a category king via GET /api/kings, which reads
+  // straight from this function and IS live on the homepage. That's exactly
+  // the promotion-bypass Gate 1 exists to prevent — a wallet failing the
+  // integrity check on its overall record shouldn't get promoted through a
+  // side door just because the category cut looks cleaner. Scoped globally
+  // (whole-wallet hold, not re-derived per category) since the underlying
+  // concern — is this wallet's record farmed — doesn't change by category.
+  const heldUserIds = new Set((await _getCachedHeldWallets().catch(() => [])).map(r => r.user_id));
+
   const now = Date.now();
   const byCategory = new Map(); // category -> derived per-trade rows
 
@@ -13386,6 +13398,7 @@ async function _computeCategoryRoiLeaderboards() {
     const catResult = [];
     for (const [userId, u] of byUser.entries()) {
       if (u.n < ROI_MIN_N_FLOOR) continue; // per-category threshold — global n does not count here
+      if (heldUserIds.has(userId)) continue; // see the anti-farming note above
       const userRow = userById.get(userId);
       if (userRow && userRow.leaderboard_opt_out === true) continue;
       const weightedRoi = u.wroiDen > 0 ? u.wroiNum / u.wroiDen : 0;
