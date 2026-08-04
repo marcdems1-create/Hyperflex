@@ -127,6 +127,8 @@
   .p-address{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px;margin-top:2px;background:none;border:none;padding:0;}
   .p-address:hover{color:var(--ink);}
   .p-rank{margin-left:auto;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);}
+  .p-profile-link{margin-left:auto;flex-shrink:0;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;color:var(--blue);text-decoration:none;white-space:nowrap;}
+  .p-profile-link:hover{text-decoration:underline;}
 
   .p-verdict{font-size:30px;font-weight:900;line-height:1.18;letter-spacing:-.015em;color:#fff;margin-bottom:20px;}
   .p-verdict.is-ineligible{color:rgba(240,240,245,.55);font-weight:700;font-size:22px;}
@@ -652,6 +654,14 @@ function renderVerified(p){
   var eligible = p.eligible;
   var scoreCls = !eligible ? 'is-neutral' : (p.score_pct >= 0 ? 'is-positive' : 'is-negative');
   var verdictText = eligible ? p.verdict : (p.eligibility_note || 'Not yet ranked.');
+  // Canonical shareable profile — same /@handle-first, /trader/:address-
+  // fallback rule as every other card on the site (trader-card.js,
+  // home-kings/feed win-cards). This inline preview computes the identical
+  // record server-side but doesn't carry Share on X / Passport link / the
+  // rest of the canonical page — link out to it instead of duplicating it.
+  var profileHref = p.username ? '/@' + encodeURIComponent(p.username)
+    : p.polymarket_address ? '/trader/' + encodeURIComponent(p.polymarket_address)
+    : null;
 
   var html = '<div class="p-header">'
     + '<div class="p-identity">'
@@ -660,6 +670,7 @@ function renderVerified(p){
         + '<div class="p-handle">'+esc(handle)+'</div>'
         + (addr ? '<button class="p-address" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+esc(p.polymarket_address)+'\')" title="Copy full address">'+esc(addr)+' <span>⧉</span></button>' : '')
       + '</div>'
+      + (profileHref ? '<a class="p-profile-link" href="'+esc(profileHref)+'">View profile →</a>' : '')
     + '</div>'
     + '<div class="p-verdict' + (eligible ? '' : ' is-ineligible') + '">' + esc(verdictText) + '</div>'
     + (eligible ? '<div class="p-scoreline '+scoreCls+'"><span class="p-score">'+esc(fmtPct(p.score_pct))+'</span><span class="p-n">n='+esc(p.n)+'</span></div>' : '')
