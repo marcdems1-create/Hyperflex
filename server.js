@@ -27510,6 +27510,7 @@ async function syncUserPositions(user) {
             shares: parseFloat(p.size) || 0,
             pnl: parseFloat(p.cashPnl) || 0,
             probability: parseFloat(p.curPrice) || 0,
+            avg_entry_price: parseFloat(p.avgPrice) || 0,
             market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
             updated_at: new Date().toISOString()
           });
@@ -61694,6 +61695,7 @@ if (pool) {
 
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS shares NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS avg_entry_price NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
 
