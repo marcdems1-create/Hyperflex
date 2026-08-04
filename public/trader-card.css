@@ -29,10 +29,10 @@
 .tcard-avatar {
   width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800;
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; font-weight: 800;
   color: #0e0e15;
 }
-.tcard-handle { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: rgba(240,240,245,.55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard-handle { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 15px; color: rgba(240,240,245,.7); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tcard-rank {
   margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
   color: rgba(240,240,245,.35); letter-spacing: .06em; flex-shrink: 0;
@@ -63,11 +63,11 @@
 /* ── scope disclosure — travels with score+n, same discipline. What the
    score is actually computed over (durable markets only as of 2026-07-20),
    not buried in a tooltip. ── */
-.tcard-scope { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,240,245,.32); }
+.tcard-scope { font-family: 'Inter', -apple-system, sans-serif; font-size: 10.5px; color: rgba(240,240,245,.38); }
 
 /* ── style/risk flag — keeps a promoted win rate from appearing naked ── */
 .tcard-styleflag {
-  font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.4;
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 11.5px; line-height: 1.4;
   margin-top: 8px; padding: 6px 10px; border-radius: 6px;
   color: rgba(240,240,245,.6); background: rgba(240,240,245,.04);
   border: 1px solid rgba(240,240,245,.08);
@@ -84,7 +84,7 @@
   display: flex; flex-direction: column; gap: 3px;
 }
 .tcard-evidence-line {
-  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700;
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; font-weight: 700;
   color: rgba(240,240,245,.85);
 }
 .tcard-evidence-line .mult-win { color: #00e68a; }
@@ -98,7 +98,7 @@
 .tcard-form { display: flex; align-items: center; gap: 10px; margin-top: auto; }
 .tcard-sparkline { flex-shrink: 0; display: block; }
 .tcard-streak {
-  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 10.5px; font-weight: 700;
   letter-spacing: .04em; padding: 3px 8px; border-radius: 10px;
 }
 .tcard-streak.is-win { color: #00e68a; background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); }
