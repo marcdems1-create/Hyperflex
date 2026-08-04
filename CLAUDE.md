@@ -858,6 +858,7 @@ SELL market: rawMakerAmt = roundDown(shares, 4);      rawTakerAmt = roundDown(sh
 5. Never remove the `_confirmTradeRetryCount` guard from `confirmTrade()`
 6. Never use tick-driven rounding for FOK orders (use hard-coded 2/4 decimals)
 7. Never skip `deferExec: false` in the order body
+8. **⛔ COMPLIANCE (found + fixed 2026-07-31, see SESSION_STATE.md/CHANGELOG.md that date): never make a CF Worker or Railway retry conditional on a detected `"restricted"`/geo-block response.** Both `market.html`'s `submitClobOrder()` and `creator-dashboard.html`'s `confirmTrade()` used to auto-resubmit a geo-blocked order through a different apparent-origin host specifically because Polymarket had identified the trade as region-restricted — that's circumventing Polymarket's Terms of Use, not a reliability fallback. Fixed: a detected geo-restriction now surfaces to the user immediately, on any host, with no further retry. CF Worker / Railway fallback must stay conditioned on genuine technical failure only (thrown/network exception, signature-format mismatch) — never on geography. If you're re-touching the trade-routing chain in either file, preserve this split.
 
 ---
 

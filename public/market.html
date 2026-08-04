@@ -6926,40 +6926,56 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     if (cfRes.ok) return cfData;
 
-    // Belt-and-suspenders: also fall through to Railway on signature errors.
-    // If CF Worker hits a V1 backend (pre-Apr-28 cutover or stale Worker
-    // deploy) with a V2-signed order, CLOB returns "invalid signature(s)" —
-    // not a geo-block, but the Railway proxy is V2-aware (server.js:40087)
-    // so it'll succeed. Defensive string match across known wordings.
+    // Polymarket's CLOB has identified this order as geographically
+    // restricted. This is Polymarket enforcing its own Terms of Use — do
+    // NOT retry through Railway (a different, non-representative IP) to
+    // route around it. Doing so would be exactly the "circumvent
+    // geographic restrictions" behavior those Terms prohibit. Surface it
+    // honestly and stop; there is no compliant fallback for this case.
+    if (isGeoBlocked(cfData)) {
+      var geoErrMsg = cfData.error || cfData.message || 'Trading restricted in your region.';
+      return { _error: true, _geoBlocked: true, _errorMsg: geoErrMsg };
+    }
+
+    if (cfRes.status === 401) {
+      // CLOB 401 means the API keys are bad — invalidate ONLY the
+      // keys, NOT the EOA address. Nuking poly_eoa_address forced
+      // a wallet-reconnect popup on the next trade attempt, which
+      // was a major source of the "multiple MetaMask signatures
+      // per trade" friction. The EOA is the user's wallet
+      // identity; it has nothing to do with CLOB auth state.
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      updateTradingUI();
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (cfData.error || cfData.message || 'Unauthorized') };
+    }
+
+    // Belt-and-suspenders: fall through to Railway ONLY for a technical
+    // signature mismatch (e.g. CF Worker hitting a stale V1 backend with a
+    // V2-signed order) — a purely technical, non-geographic reason.
+    // Never fall through for anything else; every other CLOB error
+    // (balance, allowance, malformed order) is returned as-is above/below.
     function isSignatureError(d) {
       var s = JSON.stringify(d || {}).toLowerCase();
       return s.indexOf('invalid signature') !== -1 || s.indexOf('signature verification failed') !== -1;
     }
 
-    if (!isGeoBlocked(cfData) && !isSignatureError(cfData)) {
-      if (cfRes.status === 401) {
-        // CLOB 401 means the API keys are bad — invalidate ONLY the
-        // keys, NOT the EOA address. Nuking poly_eoa_address forced
-        // a wallet-reconnect popup on the next trade attempt, which
-        // was a major source of the "multiple MetaMask signatures
-        // per trade" friction. The EOA is the user's wallet
-        // identity; it has nothing to do with CLOB auth state.
-        localStorage.removeItem('poly_api_key');
-        localStorage.removeItem('poly_api_secret');
-        localStorage.removeItem('poly_api_passphrase');
-        updateTradingUI();
-        return { _expired: true, _errorMsg: 'CLOB 401: ' + (cfData.error || cfData.message || 'Unauthorized') };
-      }
+    if (!isSignatureError(cfData)) {
       var cfErrMsg = cfData.error || cfData.message || JSON.stringify(cfData);
       return { _error: true, _errorMsg: 'CLOB ' + cfRes.status + ': ' + cfErrMsg };
     }
 
-    tradeDebug('CF Worker geo-blocked or returned signature error — trying Railway');
+    tradeDebug('CF Worker returned signature error — trying Railway');
   } catch (cfErr) {
     tradeDebug('CF proxy THREW', cfErr.message + ' — trying Railway');
   }
 
-  // 3) RAILWAY SERVER PROXY (US IP — last resort)
+  // 3) RAILWAY SERVER PROXY (US IP — last resort, technical failures only).
+  // NEVER reached as a reaction to a geo-restriction — see the isGeoBlocked()
+  // return above. This path only exists for CF Worker being unreachable or a
+  // signature-format mismatch; it must never become a way to resubmit a
+  // region-restricted order under a different apparent origin.
   try {
     tradeDebug('submitting via Railway proxy (last resort)', '/api/polymarket/order');
     var railRes = await fetch('/api/polymarket/order', {
