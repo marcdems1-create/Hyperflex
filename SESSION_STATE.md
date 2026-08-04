@@ -49,26 +49,22 @@
 
 ## Chronological log (newest first)
 
-## 2026-08-03d (Competitor scan for moat-building; found an uncommitted public /methodology page already built — verified, not committed)
+## 2026-08-03d (✅ SHIPPED `785e73a` — public /methodology page live, nav Track Record link repointed)
 
-**Shipped:** none this entry — research + verification only.
+**Shipped (with hash):**
+- `785e73a`: `public/methodology.html` (found as pre-existing uncommitted work, then edited) + `GET /methodology` route (`server.js` ~13982) + link from `profile-trader.html`'s strip ("How this is calculated"). Public "How the score works" page: what the score measures (90-day decay, shrinkage K=20, per-trade cap), which trades count (durable-only, ephemeral excluded and why), how it's verified (on-chain fills + gamma settlement, permanent resolution archive), and an explicit "does not predict future results" section backed by real backtest endpoints (`/api/admin/score-backtest` + `score-backtest-rolling`, both confirmed present).
+- Same commit: `nav.js`'s "✓ Track Record" link (both the dropdown entry and the search-palette entry) repointed from `/transparency` (edge-signal hit rate, currently below its own n≥30/58% publish gate at 53%) to `/methodology` (trader scoring, not gated). `/transparency` stays live, cross-linked from `/methodology`'s footer so it isn't orphaned, just out of the primary nav slot.
+- Removed a "This is not theoretical" card that named the 2026-07-29 596-record self-audit specifically — Marc's call: zero users right now, no audience for a public incident retelling yet. Kept the general verification-discipline copy (durable-only scoring, gamma settlement checks, the backtest disclosure); cut the specific incident narrative. Matching stale code comment in server.js (route comment referencing "596 records removed") also corrected.
+- Confirmed on origin: `git log origin/main --oneline -1` → `785e73a`.
 
-**Found (pre-existing uncommitted work in the working tree, undocumented until now):**
-- `public/methodology.html` + `GET /methodology` route (`server.js` ~line 13985) + a link from `profile-trader.html`'s strip ("How this is calculated"). A public "How the score works" page: what the score measures (90-day decay, shrinkage K=20, per-trade cap), which trades count (durable-only, ephemeral excluded and why), how it's verified (on-chain fills + gamma settlement, permanent resolution archive), the 2026-07-29 596-record self-audit disclosed publicly by name, and an explicit "does not predict future results" section backed by real backtest endpoints.
-- Verified this session: `node --check server.js` passes. `/api/admin/score-backtest` and `/api/admin/score-backtest-rolling` (referenced in the route's comment) both exist in server.js. Page is NOT linked from `nav.js` — only reachable via trader profile pages today.
-
-**Competitive research (web search, this session):** scanned Polycopy, Polyfollow, Convexly, Polyburg, Polymonit, Polysyncer, Predicts.guru, KalshiSpy, Laikalabs — the "top trader leaderboard + copy trading" space is crowded and commoditized. None of them (a) exclude ephemeral/unverifiable markets from scoring, (b) re-verify settlement against a live source at ingestion time, or (c) show losses with equal weight to wins. Our ephemeral/durable split + gamma-verification discipline — the thing three separate 2026-07 fabrication bugs taught us the hard way — is a genuine, hard-to-copy moat *if published*, which `/methodology.html` already does. Proposed this as the top moat-building priority; Marc confirmed via AskUserQuestion.
-
-**Open question — flagging for Marc, not decided silently:** `nav.js` already has a "✓ Track Record" link to `/transparency` — a DIFFERENT page (edge-signal/whale-consensus accuracy via `/api/edge/track-record`, gated behind the n≥30/58% publish bar, currently below it at 53%). `/methodology` (trader-scoring explainer) and `/transparency` (edge-signal explainer) cover two different scored systems but could read as the same "trust page" to a visitor landing on either. Did not add a nav entry for `/methodology` or touch `/transparency`'s label — that's an IA call.
+**Competitive research (web search, this session):** scanned Polycopy, Polyfollow, Convexly, Polyburg, Polymonit, Polysyncer, Predicts.guru, KalshiSpy, Laikalabs — the "top trader leaderboard + copy trading" space is crowded and commoditized. None of them (a) exclude ephemeral/unverifiable markets from scoring, (b) re-verify settlement against a live source at ingestion time, or (c) show losses with equal weight to wins. Our ephemeral/durable split + gamma-verification discipline — the thing three separate 2026-07 fabrication bugs taught us the hard way — is a genuine, hard-to-copy moat *if published*, which `/methodology.html` now does live.
 
 **Active blockers:** none.
 
-**Queued (priority order):**
-1. Marc's call: does `/methodology` get a nav link (and does `/transparency`'s "Track Record" label need to change to disambiguate), or does living-on-profile-pages stay sufficient for now?
-2. Commit + push `public/methodology.html` + the `server.js` route once the above is settled — currently uncommitted locally.
+**Queued:** (none from this arc)
 
 **Notes for next session:**
-- Don't rebuild the public verification/methodology page — it already exists at `public/methodology.html`, fully written, just needs a nav decision and a commit.
+- `/methodology` is live and in nav. Don't rebuild it. If a future session wants to publish a specific self-audit incident again (e.g. after the platform has real users), that copy pattern is in git history at `785e73a`'s parent — reintroduce deliberately, don't restore by reflex.
 
 ## 2026-08-03c (✅ SHIPPED — resync-sold-trades: two real query bugs found live, fixed, then made self-driving. Confirmed real scale: 1,576 wallets / 41,356 old-format rows.)
 
