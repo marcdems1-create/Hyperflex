@@ -79,7 +79,17 @@
     var streakText = card.streak && card.streak.count
       ? card.streak.count + (card.streak.type === 'win' ? 'W' : card.streak.type === 'loss' ? 'L' : 'P') + ' streak'
       : null;
-    var profileHref = card.user_id ? '/trader/' + esc(card.user_id) : '#';
+    // Canonical trader profile is /@handle (per CLAUDE.md, since 2026-07-30)
+    // — /trader/:param only resolves a REAL 0x wallet address (redirecting
+    // to /@handle server-side); anything else, including card.user_id
+    // (an internal UUID, not an address), falls through to the legacy
+    // trader.html page and prints "INVALID WALLET ADDRESS". Link straight
+    // to the canonical route when a handle exists; fall back to the real
+    // wallet address (which /trader/:address DOES handle correctly) only
+    // when there's no handle yet.
+    var profileHref = card.username ? '/@' + esc(card.username)
+      : card.polymarket_address ? '/trader/' + esc(card.polymarket_address)
+      : '#';
 
     var html = '<a class="' + cls + '" href="' + profileHref + '" data-user-id="' + esc(card.user_id) + '">';
 
