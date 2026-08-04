@@ -64576,6 +64576,48 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
   }
 });
 
+// GET /api/admin/wallet-position-schema — one-shot information_schema.columns
+// dump for every table whose name matches wallet/position/snapshot/clv, so a
+// live-vs-resolved-trades question can be answered by reading the actual
+// production schema instead of trusting migration files (which can drift
+// from prod after manual ALTERs). Read-only, single curl.
+app.get('/api/admin/wallet-position-schema', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const tables = await dbQuery(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
+             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      ORDER BY table_name
+    `);
+
+    const columns = await dbQuery(`
+      SELECT table_name, column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
+             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      ORDER BY table_name, ordinal_position
+    `);
+
+    const byTable = {};
+    for (const row of columns) {
+      if (!byTable[row.table_name]) byTable[row.table_name] = [];
+      byTable[row.table_name].push(row);
+    }
+
+    res.json({
+      tables: tables.map(t => t.table_name),
+      columns_by_table: byTable,
+    });
+  } catch (e) {
+    console.error('[wallet-position-schema]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/admin/integrity-scan — anti-farming gate visibility. Read-only,
 // one curl. _computeRoiLeaderboard now silently drops wallets that trip the
 // joint thin_capital+narrow_time_span+extreme_roi_heavy signal (see
