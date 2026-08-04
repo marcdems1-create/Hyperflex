@@ -62,10 +62,53 @@
     .strip b{color:var(--ink);font-weight:500}
 
     /* Chart */
-    .chart-wrap{padding:44px 52px 22px}
-    .chart-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:26px}
+    .chart-wrap{padding:44px 52px 40px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--card-2);min-height:280px}
+    .chart-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px}
     .chart-lbl{font-family:var(--mono);font-size:21px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim)}
-    svg.spark{width:100%;height:340px;display:block}
+
+    .chart-grid{display:grid;grid-template-columns:76px 1fr;grid-template-rows:220px 30px;column-gap:12px}
+    .chart-ylabels{grid-column:1;grid-row:1;position:relative}
+    .chart-ylabel{position:absolute;right:8px;transform:translateY(-50%);font-family:var(--mono);font-size:16px;color:var(--dim);white-space:nowrap}
+    .chart-plot{grid-column:2;grid-row:1;position:relative;overflow:visible}
+    .chart-plot-gridline{position:absolute;left:0;right:0;border-top:1px dashed rgba(255,255,255,0.07)}
+    svg.spark{position:absolute;inset:0;width:100%;height:100%;display:block}
+    .chart-pt-hit{position:absolute;width:26px;height:26px;transform:translate(-50%,-50%);border-radius:50%;cursor:pointer;background:transparent;border:none;padding:0}
+    .chart-pt-hit:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+    .chart-peak-dot{position:absolute;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--card-2);pointer-events:none}
+    .chart-peak-dot.pos{background:var(--green)} .chart-peak-dot.neg{background:var(--red)}
+    .chart-peak-label{position:absolute;transform:translate(-50%,0);pointer-events:none;max-width:260px;text-align:center}
+    .chart-peak-label.align-start{transform:translate(0,0);text-align:left}
+    .chart-peak-label.align-end{transform:translate(-100%,0);text-align:right}
+    .chart-peak-q{font-family:var(--mono);font-size:15px;color:var(--soft);line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,0.8)}
+    .chart-peak-delta{font-family:var(--mono);font-size:16px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,0.8)}
+    .chart-peak-delta.pos{color:var(--green)} .chart-peak-delta.neg{color:var(--red)}
+
+    .chart-xlabels{grid-column:2;grid-row:2;position:relative}
+    .chart-xlabel{position:absolute;top:6px;font-family:var(--mono);font-size:16px;color:var(--dim);white-space:nowrap}
+
+    .chart-badge{position:absolute;top:10px;right:10px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:2px;background:rgba(15,15,22,0.92);border:1px solid rgba(34,211,238,0.35);border-radius:10px;padding:8px 14px}
+    .chart-badge-lbl{font-family:var(--mono);font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--cyan);opacity:0.75}
+    .chart-badge-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--cyan)}
+
+    .chart-tip{position:absolute;z-index:10;display:none;min-width:200px;max-width:260px;background:#1a1a22;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:12px 15px;box-shadow:0 8px 24px rgba(0,0,0,0.5);pointer-events:none}
+    .chart-tip-q{font-family:var(--sans);font-size:16px;color:var(--ink);line-height:1.35;margin-bottom:6px}
+    .chart-tip-meta{font-family:var(--mono);font-size:14px;color:var(--dim);margin-bottom:6px}
+    .chart-tip-side{color:var(--cyan);font-weight:700}
+    .chart-tip-delta{font-family:var(--mono);font-size:17px;font-weight:700}
+    .chart-tip-delta.pos{color:var(--green)} .chart-tip-delta.neg{color:var(--red)}
+
+    @media(max-width:640px){
+      .chart-wrap{padding:28px 20px 30px}
+      .chart-head{flex-direction:column;align-items:flex-start;gap:4px}
+      .chart-lbl{font-size:15px}
+      .chart-grid{grid-template-columns:54px 1fr}
+      .chart-ylabel{font-size:13px}
+      .chart-xlabel{font-size:13px}
+      .chart-peak-q{font-size:13px}
+      .chart-peak-label{max-width:180px}
+      .chart-badge{top:6px;right:6px;padding:6px 10px}
+      .chart-badge-val{font-size:18px}
+    }
 
     /* Open positions — the copyable layer */
     .open-side{display:inline-block;font-family:var(--mono);font-size:19px;font-weight:700;padding:3px 12px;border-radius:6px;background:rgba(34,211,238,0.12);color:var(--cyan);margin-right:14px;vertical-align:2px}
@@ -155,23 +198,161 @@
       window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'noopener');
     };
 
-    function sparkline(series){
+    // Series data for the currently-rendered chart, keyed by point index —
+    // the tap handler below is global (inline onclick runs outside the
+    // IIFE closure, same reason shareTraderCard lives on window) so it
+    // needs a place to look up the point that was tapped.
+    var chartSeriesData = null;
+
+    function chartDateLabel(t){
+      var d = new Date(t);
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    }
+    function chartRoiLabel(v){
+      var n = num(v); if (n==null) return '—';
+      return (n>=0?'+':'') + n.toFixed(1) + '%';
+    }
+
+    // Tap/click tooltip — no hover-only state, mobile-first per spec. Reuses
+    // the dark-card tooltip look already established elsewhere (.cal-tooltip
+    // in predictors.html/member.html) but that pattern is hover:show/hide
+    // only, so this is a tap-driven variant rather than a straight reuse.
+    window.__hfChartTap = function(evt, idx){
+      evt.stopPropagation();
+      var series = chartSeriesData;
+      var tip = document.getElementById('chartTip');
+      var wrap = document.getElementById('chartWrap');
+      if (!series || !series[idx] || !tip || !wrap) return;
+      var p = series[idx];
+      var delta = num(p.trade_roi_pct);
+      var sideStr = p.side ? String(p.side).toUpperCase() : '';
+      tip.innerHTML =
+        '<div class="chart-tip-q">' + esc(p.market_question || 'Unknown market') + '</div>' +
+        '<div class="chart-tip-meta">' + esc(chartDateLabel(p.t)) +
+          (sideStr ? ' &middot; <span class="chart-tip-side">' + esc(sideStr) + '</span>' : '') +
+        '</div>' +
+        '<div class="chart-tip-delta ' + (delta==null ? '' : (delta>=0?'pos':'neg')) + '">' +
+          chartRoiLabel(delta) + ' this trade</div>';
+
+      var wrapRect = wrap.getBoundingClientRect();
+      var elRect = evt.currentTarget.getBoundingClientRect();
+      tip.style.display = 'block';
+      var tipW = tip.offsetWidth || 220;
+      var left = (elRect.left - wrapRect.left + elRect.width/2) - tipW/2;
+      left = Math.max(8, Math.min(left, wrapRect.width - tipW - 8));
+      var top = (elRect.top - wrapRect.top) - tip.offsetHeight - 14;
+      if (top < 0) top = (elRect.bottom - wrapRect.top) + 14;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    };
+    document.addEventListener('click', function(e){
+      var tip = document.getElementById('chartTip');
+      if (tip && tip.style.display === 'block' && !e.target.closest('.chart-pt-hit')) {
+        tip.style.display = 'none';
+      }
+    });
+
+    function roiChart(series){
       if(!series || series.length<2) return '';
+      chartSeriesData = series;
+
       var vals = series.map(function(p){return num(p.roi_pct)||0;});
       var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals);
-      if(max===min){max=min+1;}
-      var W=680, H=340, pad=14;
-      var pts = vals.map(function(v,i){
-        var x = (i/(vals.length-1))*W;
-        var y = H-pad - ((v-min)/(max-min))*(H-pad*2);
-        return x.toFixed(1)+','+y.toFixed(1);
-      });
-      var line = pts.join(' ');
-      var area = '0,'+H+' '+line+' '+W+','+H;
-      return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Cumulative ROI over resolved trades">'+
-        '<polygon points="'+area+'" fill="rgba(34,211,238,0.10)"></polygon>'+
-        '<polyline points="'+line+'" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>'+
+      if (max===min) { max += 1; min -= 1; }
+      var pad = (max-min)*0.1;
+      min -= pad; max += pad;
+      var range = max-min;
+
+      function xPct(i){ return (i/(series.length-1))*100; }
+      function yPct(v){ return 100 - ((v-min)/range)*100; }
+
+      // Line + fill — plain SVG, viewBox 0-100 on both axes so the
+      // coordinate math lines up 1:1 with the percentage-based HTML overlay
+      // used for axis labels, points, and the peak annotation below.
+      var line = vals.map(function(v,i){ return xPct(i).toFixed(2)+','+yPct(v).toFixed(2); }).join(' ');
+      var area = '0,100 ' + line + ' 100,100';
+      var svg = '<svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Cumulative ROI over resolved trades">' +
+        '<polygon points="'+area+'" fill="rgba(34,211,238,0.10)"></polygon>' +
+        '<polyline points="'+line+'" fill="none" stroke="#22d3ee" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>' +
       '</svg>';
+
+      // Y axis — 4 gridlines spanning the padded range.
+      var GRID_N = 4, gridlines = '', ylabels = '';
+      for (var g=0; g<GRID_N; g++){
+        var gv = min + (g/(GRID_N-1))*range;
+        var gy = yPct(gv);
+        gridlines += '<div class="chart-plot-gridline" style="top:'+gy.toFixed(2)+'%"></div>';
+        ylabels += '<span class="chart-ylabel" style="top:'+gy.toFixed(2)+'%">'+chartRoiLabel(gv)+'</span>';
+      }
+
+      // X axis — evenly-spaced date ticks. Fewer on narrow viewports so
+      // labels don't collide (5 ticks needs ~60px each, which a phone-width
+      // plot column doesn't have).
+      var narrow = window.innerWidth < 480;
+      var TICK_N = Math.min(narrow ? 3 : 5, series.length), xlabels = '';
+      for (var t=0; t<TICK_N; t++){
+        var idx = TICK_N===1 ? 0 : Math.round((t/(TICK_N-1))*(series.length-1));
+        var tx = xPct(idx);
+        var align = t===0 ? 'left:0;transform:translateX(0)' :
+                    (t===TICK_N-1 ? 'left:'+tx.toFixed(2)+'%;transform:translateX(-100%)' :
+                                     'left:'+tx.toFixed(2)+'%;transform:translateX(-50%)');
+        xlabels += '<span class="chart-xlabel" style="'+align+'">'+esc(chartDateLabel(series[idx].t))+'</span>';
+      }
+
+      // Tap targets — every point is tappable, per spec. Rendered as
+      // invisible hit areas (26px, real touch-target size) rather than SVG
+      // circles so they aren't distorted by the non-uniform viewBox stretch.
+      var hitTargets = series.map(function(p,i){
+        return '<button type="button" class="chart-pt-hit" style="left:'+xPct(i).toFixed(2)+'%;top:'+yPct(num(p.roi_pct)||0).toFixed(2)+'%" ' +
+          'aria-label="' + esc((p.market_question||'trade') + ', ' + chartDateLabel(p.t)) + '" ' +
+          'onclick="window.__hfChartTap(event,'+i+')"></button>';
+      }).join('');
+
+      // Auto-annotation on the single largest-magnitude single-trade ROI
+      // delta (win or loss) — legible without tapping, per spec. Only one
+      // point is ever annotated this way; multi-point annotation is a
+      // future pass.
+      var peakIdx=-1, peakAbs=-1;
+      series.forEach(function(p,i){
+        var d = num(p.trade_roi_pct);
+        if (d!=null && Math.abs(d)>peakAbs){ peakAbs=Math.abs(d); peakIdx=i; }
+      });
+      var peakMarkup = '';
+      if (peakIdx>=0){
+        var pp = series[peakIdx];
+        var px = xPct(peakIdx), py = yPct(num(pp.roi_pct)||0);
+        var delta = num(pp.trade_roi_pct);
+        var isPos = delta==null || delta>=0;
+        var alignCls = px>72 ? 'align-end' : (px<28 ? 'align-start' : '');
+        // Keep clear of the current-value badge pinned in the top-right
+        // corner of the plot — force the label below the point there
+        // instead of above it.
+        var nearBadge = px>55 && py<22;
+        var labelTop = (py>28 && !nearBadge) ? (py-24)+'%' : (py+8)+'%';
+        var qShort = (pp.market_question||'').length>34 ? pp.market_question.slice(0,34)+'…' : (pp.market_question||'');
+        peakMarkup =
+          '<div class="chart-peak-dot ' + (isPos?'pos':'neg') + '" style="left:'+px.toFixed(2)+'%;top:'+py.toFixed(2)+'%"></div>' +
+          '<div class="chart-peak-label ' + alignCls + '" style="left:'+px.toFixed(2)+'%;top:'+labelTop+'">' +
+            '<div class="chart-peak-q">' + esc(qShort) + '</div>' +
+            '<div class="chart-peak-delta ' + (isPos?'pos':'neg') + '">' + chartRoiLabel(delta) + '</div>' +
+          '</div>';
+      }
+
+      var lastVal = vals[vals.length-1];
+      var badge = '<div class="chart-badge"><span class="chart-badge-lbl">current</span>' +
+        '<span class="chart-badge-val">' + chartRoiLabel(lastVal) + '</span></div>';
+
+      return '<div class="chart-wrap" id="chartWrap">' +
+          '<div class="chart-head"><span class="chart-lbl">cumulative ROI</span>' +
+          '<span class="chart-lbl">' + series.length + ' resolved</span></div>' +
+          '<div class="chart-grid">' +
+            '<div class="chart-ylabels">' + ylabels + '</div>' +
+            '<div class="chart-plot">' + gridlines + svg + peakMarkup + hitTargets + badge + '</div>' +
+            '<div class="chart-xlabels">' + xlabels + '</div>' +
+          '</div>' +
+          '<div class="chart-tip" id="chartTip"></div>' +
+        '</div>';
     }
 
     function render(d){
@@ -245,13 +426,7 @@
       var strip = '<div class="strip">' + stripBits.join(' &nbsp;·&nbsp; ') + '</div>';
 
       // ── chart
-      var chart = '';
-      if (c && c.roi_series && c.roi_series.length > 1) {
-        chart = '<div class="chart-wrap">' +
-          '<div class="chart-head"><span class="chart-lbl">cumulative ROI</span>' +
-          '<span class="chart-lbl">' + c.roi_series.length + ' resolved</span></div>' +
-          sparkline(c.roi_series) + '</div>';
-      }
+      var chart = (c && c.roi_series && c.roi_series.length > 1) ? roiChart(c.roi_series) : '';
 
       // ── how they trade (risk / style disclosure)
       var risk = '';
