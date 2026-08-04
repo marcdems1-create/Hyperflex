@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-04 (fix: trading pages were wiping the CLOB session on a mere MetaMask lock, not just a real disconnect — same branch as before, `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221 already merged so this restarts the branch fresh per the branch-reuse rule)
+
+**Ask:** after the /connect wallet-remembering fix shipped, Marc said "check trading pages" — asking whether `market.html`/`creator-dashboard.html` had the same "constantly sign in" problem.
+
+**Finding — much worse than /connect's gap, and a real bug, not just a missing feature.** Both trading pages already persisted the CLOB session correctly in the common case (`poly_api_key`/`poly_api_secret`/`poly_api_passphrase`/`poly_eoa_address` in localStorage, `updateTradingUI()` reads them on load and shows "Trading enabled" without requiring a click). The bug was in the wallet-switch detection path: `wallet.js`'s `syncCurrentAccount()` (polled on every page load AND on every tab focus/visibilitychange) calls `eth_accounts` and treats an **empty result** as "user disconnected," firing `hfx_wallet_switched` with `newEoa: null`. But `eth_accounts` returns empty in three cases, not one: a genuine disconnect, MetaMask simply being **locked** (auto-lock timeout, browser restart — extremely common), or the extension not yet finished injecting on a fresh page load. Both pages' `newEoa: null` handlers (`hfxHandleWalletSwitch` in `market.html`, `hfxDashHandleWalletSwitch` in `creator-dashboard.html`) treated all three identically: unconditionally wipe `poly_api_key`/`secret`/`passphrase` (market.html also wiped `poly_eoa_address`). Since deriving those keys requires a real EIP-712 `signTypedData` MetaMask signature (`enableTrading()` / `derivePolymarketApiKey()`), this meant: **every time a returning user's MetaMask happened to be locked, the page would silently throw away a perfectly valid trading session and force a full reconnect + a brand-new signature prompt** — the exact "have to sign in constantly" complaint, and worse than /connect's gap because it destroyed working state rather than just failing to restore it.
+
+**Compounding bug in `creator-dashboard.html` only:** a second, separate raw `window.ethereum.on('accountsChanged', ...)` listener (commented "belt-and-suspenders backup") called the fully-destructive `disconnectBrowserWallet()` directly on any empty-accounts event — completely independent of `hfxDashHandleWalletSwitch`. Fixing the main handler alone would NOT have fixed the bug on this page; this redundant listener would have kept nuking the session regardless. `market.html` did not have this second listener.
+
+**Fix (both files):** when `newEoa` is falsy, no longer clear the persisted CLOB credentials — only clear the live in-memory signer/provider objects (genuinely stale while locked) and show an informational status ("MetaMask locked or not connected. Unlock MetaMask to resume trading.") instead of "Wallet disconnected." A genuine switch to a **different**, non-null address still clears and re-derives everything correctly (that branch was already right, untouched). Removed `creator-dashboard.html`'s redundant raw `accountsChanged` listener entirely — `wallet.js`'s own listener + `syncCurrentAccount()` already drives the (now-fixed) `hfxDashHandleWalletSwitch` via the `hfx_wallet_switched` event, so the second listener was pure duplication that happened to be the more harmful of the two paths.
+
+**Verified:** inline `<script>` blocks in both files parse via `new Function()` (no syntax errors introduced). Confirmed the explicit "Disconnect" button (`disconnectBrowserWallet()`, `creator-dashboard.html`) is unaffected — that's still a deliberate user action and should still fully wipe credentials; only the automatic/passive empty-accounts path changed. No live browser test possible in this environment (would need a real MetaMask session that can be locked/unlocked across page loads).
+
+**Active blockers:** (none)
+
+**Queued (priority order):**
+1. No live test of the actual lock/unlock cycle in a real browser — worth a manual check soon after this ships (lock MetaMask, reload `market.html`/`creator-dashboard.html`, confirm "Trading enabled" survives and no new Sign prompt appears until a genuine account switch).
+
+**Notes for next session:**
+- Do not reintroduce a raw `accountsChanged` listener in `creator-dashboard.html` that calls `disconnectBrowserWallet()` (or clears `poly_api_key` et al) unconditionally on empty accounts — that's exactly the bug just fixed. Any future wallet-disconnect handling should go through `hfxHandleWalletSwitch`/`hfxDashHandleWalletSwitch`'s `newEoa` check, which now correctly distinguishes "locked" (keep credentials) from "genuine switch" (clear + re-derive).
+
 ## 2026-08-03e (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
 
 **Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-08-03f compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.

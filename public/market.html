@@ -8253,17 +8253,20 @@ async function hfxHandleWalletSwitch(detail) {
 
   console.log('[market] wallet switched:', (oldEoa || '').slice(0,10), '→', (newEoa || '').slice(0,10));
 
-  // Clear all stale data
-  localStorage.removeItem('poly_api_key');
-  localStorage.removeItem('poly_api_secret');
-  localStorage.removeItem('poly_api_passphrase');
-  localStorage.removeItem('hf_poly_wallet');
-  sessionStorage.removeItem('hf_poly_wallet_session');
-
   if (!newEoa) {
-    // User disconnected from MetaMask entirely
-    localStorage.removeItem('poly_eoa_address');
-    showTradeStatus('Wallet disconnected. Connect MetaMask to trade.', 'info');
+    // eth_accounts reported no accounts. This fires both on a genuine
+    // disconnect AND on the far more common case of MetaMask simply being
+    // LOCKED (auto-lock timeout, browser restart) or not yet finished
+    // injecting on a fresh page load — MetaMask reports empty accounts in
+    // all of those cases, indistinguishable from a real disconnect. This
+    // used to unconditionally wipe poly_api_key/secret/passphrase/eoa on
+    // every one of those, forcing a full reconnect + a brand new EIP-712
+    // signature every time a returning user's MetaMask happened to be
+    // locked — exactly the "have to sign in constantly" complaint. Keep
+    // the persisted CLOB session intact here; if the SAME account reappears
+    // (unlock), trading resumes with zero extra signing. Only a genuine
+    // switch to a DIFFERENT account (below) invalidates the cached keys.
+    showTradeStatus('MetaMask locked or not connected. Unlock MetaMask to resume trading.', 'info');
     var balEl = document.getElementById('tradeBalance');
     if (balEl) balEl.textContent = 'Balance: —';
     var posEl = document.getElementById('tradePosition');
@@ -8271,6 +8274,14 @@ async function hfxHandleWalletSwitch(detail) {
     updateTradingUI();
     return;
   }
+
+  // Genuine switch to a DIFFERENT account — the cached keys are for the
+  // wrong wallet now, clear them and derive fresh state for the new one.
+  localStorage.removeItem('poly_api_key');
+  localStorage.removeItem('poly_api_secret');
+  localStorage.removeItem('poly_api_passphrase');
+  localStorage.removeItem('hf_poly_wallet');
+  sessionStorage.removeItem('hf_poly_wallet_session');
 
   // Set new EOA + derive new proxy
   localStorage.setItem('poly_eoa_address', newEoa);
