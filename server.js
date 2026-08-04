@@ -12607,6 +12607,20 @@ function _integrityFlagDisclosure(signals) {
   return out;
 }
 
+// For a wallet in heldRows (see _getCachedHeldWallets) — the record isn't
+// hidden, it just doesn't rank yet. This is the leading disclosure entry;
+// the individual component flags from _integrityFlagDisclosure follow it so
+// the reader sees exactly why, not just that. Severity 'medium' (not
+// 'high') on purpose — this states a mechanical fact about the record, not
+// an accusation; the underlying flags speak for themselves.
+function _integrityHoldNote() {
+  return {
+    key: 'not_ranked_integrity', severity: 'medium',
+    label: 'Not currently ranked',
+    detail: 'This record currently trips more than one of the checks below at once. It is not deleted or hidden — it re-appears on the ranked board automatically once it grows past these thresholds.',
+  };
+}
+
 function _roiWindowClause(window) {
   if (window === '30d') return "AND rt.closed_at >= NOW() - INTERVAL '30 days'";
   if (window === '90d') return "AND rt.closed_at >= NOW() - INTERVAL '90 days'";
@@ -12773,11 +12787,32 @@ async function _getCachedDurableLeaderboard() {
   if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
     const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
     if (computed) {
-      _cached = { data: computed.rows, popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+      _cached = { data: computed.rows, heldData: computed.heldRows || [], popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
       _roiLbCache.set(_ck, _cached);
     }
   }
   return _cached ? _cached.data : [];
+}
+
+// Sibling read of the SAME cache entry, for wallets the anti-farming
+// integrity gate is currently holding OFF the board (see
+// _computeIntegritySignals). _getCachedDurableLeaderboard's return value
+// must never include these — every caller of that function treats its
+// result as "verified," including the copy-trading gate — so this is a
+// deliberately separate function rather than a parameter on the existing
+// one, to make it structurally hard to accidentally leak a held wallet
+// into a verified-only check.
+async function _getCachedHeldWallets() {
+  const _ck = `all:${ROI_MIN_N_FLOOR}`;
+  let _cached = _roiLbCache.get(_ck);
+  if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
+    if (computed) {
+      _cached = { data: computed.rows, heldData: computed.heldRows || [], popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+      _roiLbCache.set(_ck, _cached);
+    }
+  }
+  return _cached ? (_cached.heldData || []) : [];
 }
 
 // Address-keyed verification check — copy-bot subscriptions are keyed on a
@@ -31157,23 +31192,33 @@ app.get('/api/user/profile/:handle', async (req, res) => {
     // integrity_flags piggybacks on the same lookup — see _computeIntegritySignals
     // (anti-farming gate, near ROI_CAP). Disclosed here even when the wallet
     // isn't held (individual flags are informational, not punitive — see
-    // that function's comment). NOTE: this only covers the RANKED case —
-    // _getCachedDurableLeaderboard's rows exclude held wallets by design, so
-    // a held wallet currently shows no explicit note here. Zero wallets are
-    // held as of 2026-08-04's live scan, so this gap is real but not yet
-    // hit; worth closing if integrity_hold ever actually fires on a live
-    // wallet (would need heldRows surfaced through the cache too).
+    // that function's comment). Held wallets (checked via the separate
+    // _getCachedHeldWallets, NOT the verified-rows getter — see that
+    // function's comment on why it's deliberately a different call) get a
+    // leading "Not currently ranked" note ahead of the same per-flag detail,
+    // closing the gap where a held wallet's own profile used to show full
+    // stats with zero explanation for why it dropped off the board.
     try {
       const leaderboardRows = await _getCachedDurableLeaderboard();
       const row = leaderboardRows.find(r => r.user_id === profile.id);
       profile.durable_verified = !!row;
       profile.durable_scope_label = row ? row.scope_label : null;
+
+      let integrityRow = row;
+      let isHeld = false;
+      if (!integrityRow) {
+        const heldWallets = await _getCachedHeldWallets();
+        const heldRow = heldWallets.find(r => r.user_id === profile.id);
+        if (heldRow) { integrityRow = heldRow; isHeld = true; }
+      }
+
       // Merged into the existing risk_profile.flags array (not a new field)
       // so profile-trader.html renders them through the already-shipped
       // .flag/.flag-dot markup — one disclosure block, one voice, not two.
-      if (row && row.integrity_flags && row.integrity_flags.length && profile.card && profile.card.risk_profile) {
+      if (integrityRow && integrityRow.integrity_flags && integrityRow.integrity_flags.length && profile.card && profile.card.risk_profile) {
+        const notes = isHeld ? [_integrityHoldNote()] : [];
         profile.card.risk_profile.flags = (profile.card.risk_profile.flags || [])
-          .concat(_integrityFlagDisclosure(row));
+          .concat(notes, _integrityFlagDisclosure(integrityRow));
       }
     } catch (e) {
       console.warn('[api/user/profile] durable_verified check failed:', e.message);

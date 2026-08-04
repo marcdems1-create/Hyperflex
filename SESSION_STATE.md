@@ -49,6 +49,25 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-04d (Closed the held-wallet-profile-disclosure gap flagged twice in the last two entries)
+
+**Ask:** "keep building" — continuing the anti-farming/moat thread rather than starting something new, since it was the active context and the gap was already understood and queued.
+
+**Shipped:** `_getCachedHeldWallets()` (server.js, next to `_getCachedDurableLeaderboard`) — a deliberately SEPARATE function reading the same `_roiLbCache` entry (now also stores `heldData` alongside `data`), not a parameter on the existing getter. Kept separate on purpose: every caller of `_getCachedDurableLeaderboard()` treats its result as verified (the copy-trading gate, copy-bot's auto-execute check), so a shared function with a "include held" flag would be one bad default away from leaking a held wallet into a verified-only check. `durable_verified` in `/api/user/profile/:handle` is untouched — still computed only from `_getCachedDurableLeaderboard()`'s rows, never from the held lookup.
+
+**Also shipped:** `_integrityHoldNote()` — a leading `{key: 'not_ranked_integrity', severity: 'medium', label: 'Not currently ranked', detail: '...'}` entry, prepended ahead of the wallet's individual `_integrityFlagDisclosure()` flags when the wallet is found in `_getCachedHeldWallets()` instead of the ranked rows. Route logic: look up ranked rows first (existing behavior, unchanged); only if NOT found there, check held wallets as a fallback, purely for disclosure copy — never for `durable_verified`.
+
+**Net effect:** a held wallet's own `/@handle` profile now explicitly states it isn't ranked and why, instead of showing full stats with the ranking silently absent. Not exercised on real data yet — still 0 held wallets as of the last live scan — but the profile-side half of "flag, don't hide" is now actually complete, not just documented as a known gap.
+
+**Verified:** `node --check server.js` passes. Extended the same standalone Node harness from the prior entry with a synthetic held-wallet case (`narrow_time_span` + `thin_capital`, matching the actual hold-logic combination) — hold note renders first, component flags follow, output correct.
+
+**Active blockers:** none.
+
+**Queued:** none from this arc. `ADMIN_SECRET` rotation is still the one standing item, unrelated to this work.
+
+**Notes for next session:**
+- If `_getCachedDurableLeaderboard()` is ever refactored, keep `heldData` on the same cache entry rather than a separate cache — `_getCachedHeldWallets()` depends on both functions sharing the identical `_ck` key so a call to one warms the other within the same 120s window.
+
 ## 2026-08-04c (Anti-farming integrity_flags now surfaced on the canonical /@handle profile)
 
 **Ask:** "surface flags on profiles" — closing the queued item from the integrity-scan work: `integrity_flags` existed only in `/api/predictors/leaderboard?mode=roi`'s raw JSON, nothing rendered it anywhere.
