@@ -64622,6 +64622,61 @@ app.get('/api/admin/wallet-position-schema', requireAdminSecret, async (req, res
   }
 });
 
+// GET /api/admin/wallet-position-live-check — schema alone doesn't say
+// whether a table is actually populated/actively written. This runs
+// read-only counts + freshness + samples against the two tables that
+// matter for the live-open-position question: polymarket_trades (has a
+// status/open-closed state machine) and realized_trades (resolved-only by
+// design). Single curl.
+app.get('/api/admin/wallet-position-live-check', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const [polymarketTrades, openSample, realizedTrades, cachedPositions] = await Promise.all([
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
+               COUNT(*) FILTER (WHERE status = 'closed')::int AS closed_count,
+               COUNT(DISTINCT proxy_address)::int AS distinct_wallets,
+               MAX(created_at) AS latest_created_at,
+               MAX(updated_at) AS latest_updated_at
+        FROM polymarket_trades
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT proxy_address, market_slug, side, entry_price, shares, status, created_at
+        FROM polymarket_trades
+        WHERE status = 'open'
+        ORDER BY created_at DESC
+        LIMIT 5
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE closed_at IS NOT NULL)::int AS closed_at_present,
+               COUNT(*) FILTER (WHERE closed_at IS NULL)::int AS closed_at_null,
+               MAX(created_at) AS latest_created_at
+        FROM realized_trades
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(DISTINCT user_id)::int AS distinct_wallets,
+               MAX(updated_at) AS latest_updated_at
+        FROM cached_positions
+      `).catch(e => ({ error: e.message })),
+    ]);
+
+    res.json({
+      polymarket_trades: polymarketTrades[0] || polymarketTrades,
+      polymarket_trades_open_sample: openSample,
+      realized_trades: realizedTrades[0] || realizedTrades,
+      cached_positions: cachedPositions[0] || cachedPositions,
+      note: 'polymarket_trades.open_count > 0 means live open positions exist and are actively tracked. realized_trades.closed_at_null should be near-zero if the table is truly resolved-only by construction (every row already represents a closed round-trip) — a large closed_at_null count would mean it also holds open-position rows despite the naming/docs.',
+    });
+  } catch (e) {
+    console.error('[wallet-position-live-check]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/admin/integrity-scan — anti-farming gate visibility. Read-only,
 // one curl. _computeRoiLeaderboard now silently drops wallets that trip the
 // joint thin_capital+narrow_time_span+extreme_roi_heavy signal (see
