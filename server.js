@@ -12504,14 +12504,26 @@ const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
 // schema migration; same computed-on-read pattern as the rest of this
 // function). Individual flags are DISCLOSED, not silently punitive — a real
 // skilled trader can plausibly trip any one of these alone (e.g. a genuine
-// long-shot call, or a trader who is simply new to durable markets). Hard
-// exclusion from the qualifying board only fires when the three strongest,
-// least-overlapping signals all trip on the SAME wallet at once — thin
-// capital AND a narrow time span AND a record dominated by extreme-price
-// bets is a much stronger joint signal than any one alone, and is the same
-// "flag, don't delete" posture as the 2026-07-29 redeemed-fabrication purge:
-// held wallets are not erased, they keep their trades and re-qualify as
-// their record grows past the thresholds.
+// long-shot call, or a trader who is simply new to durable markets).
+//
+// Hold logic revised 2026-08-04 after the first live run of /api/admin/
+// integrity-scan (165 qualifying, 0 held, 27 flagged): extreme_roi_heavy
+// never fired across the whole cohort — it was calibrated against the OLD
+// redeemed-cashPnl fabrication bug's exact signature (values pinned near
+// the ±100% settlement extremes), a bug already closed at ingestion, so a
+// realistic farming attempt today has no reason to leave that fingerprint.
+// The original hold rule required thin_capital AND narrow_time_span AND
+// extreme_roi_heavy simultaneously — with the third leg effectively
+// unreachable, the gate could flag but never actually exclude anyone, and
+// thin_capital's $250 floor is trivial for a funded farmer to clear anyway.
+// Narrow_time_span is the signal most directly tied to the actual worry in
+// CLAUDE.md ("10 cherry-picked durable trades and you're listed") — real
+// organic durable-market wins take weeks/months to accumulate, a batch of
+// cherry-picked ones doesn't. Hold now requires narrow_time_span PLUS at
+// least one corroborating flag, not all three specific ones — same "flag,
+// don't delete" posture as the 2026-07-29 redeemed-fabrication purge either
+// way: held wallets are not erased, they keep their trades and re-qualify
+// as their record grows past the thresholds.
 const INTEGRITY_MIN_CAPITAL_USD = 250;        // total capital deployed across scored (durable) trades
 const INTEGRITY_MIN_SPAN_DAYS = 14;           // scored trades must span at least this many days first-to-last
 const INTEGRITY_MAX_EXTREME_ROI_SHARE = 0.7;  // share of trades resolving near the ROI cap or near total loss
@@ -12542,7 +12554,8 @@ function _computeIntegritySignals(r, n) {
   if (lateSnipeShare > INTEGRITY_MAX_LATE_SNIPE_SHARE) flags.push('late_entry_heavy');
   if (daysOnPlatform != null && daysOnPlatform < INTEGRITY_NEW_WALLET_DAYS) flags.push('new_wallet'); // informational only
 
-  const hold = flags.includes('thin_capital') && flags.includes('narrow_time_span') && flags.includes('extreme_roi_heavy');
+  const hold = flags.includes('narrow_time_span')
+    && (flags.includes('thin_capital') || flags.includes('extreme_roi_heavy') || flags.includes('late_entry_heavy'));
 
   return {
     capital_deployed_usd: capitalUsd,

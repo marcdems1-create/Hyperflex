@@ -69,6 +69,31 @@
 **Notes for next session:**
 - Do not reintroduce a raw `accountsChanged` listener in `creator-dashboard.html` that calls `disconnectBrowserWallet()` (or clears `poly_api_key` et al) unconditionally on empty accounts — that's exactly the bug just fixed. Any future wallet-disconnect handling should go through `hfxHandleWalletSwitch`/`hfxDashHandleWalletSwitch`'s `newEoa` check, which now correctly distinguishes "locked" (keep credentials) from "genuine switch" (clear + re-derive).
 
+## 2026-08-04b (Anti-farming gate: first live integrity-scan run — 0 held, real finding on why, hold logic tightened)
+
+**Correction to prior sessions' repeated claim:** "this sandbox has no network path to hyperflex.network" — retested this session, `/health` returned 200 and the new `/api/admin/integrity-scan` route responded (403 without a secret, as expected). Network access to production works from this environment now. Whatever caused the earlier block, it isn't universally true anymore — don't assume it without retesting.
+
+**Ran `GET /api/admin/integrity-scan` live for the first time** (Marc ran it directly, `ADMIN_SECRET` never passed through this session — see note below). Result: **165 qualifying, 0 held, 27 flagged-but-qualifying.**
+
+**Real finding: `extreme_roi_heavy` never fired — 0 wallets out of 192 total.** It was calibrated against the OLD redeemed-cashPnl fabrication bug's exact signature (values pinned near the ±100% settlement extremes) — a bug already closed at ingestion (2026-07-29 fixes), so nothing in live data has a reason to leave that fingerprint anymore. Since the original hold rule required `thin_capital` AND `narrow_time_span` AND `extreme_roi_heavy` **all three at once**, and one leg was structurally unreachable, the gate could flag wallets but could never actually hold anyone — inert by construction, not by the data being clean. Also: `thin_capital`'s $250 floor is trivial for any funded farming attempt to clear, so it wasn't a meaningful gate either.
+
+**Closest-to-the-actual-worry wallets** (near the n≥10 floor, `narrow_time_span` flagged — the shape CLAUDE.md's "10 cherry-picked durable trades" risk describes): C9usa (n=10), svoter (n=10), LynxTitan (n=11), Prediqa (n=11), rainbowlilies (n=12). None held under the old OR the new logic — worth a manual look if anyone wants to sanity-check the gate against a real edge case, since nothing has excluded them either way.
+
+**Fix shipped:** hold logic changed from `thin_capital && narrow_time_span && extreme_roi_heavy` to `narrow_time_span && (thin_capital || extreme_roi_heavy || late_entry_heavy)` (server.js, `_computeIntegritySignals`, doc comment + logic both updated). Marc's call, confirmed before shipping. Makes `narrow_time_span` the necessary signal (most directly tied to the actual worry) plus any one corroborating flag, instead of requiring capital-thinness and ROI-extremity simultaneously. **Honest caveat: re-checked against today's actual 27 flagged wallets, this change still results in 0 held** — every narrow-span wallet in today's data only co-occurs with `new_wallet` (informational-only, not part of the OR set), not with `thin_capital`/`extreme_roi_heavy`/`late_entry_heavy`. This is a "more defensible going forward" change, not a "fixes something broken today" change — logged so nobody re-discovers that gap and thinks the fix was pointless.
+
+**Credential handling note:** Marc pasted the live `ADMIN_SECRET` value directly into chat mid-session. Declined to use it or store it anywhere (prohibited action per operating rules — entering an API key/token, even user-supplied, into a request) and flagged that the value is now in chat history and should be rotated sooner than "later." Gave Marc the curl to run himself with the value inline in his own terminal instead. Not stored in this file, in code, or anywhere else.
+
+**Active blockers:** none.
+
+**Queued (priority order):**
+1. Re-run `/api/admin/integrity-scan` after this fix deploys, confirm still 0 held (expected, per the honest caveat above) and 27 flagged (unchanged).
+2. Marc should rotate `ADMIN_SECRET` given it was typed into this chat session.
+3. Still not surfaced in any UI — `integrity_flags` is API-only. Unchanged from the prior entry.
+
+**Notes for next session:**
+- Don't assume "no network path to production" without retesting first — it was true for a long stretch of sessions, isn't anymore as of this one.
+- If `extreme_roi_heavy` still never fires after real trading volume grows, consider whether the 70% share / near-cap-or-floor definition is the wrong shape entirely, not just a threshold to retune.
+
 ## 2026-08-03e (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
 
 **Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-08-03f compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
