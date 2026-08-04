@@ -255,7 +255,11 @@ function winCardHtml(e, accent) {
   var entryC = win.entry_price != null ? Math.round(win.entry_price * 100) + '¢' : null;
   var multText = win.multiplier != null ? win.multiplier + 'x' : fmtPct(win.roi_pct);
   var scorePositive = (e.score_pct != null ? e.score_pct : 0) >= 0;
-  var href = e.user_id ? '/trader/' + esc(e.user_id) : '#';
+  // Canonical trader profile is /@handle, not /trader/<uuid> — same bug
+  // and same fix as trader-card.js's HFXTraderCard.render() (this card
+  // markup is a separate implementation, doesn't route through that
+  // shared component, so it needed the identical fix applied here too).
+  var href = e.username ? '/@' + esc(e.username) : e.polymarket_address ? '/trader/' + esc(e.polymarket_address) : '#';
   return '<a class="wcard" style="--accent:' + accent + '" href="' + href + '">'
     + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
     + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
