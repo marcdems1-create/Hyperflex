@@ -64577,28 +64577,32 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
 });
 
 // GET /api/admin/wallet-position-schema — one-shot information_schema.columns
-// dump for every table whose name matches wallet/position/snapshot/clv, so a
-// live-vs-resolved-trades question can be answered by reading the actual
+// dump for every table whose name matches wallet/position/snapshot/clv/trade,
+// so a live-vs-resolved-trades question can be answered by reading the actual
 // production schema instead of trusting migration files (which can drift
 // from prod after manual ALTERs). Read-only, single curl.
+// NOTE: pattern originally covered position/wallet/snapshot/clv only, which
+// missed realized_trades (the actual ROI-leaderboard source of truth) —
+// broadened to also catch %trade%/%fill%/%realized% table names.
 app.get('/api/admin/wallet-position-schema', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
 
+    const NAME_FILTER = `(table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
+      OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%'
+      OR table_name ILIKE '%trade%' OR table_name ILIKE '%fill%'
+      OR table_name ILIKE '%realized%')`;
+
     const tables = await dbQuery(`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
-             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      WHERE table_schema = 'public' AND ${NAME_FILTER}
       ORDER BY table_name
     `);
 
     const columns = await dbQuery(`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
-             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      WHERE table_schema = 'public' AND ${NAME_FILTER}
       ORDER BY table_name, ordinal_position
     `);
 
