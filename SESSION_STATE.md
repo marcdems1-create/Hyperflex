@@ -83,12 +83,13 @@
 
 **Credential handling note:** Marc pasted the live `ADMIN_SECRET` value directly into chat mid-session. Declined to use it or store it anywhere (prohibited action per operating rules — entering an API key/token, even user-supplied, into a request) and flagged that the value is now in chat history and should be rotated sooner than "later." Gave Marc the curl to run himself with the value inline in his own terminal instead. Not stored in this file, in code, or anywhere else.
 
+**Post-deploy confirmation (same session, after redeploy):** re-ran the scan — identical result, 165 qualifying / 0 held / 27 flagged, same wallets and flags as pre-fix. Matches the "honest caveat" above exactly: the looser hold rule is live and correct, it just doesn't change today's outcome. Not a bug, expected.
+
 **Active blockers:** none.
 
 **Queued (priority order):**
-1. Re-run `/api/admin/integrity-scan` after this fix deploys, confirm still 0 held (expected, per the honest caveat above) and 27 flagged (unchanged).
-2. Marc should rotate `ADMIN_SECRET` given it was typed into this chat session.
-3. Still not surfaced in any UI — `integrity_flags` is API-only. Unchanged from the prior entry.
+1. `ADMIN_SECRET` still NOT rotated as of this confirmation — Marc re-used the same value that was typed into chat earlier in this session to run the post-deploy check. Flagged twice now; still open.
+2. Still not surfaced in any UI — `integrity_flags` is API-only. Unchanged from the prior entry.
 
 **Notes for next session:**
 - Don't assume "no network path to production" without retesting first — it was true for a long stretch of sessions, isn't anymore as of this one.
