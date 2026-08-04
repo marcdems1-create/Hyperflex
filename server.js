@@ -12568,6 +12568,45 @@ function _computeIntegritySignals(r, n) {
   };
 }
 
+// Translates _computeIntegritySignals' flag keys into the same
+// {key, severity, label, detail} shape computeTraderRiskProfile's flags
+// already use (public/profile-trader.html renders both through the same
+// .flag/.flag-dot markup) — one disclosure block on the canonical profile,
+// not two differently-styled ones. Voice matches computeTraderRiskProfile's
+// existing flags: dry, factual, states the mechanical fact and why it
+// matters, no accusation ("cherry-picked", "farmed", "suspicious" never
+// appear — the record speaks for itself, per the Voice & Posture charter).
+function _integrityFlagDisclosure(signals) {
+  const out = [];
+  const flags = signals.integrity_flags || [];
+  if (flags.includes('narrow_time_span')) out.push({
+    key: 'narrow_time_span', severity: 'medium',
+    label: 'Scored trades cluster in time',
+    detail: 'The full scored record spans ' + (signals.record_span_days != null ? signals.record_span_days + ' days' : 'under ' + INTEGRITY_MIN_SPAN_DAYS + ' days') + ' start to finish. A record built this quickly is harder to distinguish from a handful of picked calls than one built over months.',
+  });
+  if (flags.includes('extreme_roi_heavy')) out.push({
+    key: 'extreme_roi_heavy', severity: 'medium',
+    label: 'Record leans on extreme outcomes',
+    detail: signals.extreme_roi_share_pct + '% of scored trades resolve near a total win or a total loss, rather than a moderate return.',
+  });
+  if (flags.includes('thin_capital')) out.push({
+    key: 'thin_capital', severity: 'low',
+    label: 'Thin capital on record',
+    detail: 'Total capital deployed across the scored record is ' + _fmtBioUsd(signals.capital_deployed_usd) + '.',
+  });
+  if (flags.includes('late_entry_heavy')) out.push({
+    key: 'late_entry_heavy', severity: 'low',
+    label: 'Frequent late entries',
+    detail: signals.late_entry_share_pct + '% of scored trades were opened within 48 hours of resolution, at a price already near the extremes.',
+  });
+  if (flags.includes('new_wallet')) out.push({
+    key: 'new_wallet', severity: 'low',
+    label: 'New to durable markets',
+    detail: 'First recorded activity is ' + signals.days_on_platform + ' day' + (signals.days_on_platform === 1 ? '' : 's') + ' ago.',
+  });
+  return out;
+}
+
 function _roiWindowClause(window) {
   if (window === '30d') return "AND rt.closed_at >= NOW() - INTERVAL '30 days'";
   if (window === '90d') return "AND rt.closed_at >= NOW() - INTERVAL '90 days'";
@@ -31115,11 +31154,27 @@ app.get('/api/user/profile/:handle', async (req, res) => {
     // is copyable; a copy affordance on an unverified/fabricated record
     // would be exactly the moat-destroying failure Gate 1 exists to
     // prevent.
+    // integrity_flags piggybacks on the same lookup — see _computeIntegritySignals
+    // (anti-farming gate, near ROI_CAP). Disclosed here even when the wallet
+    // isn't held (individual flags are informational, not punitive — see
+    // that function's comment). NOTE: this only covers the RANKED case —
+    // _getCachedDurableLeaderboard's rows exclude held wallets by design, so
+    // a held wallet currently shows no explicit note here. Zero wallets are
+    // held as of 2026-08-04's live scan, so this gap is real but not yet
+    // hit; worth closing if integrity_hold ever actually fires on a live
+    // wallet (would need heldRows surfaced through the cache too).
     try {
       const leaderboardRows = await _getCachedDurableLeaderboard();
       const row = leaderboardRows.find(r => r.user_id === profile.id);
       profile.durable_verified = !!row;
       profile.durable_scope_label = row ? row.scope_label : null;
+      // Merged into the existing risk_profile.flags array (not a new field)
+      // so profile-trader.html renders them through the already-shipped
+      // .flag/.flag-dot markup — one disclosure block, one voice, not two.
+      if (row && row.integrity_flags && row.integrity_flags.length && profile.card && profile.card.risk_profile) {
+        profile.card.risk_profile.flags = (profile.card.risk_profile.flags || [])
+          .concat(_integrityFlagDisclosure(row));
+      }
     } catch (e) {
       console.warn('[api/user/profile] durable_verified check failed:', e.message);
       profile.durable_verified = false;

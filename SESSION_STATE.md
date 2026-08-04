@@ -49,6 +49,29 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-04c (Anti-farming integrity_flags now surfaced on the canonical /@handle profile)
+
+**Ask:** "surface flags on profiles" — closing the queued item from the integrity-scan work: `integrity_flags` existed only in `/api/predictors/leaderboard?mode=roi`'s raw JSON, nothing rendered it anywhere.
+
+**Found first:** `/@handle` (`public/profile-trader.html`, canonical per CLAUDE.md's file map) is powered by `computeTraderCard()` + `GET /api/user/profile/:handle` — a COMPLETELY SEPARATE pipeline from `_buildTraderCards`/`_buildTraderProfile` (`/trader/:handle`, built 2026-07-20, not in the current file map, likely superseded by the 2026-07-30 canonical-profile consolidation). Wiring `integrity_flags` into `_buildTraderCards` — the obvious first move — would NOT have surfaced anything on the page Marc actually meant.
+
+**Also found:** the canonical profile already has a disclosure mechanism for exactly this purpose — `computeTraderRiskProfile()` ("how they trade" section) already ships `flags: [{key, severity, label, detail}]` for `concentrated`/`small_size`/`fast_turnover`, rendered via `public/profile-trader.html`'s existing `.flag`/`.flag-dot` markup. Reused it rather than building a second, differently-styled block.
+
+**Shipped:** `_integrityFlagDisclosure(signals)` (server.js, right after `_computeIntegritySignals`) translates the five integrity flag keys into that same `{key, severity, label, detail}` shape — dry, factual copy, no "cherry-picked"/"farmed"/"suspicious" language (Voice & Posture charter: labels describe mechanics, never quality). `GET /api/user/profile/:handle`'s existing `_getCachedDurableLeaderboard()` lookup (already there for the copy-trading `durable_verified` gate) now also concats the translated flags onto `profile.card.risk_profile.flags` when present. Zero frontend changes needed — the existing render path picks them up automatically.
+
+**Known gap, documented inline, not fixed this pass:** `_getCachedDurableLeaderboard()` only returns non-held rows, so a wallet with `integrity_hold: true` currently shows NO disclosure note on its own profile (its stats still render in full, it just silently doesn't appear on the ranked board). Not hit in practice — 0 wallets held as of the 2026-08-04 scan — but worth closing if `integrity_hold` ever actually fires on a live wallet. Would need `heldRows` surfaced through the cache too, not just `.rows`.
+
+**Verified:** `node --check server.js` passes. Extracted `_integrityFlagDisclosure` + `_fmtBioUsd` into a standalone Node script and ran it against 7 cases (each real flag individually, an edge case, and a synthetic all-five-flags wallet) — output strings all correct, singular/plural handling right, counts match. Did not do a full browser round-trip: the only new code is object construction feeding an UNCHANGED render path already proven live for the three pre-existing risk flags, and both severities used (`medium`/`low`) already exist in production CSS — no new visual surface to check.
+
+**Active blockers:** none.
+
+**Queued (priority order):**
+1. Close the held-wallet-profile-disclosure gap above if `integrity_hold` ever fires for real.
+2. Same open item as before, unrelated to this: `ADMIN_SECRET` still not rotated.
+
+**Notes for next session:**
+- Two parallel trader-profile systems exist in this codebase: `/@handle` (`profile-trader.html`, `computeTraderCard`, canonical) and `/trader/:handle` (`trader-profile.html`, `_buildTraderProfile`/`_buildTraderCards`, built 2026-07-20, status unclear post-2026-07-30 consolidation — not in the current CLAUDE.md file map). Check which one is actually meant before wiring anything into "the trader profile" again.
+
 ## 2026-08-04 (fix: trading pages were wiping the CLOB session on a mere MetaMask lock, not just a real disconnect — same branch as before, `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221 already merged so this restarts the branch fresh per the branch-reuse rule)
 
 **Ask:** after the /connect wallet-remembering fix shipped, Marc said "check trading pages" — asking whether `market.html`/`creator-dashboard.html` had the same "constantly sign in" problem.
