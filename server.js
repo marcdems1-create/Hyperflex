@@ -13979,6 +13979,17 @@ app.get('/traders', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'home-traders-preview.html'));
 });
 
+// GET /methodology — public, permanent statement of what the score measures,
+// how records are verified, and what the score explicitly does NOT claim
+// (notably: it does not predict future results — tested, not assumed; see
+// /api/admin/score-backtest + score-backtest-rolling). Publishing the
+// limitation is the point: a track-record product that overclaims has no
+// product.
+app.get('/methodology', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'methodology.html'));
+});
+
 // ── CONNECT FLOW — wallet connect → your score ──────────────────────────────
 // The new front door per the participant-first pivot: connect wallet → see
 // YOUR score, YOUR profile, YOUR record. Progressive UX per the ingestion-
