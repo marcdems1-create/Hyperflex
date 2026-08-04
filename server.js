@@ -12494,6 +12494,67 @@ const ROI_MIN_N_FLOOR = 10;
 const CATEGORY_KING_MIN_N = 20;
 const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
 
+// ── Record-integrity gate (anti-farming) ────────────────────────────────────
+// Open risk flagged in CLAUDE.md since the participant-first pivot: default-on
+// listing means a wallet can be farmed onto the board with a handful of
+// cherry-picked durable trades. Candidate mitigations named there — minimum
+// capital deployed, minimum account age, minimum time span across trades,
+// anomaly detection on suspiciously clean records — are implemented below,
+// computed from data already in realized_trades (no new external calls, no
+// schema migration; same computed-on-read pattern as the rest of this
+// function). Individual flags are DISCLOSED, not silently punitive — a real
+// skilled trader can plausibly trip any one of these alone (e.g. a genuine
+// long-shot call, or a trader who is simply new to durable markets). Hard
+// exclusion from the qualifying board only fires when the three strongest,
+// least-overlapping signals all trip on the SAME wallet at once — thin
+// capital AND a narrow time span AND a record dominated by extreme-price
+// bets is a much stronger joint signal than any one alone, and is the same
+// "flag, don't delete" posture as the 2026-07-29 redeemed-fabrication purge:
+// held wallets are not erased, they keep their trades and re-qualify as
+// their record grows past the thresholds.
+const INTEGRITY_MIN_CAPITAL_USD = 250;        // total capital deployed across scored (durable) trades
+const INTEGRITY_MIN_SPAN_DAYS = 14;           // scored trades must span at least this many days first-to-last
+const INTEGRITY_MAX_EXTREME_ROI_SHARE = 0.7;  // share of trades resolving near the ROI cap or near total loss
+const INTEGRITY_MAX_LATE_SNIPE_SHARE = 0.5;   // share of trades entered at an extreme price within 48h of resolution
+const INTEGRITY_NEW_WALLET_DAYS = 30;         // informational only — not part of the hold combination (proxy, not true wallet age)
+
+function _computeIntegritySignals(r, n) {
+  const capitalUsd = Math.round(Number(r.total_capital) || 0);
+  // Known gap: redeemed-origin rows have opened_at hardcoded NULL (documented
+  // at the market_durability column, same root cause). A wallet whose scored
+  // trades are ALL redeemed-origin gets first_trade_at/last_trade_at = NULL
+  // from the MIN/MAX aggregate, so spanDays is null and narrow_time_span
+  // simply never fires for it — not a bug, a real blind spot given redeemed
+  // rows are a small minority of scored volume post the 2026-07-29 fixes.
+  const spanDays = (r.first_trade_at && r.last_trade_at)
+    ? Math.round((new Date(r.last_trade_at) - new Date(r.first_trade_at)) / 86400000)
+    : null;
+  const extremeShare = n > 0 ? (Number(r.n_extreme) || 0) / n : 0;
+  const lateSnipeShare = n > 0 ? (Number(r.n_late_snipe) || 0) / n : 0;
+  const daysOnPlatform = r.first_seen_any_market_at
+    ? Math.round((Date.now() - new Date(r.first_seen_any_market_at).getTime()) / 86400000)
+    : null;
+
+  const flags = [];
+  if (capitalUsd < INTEGRITY_MIN_CAPITAL_USD) flags.push('thin_capital');
+  if (spanDays != null && spanDays < INTEGRITY_MIN_SPAN_DAYS) flags.push('narrow_time_span');
+  if (extremeShare > INTEGRITY_MAX_EXTREME_ROI_SHARE) flags.push('extreme_roi_heavy');
+  if (lateSnipeShare > INTEGRITY_MAX_LATE_SNIPE_SHARE) flags.push('late_entry_heavy');
+  if (daysOnPlatform != null && daysOnPlatform < INTEGRITY_NEW_WALLET_DAYS) flags.push('new_wallet'); // informational only
+
+  const hold = flags.includes('thin_capital') && flags.includes('narrow_time_span') && flags.includes('extreme_roi_heavy');
+
+  return {
+    capital_deployed_usd: capitalUsd,
+    record_span_days: spanDays,
+    extreme_roi_share_pct: Math.round(extremeShare * 1000) / 10,
+    late_entry_share_pct: Math.round(lateSnipeShare * 1000) / 10,
+    days_on_platform: daysOnPlatform,
+    integrity_flags: flags,
+    integrity_hold: hold,
+  };
+}
+
 function _roiWindowClause(window) {
   if (window === '30d') return "AND rt.closed_at >= NOW() - INTERVAL '30 days'";
   if (window === '90d') return "AND rt.closed_at >= NOW() - INTERVAL '90 days'";
@@ -12527,12 +12588,21 @@ async function _computeRoiLeaderboard(window, minN) {
   // Per-user aggregate + population aggregate (for the shrinkage prior) in
   // one pass via GROUPING SETS so the prior reflects the exact same
   // eligible-trade universe the per-user numbers are drawn from.
+  // n_extreme / n_late_snipe feed _computeIntegritySignals (anti-farming, see
+  // above): near-cap-or-total-loss trades and short-hold extreme-price
+  // entries are cheap, real-data proxies for a farmed-looking record. Both
+  // computed in the same pass as everything else — no extra query.
   const rows = await dbQuery(`
     SELECT rt.user_id::text AS user_id,
            COUNT(*)::int AS n,
            SUM(rt.entry_cost_usd)::numeric AS total_capital,
            SUM((${cappedRoiExpr}) * (${weightExpr}))::numeric AS wroi_num,
-           SUM(${weightExpr})::numeric AS wroi_den
+           SUM(${weightExpr})::numeric AS wroi_den,
+           MIN(rt.opened_at) AS first_trade_at,
+           MAX(rt.closed_at) AS last_trade_at,
+           COUNT(*) FILTER (WHERE rt.realized_roi >= ${ROI_CAP * 0.95} OR rt.realized_roi <= -0.95)::int AS n_extreme,
+           COUNT(*) FILTER (WHERE rt.opened_at IS NOT NULL AND (rt.entry_price <= 0.03 OR rt.entry_price >= 0.97)
+             AND rt.closed_at - rt.opened_at <= INTERVAL '2 days')::int AS n_late_snipe
     ${baseWhere}
     GROUP BY GROUPING SETS ((rt.user_id), ())
   `).catch(e => { console.warn('[roi-leaderboard] query error:', e.message); return null; });
@@ -12589,7 +12659,18 @@ async function _computeRoiLeaderboard(window, minN) {
   ).catch(() => []);
   const userById = new Map(userRows.map(u => [u.id, u]));
 
-  const result = perUser.filter(r => {
+  // Account-age proxy for _computeIntegritySignals: earliest trade across
+  // ALL of a wallet's realized_trades (any durability, ephemeral included),
+  // not just the durable/scored subset above. This is "earliest activity we
+  // have ingested," not true on-chain wallet age — informational only, see
+  // INTEGRITY_NEW_WALLET_DAYS comment above.
+  const firstSeenRows = await dbQuery(
+    `SELECT user_id::text AS user_id, MIN(opened_at) AS first_seen FROM realized_trades WHERE user_id = ANY($1) GROUP BY user_id`,
+    [userIds]
+  ).catch(() => []);
+  const firstSeenByUser = new Map((firstSeenRows || []).map(r => [r.user_id, r.first_seen]));
+
+  const withIntegrity = perUser.filter(r => {
     const u = userById.get(r.user_id);
     return !(u && u.leaderboard_opt_out === true);
   }).map(r => {
@@ -12597,6 +12678,9 @@ async function _computeRoiLeaderboard(window, minN) {
     const weightedRoi = Number(r.wroi_den) > 0 ? Number(r.wroi_num) / Number(r.wroi_den) : 0;
     const shrunk = (n / (n + ROI_SHRINK_K)) * weightedRoi + (ROI_SHRINK_K / (n + ROI_SHRINK_K)) * popWeightedRoi;
     const u = userById.get(r.user_id) || {};
+    const integrity = _computeIntegritySignals(
+      { ...r, first_seen_any_market_at: firstSeenByUser.get(r.user_id) || null }, n
+    );
     return {
       user_id: r.user_id,
       display_name: resolveDisplayName(u) || 'Trader',
@@ -12609,10 +12693,19 @@ async function _computeRoiLeaderboard(window, minN) {
       score_pct: Math.round(shrunk * 1000) / 10,
       trend: trendByUser.get(r.user_id) || null,
       scope_label: durableScopeLabel(n),
+      ...integrity,
     };
-  }).sort((a, b) => b.score_pct - a.score_pct);
+  });
 
-  return { rows: result, popWeightedRoi };
+  // Hard exclusion only on the joint thin_capital+narrow_time_span+extreme_roi_heavy
+  // signal (see _computeIntegritySignals) — held wallets keep their trades and are
+  // NOT deleted, they just don't rank until their record grows past the thresholds.
+  // heldRows is returned (not just dropped) so /api/admin/integrity-scan can show
+  // exactly who's held and why, instead of a silent count.
+  const result = withIntegrity.filter(r => !r.integrity_hold).sort((a, b) => b.score_pct - a.score_pct);
+  const heldRows = withIntegrity.filter(r => r.integrity_hold);
+
+  return { rows: result, heldRows, popWeightedRoi };
 }
 
 // Shared read of the durable-verified cohort (all-time, ROI_MIN_N_FLOOR),
@@ -64353,6 +64446,50 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[record-integrity]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/integrity-scan — anti-farming gate visibility. Read-only,
+// one curl. _computeRoiLeaderboard now silently drops wallets that trip the
+// joint thin_capital+narrow_time_span+extreme_roi_heavy signal (see
+// _computeIntegritySignals near ROI_CAP) — this endpoint is what turns that
+// silent drop into something checkable: exactly who's held, why, and how
+// close everyone else is to the same thresholds, before anyone has to
+// discover it by noticing a wallet missing from the board.
+app.get('/api/admin/integrity-scan', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+
+    const all = [...computed.rows, ...(computed.heldRows || [])];
+    const flagCounts = {};
+    for (const r of all) for (const f of r.integrity_flags) flagCounts[f] = (flagCounts[f] || 0) + 1;
+
+    res.json({
+      qualifying: computed.rows.length,
+      held: (computed.heldRows || []).length,
+      held_wallets: (computed.heldRows || []).map(r => ({
+        user_id: r.user_id, display_name: r.display_name, polymarket_address: r.polymarket_address,
+        n: r.n, capital_deployed_usd: r.capital_deployed_usd, record_span_days: r.record_span_days,
+        extreme_roi_share_pct: r.extreme_roi_share_pct, flags: r.integrity_flags,
+      })),
+      // Flagged-but-not-held: qualifying wallets carrying 1-2 flags, worth eyeballing
+      // even though they don't cross the hold combination.
+      flagged_but_qualifying: computed.rows.filter(r => r.integrity_flags.length > 0).map(r => ({
+        user_id: r.user_id, display_name: r.display_name, n: r.n, flags: r.integrity_flags,
+      })),
+      flag_distribution: flagCounts,
+      thresholds: {
+        min_capital_usd: INTEGRITY_MIN_CAPITAL_USD, min_span_days: INTEGRITY_MIN_SPAN_DAYS,
+        max_extreme_roi_share: INTEGRITY_MAX_EXTREME_ROI_SHARE, max_late_snipe_share: INTEGRITY_MAX_LATE_SNIPE_SHARE,
+        new_wallet_days: INTEGRITY_NEW_WALLET_DAYS + ' (informational only, not part of the hold combination)',
+      },
+      note: 'held wallets are excluded from the board and from copy-bot/durable_verified checks, but their trades are NOT deleted — they re-qualify automatically once their record clears the thresholds. flag_distribution counts across qualifying+held combined.',
+    });
+  } catch (e) {
+    console.error('[integrity-scan]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

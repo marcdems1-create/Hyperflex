@@ -91,6 +91,34 @@
 **Notes for next session:**
 - Do not add any retry/fallback call to `/api/polymarket/order` or the CF Worker that triggers off a `"restricted"`/geo-block string match. Technical-failure fallback only.
 - Full official Polymarket ToS/Builder Code of Conduct text could not be fetched directly in this environment (403s across polymarket.com, help.polymarket.com, builders.polymarket.com) — findings here are from WebSearch snippets, not a full-document read. If precise legal text is ever needed verbatim, fetch from a machine without the proxy's bot-blocking issue.
+
+## 2026-08-03g (Anti-farming integrity gate v1 — addresses the "Open risk on automatic listing" flagged in CLAUDE.md, not yet confirmed against live data)
+
+**What shipped:** `_computeIntegritySignals()` + wiring into `_computeRoiLeaderboard` (server.js, near `ROI_CAP`/~line 12521 and the function body ~12558). Implements 3 of the 4 candidate mitigations named in CLAUDE.md's open-risk note, computed entirely from existing `realized_trades` columns — no new external calls, no schema migration:
+
+- **`thin_capital`** — `total_capital_usd < $250` deployed across scored (durable) trades.
+- **`narrow_time_span`** — first-to-last scored trade spans `< 14 days`. Durable markets resolve weeks/months out by definition, so a real diversified record hitting n≥10 almost has to span longer than this; a tight cluster is a real signal.
+- **`extreme_roi_heavy`** — `>70%` of a wallet's scored trades resolve near the ROI cap (≥950%) or near total loss (≤-95%) — proxies for a record built entirely on long-shot/extreme-price bets rather than moderate-price directional calls.
+- **`late_entry_heavy`** (disclosed, not part of the hold combination) — `>50%` of trades bought at an extreme price (≤3¢ or ≥97¢) within 48h of resolution. Known blind spot: redeemed-origin rows have `opened_at` always NULL, so this and `narrow_time_span` structurally can't fire for a wallet whose scored trades are 100% redeemed-origin (documented inline).
+- **`new_wallet`** (informational only, not part of the hold combination) — proxy account age via `MIN(opened_at)` across ALL of a wallet's realized_trades, any durability. Explicitly labeled as "earliest activity we've ingested," not true on-chain wallet age — didn't want to overclaim a signal we can't actually verify without a new external call path.
+
+**Posture, matching the rest of this codebase's "disclose, don't hide" discipline:** any single flag is disclosed on the row (`integrity_flags[]`) but does NOT exclude a wallet — a genuinely skilled trader can plausibly trip one alone. Hard exclusion (`integrity_hold`) only fires when `thin_capital` AND `narrow_time_span` AND `extreme_roi_heavy` are ALL true on the same wallet. Held wallets are dropped from `_computeRoiLeaderboard`'s `rows` (so they automatically drop out of the public leaderboard, trader cards, AND the copy-bot `durable_verified` gate — all three read the same function) but are NOT deleted and NOT hidden from their own trade history — same "flag, don't erase" posture as the 2026-07-29 redeemed-fabrication purge. `heldRows` is now a separate field on `_computeRoiLeaderboard`'s return value specifically so this isn't a silent drop.
+
+**New read-only diagnostic:** `GET /api/admin/integrity-scan` (requireAdminSecret) — one curl, shows `qualifying` count, `held` count + exactly which wallets and why, `flagged_but_qualifying` (wallets carrying 1-2 flags without being held — worth eyeballing), and `flag_distribution` across the whole cohort. Same pattern as `/api/admin/record-integrity` and `/api/admin/durable-market-scope` from earlier arcs — built specifically so checking impact never needs an ad-hoc query.
+
+**Active blockers:**
+- **Thresholds ($250 capital / 14 days / 70% / 50%) are reasoned defaults, not tuned against real data — this sandbox has no network path to hyperflex.network (confirmed repeatedly across sessions) and cannot run `/api/admin/integrity-scan` itself.** Whoever picks this up next (or Marc directly): run it once against production and see how many of the current ~80-90 qualifying wallets get flagged or held. If a real, previously-verified wallet gets held, that's a signal the thresholds are too aggressive, not that the wallet is farmed — tune the constants (`INTEGRITY_MIN_CAPITAL_USD` etc., all four grouped together right after `CATEGORY_KING_MIN_N`) rather than the logic.
+- Not hand-verified against a known-farmed wallet (we don't have a confirmed example on this board to test against — the three fabrication bugs found in July were settlement/grading bugs, not farming per se). This gate is a preventive measure for a risk that hasn't been observed yet on this board, not a fix for an observed incident.
+
+**Queued (priority order):**
+1. Run `GET /api/admin/integrity-scan?secret=$ADMIN_SECRET` against production, review `held_wallets` and `flagged_but_qualifying` for false positives, adjust thresholds if needed.
+2. Not yet surfaced in any UI (trader cards / profile pages) — `integrity_flags` exists in the API response (`/api/predictors/leaderboard?mode=roi`) but nothing renders it. Deliberately deferred to keep this pass container-first, same pattern as the original trader-card build.
+3. The 4th named mitigation (true account age, not the ingestion-timestamp proxy) would need a new external call (Polygon RPC or Polymarket API for a wallet's first-ever transaction) — not built, flagged as a possible follow-up, not started.
+
+**Notes for next session:**
+- Don't rebuild this — `_computeIntegritySignals` and its wiring are done. If tuning is needed it's four constants, not new logic.
+- `heldRows` is a new field on `_computeRoiLeaderboard`'s return — any NEW caller of that function should be aware held wallets are already excluded from `.rows` and don't need separate filtering.
+
 ## 2026-08-03d (✅ SHIPPED `785e73a` — public /methodology page live, nav Track Record link repointed)
 
 **Shipped (with hash):**
