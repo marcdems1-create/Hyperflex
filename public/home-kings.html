@@ -81,15 +81,22 @@
     display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s,box-shadow .15s;
   }
   .wcard:hover{transform:translateY(-3px);box-shadow:0 16px 36px -14px rgba(0,0,0,.55);}
+  /* ── who traded it comes FIRST — Marc: "the focus is on the roi" (it was),
+     name needs to lead. Avatar+handle bumped up in both size and position;
+     the win number stays real and visible (this IS a wins wall) but reads
+     as the second beat, not the headline. Score+n stays attached in the
+     footer either way — rule 3 never negotiable, just no longer the
+     loudest thing on the card. ── */
+  .wcard-who{display:flex;align-items:center;gap:8px;}
+  .wcard-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#0a0a0f;}
+  .wcard-handle{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .wcard-hero{display:flex;align-items:baseline;gap:6px;}
-  .wcard-hero .won-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
-  .wcard-hero .mult{font-size:24px;font-weight:900;letter-spacing:-.02em;color:var(--green);font-variant-numeric:tabular-nums;}
+  .wcard-hero .won-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+  .wcard-hero .mult{font-size:19px;font-weight:900;letter-spacing:-.02em;color:var(--green);font-variant-numeric:tabular-nums;}
   .wcard-entry{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
   .wcard-q{font-size:12px;color:rgba(240,240,245,.72);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:33px;}
-  .wcard-foot{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--border);}
-  .wcard-avatar{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;color:#0a0a0f;}
-  .wcard-handle{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,240,245,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
-  .wcard-score{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:800;white-space:nowrap;}
+  .wcard-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--border);}
+  .wcard-score{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;white-space:nowrap;}
   .wcard-score.positive{color:var(--green);}
   .wcard-score.negative{color:var(--red);}
   .wcard-score .n{font-weight:500;color:var(--muted);}
@@ -256,14 +263,11 @@ function winCardHtml(e, accent, isNew){
   // shared component, so it needed the identical fix applied here too).
   var href = e.username ? '/@' + esc(e.username) : e.polymarket_address ? '/trader/' + esc(e.polymarket_address) : '#';
   return '<a class="wcard' + (isNew ? ' flash' : '') + '" style="--accent:' + accent + '" href="' + href + '">'
+    + '<div class="wcard-who"><div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div><div class="wcard-handle">' + esc(handle) + '</div></div>'
     + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
     + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
     + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
-    + '<div class="wcard-foot">'
-      + '<div class="wcard-avatar" style="background:' + avatarColor(e.user_id) + '">' + esc(initials(handle)) + '</div>'
-      + '<div class="wcard-handle">' + esc(handle) + '</div>'
-      + '<div class="wcard-score ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + ' <span class="n">n=' + esc(e.n) + '</span></div>'
-    + '</div>'
+    + '<div class="wcard-foot"><span class="wcard-score ' + (scorePositive ? 'positive' : 'negative') + '">' + esc(fmtPct(e.score_pct)) + ' <span class="n">n=' + esc(e.n) + '</span></span></div>'
     + '</a>';
 }
 
