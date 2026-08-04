@@ -13979,6 +13979,17 @@ app.get('/traders', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'home-traders-preview.html'));
 });
 
+// GET /methodology — public, permanent statement of what the score measures,
+// how records are verified, and what the score explicitly does NOT claim
+// (notably: it does not predict future results — tested, not assumed; see
+// /api/admin/score-backtest + score-backtest-rolling). Publishing the
+// limitation is the point: a track-record product that overclaims has no
+// product.
+app.get('/methodology', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'methodology.html'));
+});
+
 // ── CONNECT FLOW — wallet connect → your score ──────────────────────────────
 // The new front door per the participant-first pivot: connect wallet → see
 // YOUR score, YOUR profile, YOUR record. Progressive UX per the ingestion-
@@ -64476,6 +64487,116 @@ app.get('/api/admin/score-backtest', requireAdminSecret, async (req, res) => {
     });
   } catch (e) {
     console.error('[score-backtest]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── ROLLING BASKET BACKTEST — the robust predictiveness question ─────────
+// Per-wallet prediction failed (unstable across 3 windows, n=15-21). But
+// "does the TOP-SCORED BASKET beat the bottom, ON AVERAGE, across many
+// points in time?" is a different and far more robust question — it pools
+// observations instead of betting on one cutoff, and aggregate edge can
+// survive where per-wallet signal is noise (index vs stock-picking).
+//
+// Rolls the cutoff T across the last ~year in fixed steps. At each T (no
+// lookahead, same as score-backtest): score wallets from trades closed < T,
+// form the top-quartile and bottom-quartile baskets by score, measure each
+// basket's mean forward ROI on trades in [T, T+forward). Then aggregate
+// across ALL cutoffs: mean spread, and — the money metric — the fraction of
+// cutoffs where the top basket beat the bottom. ~50% = coin flip, no edge.
+// Consistently >60% with positive mean spread = a real aggregate signal you
+// could build a top-decile index around, even without per-wallet alpha.
+app.get('/api/admin/score-backtest-rolling', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const forwardDays = Math.min(180, Math.max(14, parseInt(req.query.forward_days, 10) || 45));
+    const stepDays    = Math.min(60,  Math.max(7,  parseInt(req.query.step_days, 10)    || 14));
+    const spanDays    = Math.min(500, Math.max(90, parseInt(req.query.span_days, 10)    || 300));
+    const minBefore   = Math.max(5, parseInt(req.query.min_before, 10) || 8);
+    const minAfter    = Math.max(2, parseInt(req.query.min_after, 10)  || 3);
+    const minWallets  = Math.max(6, parseInt(req.query.min_wallets, 10) || 8); // per-cutoff floor to form baskets
+
+    const rows = await dbQuery(`
+      SELECT user_id::text AS user_id, closed_at, entry_cost_usd, realized_roi
+      FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_roi IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0 AND closed_at IS NOT NULL
+    `).catch(() => null);
+    if (rows == null) return res.status(500).json({ error: 'query failed' });
+    const trades = rows.map(r => ({ u: r.user_id, t: new Date(r.closed_at).getTime(), c: Number(r.entry_cost_usd), r: Number(r.realized_roi) }));
+    const cap = v => Math.min(Math.max(v, -1.0), ROI_CAP);
+    const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
+
+    const now = Date.now();
+    const cutoffs = [];
+    for (let d = spanDays; d >= forwardDays + stepDays; d -= stepDays) cutoffs.push(now - d * 86400000);
+
+    const windows = [];
+    for (const T of cutoffs) {
+      const Tend = T + forwardDays * 86400000;
+      let popNum = 0, popDen = 0;
+      const before = new Map(), after = new Map();
+      for (const x of trades) {
+        if (x.t < T) {
+          const w = x.c * Math.pow(0.5, ((T - x.t) / 86400000) / ROI_HALF_LIFE_DAYS);
+          popNum += cap(x.r) * w; popDen += w;
+          if (!before.has(x.u)) before.set(x.u, { n: 0, wn: 0, wd: 0 });
+          const b = before.get(x.u); b.n++; b.wn += cap(x.r) * w; b.wd += w;
+        } else if (x.t < Tend) {
+          if (!after.has(x.u)) after.set(x.u, { cost: 0, num: 0, n: 0 });
+          const a = after.get(x.u); a.cost += x.c; a.num += x.r * x.c; a.n++;
+        }
+      }
+      const popWroi = popDen > 0 ? popNum / popDen : 0;
+      const pts = [];
+      for (const [u, b] of before) {
+        if (b.n < minBefore) continue;
+        const a = after.get(u);
+        if (!a || a.n < minAfter || a.cost <= 0) continue;
+        const wroi = b.wd > 0 ? b.wn / b.wd : 0;
+        const shrunk = (b.n / (b.n + ROI_SHRINK_K)) * wroi + (ROI_SHRINK_K / (b.n + ROI_SHRINK_K)) * popWroi;
+        pts.push({ score: shrunk, fwd: a.num / a.cost });
+      }
+      if (pts.length < minWallets) continue;
+      pts.sort((x, y) => x.score - y.score);
+      const q = Math.max(1, Math.floor(pts.length / 4));
+      const bot = mean(pts.slice(0, q).map(p => p.fwd));
+      const top = mean(pts.slice(-q).map(p => p.fwd));
+      const all = mean(pts.map(p => p.fwd));
+      windows.push({ n: pts.length, top, bot, all, spread: top - bot, top_beat_all: top > all });
+    }
+
+    if (windows.length < 5) {
+      return res.json({ cutoffs_used: windows.length, note: 'Too few usable cutoffs to pool. Lower min_before/min_after/min_wallets or shorten forward_days.' });
+    }
+
+    const pct = x => Math.round(x * 1000) / 10;
+    const spreads = windows.map(w => w.spread);
+    const topBeatsBot = windows.filter(w => w.spread > 0).length;
+    const topBeatsAll = windows.filter(w => w.top_beat_all).length;
+    const beatRate = topBeatsBot / windows.length;
+    const meanSpread = mean(spreads);
+
+    res.json({
+      forward_days: forwardDays, step_days: stepDays, span_days: spanDays,
+      min_before: minBefore, min_after: minAfter, min_wallets_per_cutoff: minWallets,
+      cutoffs_used: windows.length,
+      total_wallet_observations: windows.reduce((s, w) => s + w.n, 0),
+      mean_top_basket_forward_roi_pct: pct(mean(windows.map(w => w.top))),
+      mean_bottom_basket_forward_roi_pct: pct(mean(windows.map(w => w.bot))),
+      mean_all_forward_roi_pct: pct(mean(windows.map(w => w.all))),
+      mean_spread_pct: pct(meanSpread),
+      top_beats_bottom_rate: Math.round(beatRate * 1000) / 1000,
+      top_beats_average_rate: Math.round((topBeatsAll / windows.length) * 1000) / 1000,
+      interpretation: (beatRate >= 0.62 && meanSpread > 0)
+        ? 'AGGREGATE EDGE — the top-scored basket beat the bottom in ' + Math.round(beatRate * 100) + '% of ' + windows.length + ' rolling windows, mean spread ' + pct(meanSpread) + '%. Per-wallet prediction is noisy but a top-decile INDEX has forward edge — the honest basis for a curated basket product.'
+        : (beatRate <= 0.55 || meanSpread <= 0
+          ? 'NO AGGREGATE EDGE — top basket beats bottom only ' + Math.round(beatRate * 100) + '% of the time (≈ coin flip). The score does not select forward-winning baskets either. Reputation/verification stands; predictive selection does not.'
+          : 'MARGINAL — ' + Math.round(beatRate * 100) + '% beat rate, weak. Not a foundation to build on; revisit as data deepens.'),
+      note: 'Rolling, no-lookahead: at each of ' + windows.length + ' cutoffs, score from trades before T, measure top/bottom-quartile basket forward ROI on [T,T+forward). Pools windows to escape the single-cutoff small-n trap. top_beats_bottom_rate is the headline: fraction of windows the top basket out-returned the bottom.',
+    });
+  } catch (e) {
+    console.error('[score-backtest-rolling]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

@@ -238,7 +238,11 @@
       }
       if (c && c.avg_size_usd != null)  stripBits.push('Avg size <b>' + usd(c.avg_size_usd) + '</b>');
       if (c && c.categories && c.categories.length) stripBits.push('Categories <b>' + c.categories.map(esc).join(' · ') + '</b>');
-      var strip = stripBits.length ? '<div class="strip">' + stripBits.join(' &nbsp;·&nbsp; ') + '</div>' : '';
+      // Always link the methodology, even when no meta bits exist — the
+      // score should never appear without a route to what it does (and
+      // does not) claim.
+      stripBits.push('<a href="/methodology" style="color:var(--cyan)">How this is calculated</a>');
+      var strip = '<div class="strip">' + stripBits.join(' &nbsp;·&nbsp; ') + '</div>';
 
       // ── chart
       var chart = '';

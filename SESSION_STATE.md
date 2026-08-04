@@ -51,7 +51,7 @@
 
 ## 2026-08-03e (wallet-remembering fix for /connect, same branch as the compliance PR — `claude/hyperflex-polymarket-clob-compliance-6dxr1g`, PR #221)
 
-**Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-08-03d compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
+**Shipped (with hashes):** pending push this session — see commit on this branch after this entry. Landed on the same branch/PR as the 2026-08-03f compliance fix below since only one branch was designated for this session; PR #221 now covers both changes.
 
 **Ask:** Marc asked for HYPERFLEX to "remember someone's wallet so they don't need to constantly sign in" — right after asking for a PR on the compliance fix.
 
@@ -69,7 +69,7 @@
 **Notes for next session:**
 - If `/connect`'s cache logic is touched again, keep the fast-path/full-refresh split (`FULL_REFRESH_INTERVAL_MS`, currently 15 min) — don't let a naive fix start calling `/api/connect` on every page load again.
 
-## 2026-08-03d (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
+## 2026-08-03f (Polymarket CLOB ToS compliance audit, branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 **Shipped (with hashes):** pending push this session — see commit on this branch after this entry.
 
@@ -91,6 +91,23 @@
 **Notes for next session:**
 - Do not add any retry/fallback call to `/api/polymarket/order` or the CF Worker that triggers off a `"restricted"`/geo-block string match. Technical-failure fallback only.
 - Full official Polymarket ToS/Builder Code of Conduct text could not be fetched directly in this environment (403s across polymarket.com, help.polymarket.com, builders.polymarket.com) — findings here are from WebSearch snippets, not a full-document read. If precise legal text is ever needed verbatim, fetch from a machine without the proxy's bot-blocking issue.
+## 2026-08-03d (✅ SHIPPED `785e73a` — public /methodology page live, nav Track Record link repointed)
+
+**Shipped (with hash):**
+- `785e73a`: `public/methodology.html` (found as pre-existing uncommitted work, then edited) + `GET /methodology` route (`server.js` ~13982) + link from `profile-trader.html`'s strip ("How this is calculated"). Public "How the score works" page: what the score measures (90-day decay, shrinkage K=20, per-trade cap), which trades count (durable-only, ephemeral excluded and why), how it's verified (on-chain fills + gamma settlement, permanent resolution archive), and an explicit "does not predict future results" section backed by real backtest endpoints (`/api/admin/score-backtest` + `score-backtest-rolling`, both confirmed present).
+- Same commit: `nav.js`'s "✓ Track Record" link (both the dropdown entry and the search-palette entry) repointed from `/transparency` (edge-signal hit rate, currently below its own n≥30/58% publish gate at 53%) to `/methodology` (trader scoring, not gated). `/transparency` stays live, cross-linked from `/methodology`'s footer so it isn't orphaned, just out of the primary nav slot.
+- Removed a "This is not theoretical" card that named the 2026-07-29 596-record self-audit specifically — Marc's call: zero users right now, no audience for a public incident retelling yet. Kept the general verification-discipline copy (durable-only scoring, gamma settlement checks, the backtest disclosure); cut the specific incident narrative. Matching stale code comment in server.js (route comment referencing "596 records removed") also corrected.
+- Confirmed on origin: `git log origin/main --oneline -1` → `785e73a`.
+
+**Competitive research (web search, this session):** scanned Polycopy, Polyfollow, Convexly, Polyburg, Polymonit, Polysyncer, Predicts.guru, KalshiSpy, Laikalabs — the "top trader leaderboard + copy trading" space is crowded and commoditized. None of them (a) exclude ephemeral/unverifiable markets from scoring, (b) re-verify settlement against a live source at ingestion time, or (c) show losses with equal weight to wins. Our ephemeral/durable split + gamma-verification discipline — the thing three separate 2026-07 fabrication bugs taught us the hard way — is a genuine, hard-to-copy moat *if published*, which `/methodology.html` now does live.
+
+**Active blockers:** none.
+
+**Queued:** (none from this arc)
+
+**Notes for next session:**
+- `/methodology` is live and in nav. Don't rebuild it. If a future session wants to publish a specific self-audit incident again (e.g. after the platform has real users), that copy pattern is in git history at `785e73a`'s parent — reintroduce deliberately, don't restore by reflex.
+
 ## 2026-08-03c (✅ SHIPPED — resync-sold-trades: two real query bugs found live, fixed, then made self-driving. Confirmed real scale: 1,576 wallets / 41,356 old-format rows.)
 
 Follow-up to 2026-08-03b's audit finding. Marc ran the dry-run curl and hit two SEPARATE real bugs in my own new endpoint, one at a time:
