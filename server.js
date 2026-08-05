@@ -65036,10 +65036,18 @@ async function _reconcileWallet(userId, address) {
   if (!address) return { user_id: userId, error: 'no polymarket_address' };
 
   const ourRows = await dbQuery(`
-    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability
+    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability,
+           -- Score eligibility: _computeRoiLeaderboard additionally requires a
+           -- realized_roi and a positive entry cost. Surfaced so the public
+           -- verifier can distinguish "trades we checked on-chain" from
+           -- "trades that actually back the score" — without it, a profile
+           -- shows "34 verified" beside a score computed on 10 and the two
+           -- numbers silently disagree.
+           (realized_roi IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0) AS score_eligible
     FROM realized_trades
     WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
   `, [userId]).catch(() => []);
+  const scoreEligible = ourRows.filter(r => r.score_eligible === true).length;
 
   const { events, capped } = await _fetchAllActivity(address.toLowerCase());
 
@@ -65120,6 +65128,7 @@ async function _reconcileWallet(userId, address) {
     address,
     our_durable_conditions: ourByCond.size,
     our_durable_rows: ourRows.length,
+    score_eligible_rows: scoreEligible,
     onchain_trade_events: events.length,
     onchain_conditions: onchainConds.size,
     coverage_capped: capped,
@@ -65336,6 +65345,10 @@ app.get('/api/verify-record/:handle', async (req, res) => {
       on_chain: sold && !sold.error ? {
         trades_in_our_record: sold.our_durable_rows,
         markets_in_our_record: sold.our_durable_conditions,
+        // Not every verified trade backs the score: ranking additionally
+        // requires a realized return and a positive entry cost. Reported so
+        // "N verified" can never be mistaken for "N trades behind the score".
+        trades_counting_toward_score: sold.score_eligible_rows,
         on_chain_trade_events_examined: sold.onchain_trade_events,
         trades_with_no_matching_on_chain_activity: sold.fabricated_count,
         pnl_direction_disagreements: sold.pnl_sign_mismatch_count,
@@ -65348,7 +65361,7 @@ app.get('/api/verify-record/:handle', async (req, res) => {
         graded_on_unresolved_markets: redeemed.fabricated_resolution_count,
         graded_against_actual_outcome: redeemed.inverted_grade_count,
       } : null,
-      how_to_read: 'Verified means: we re-derived this record from the wallet\'s own on-chain transactions, not from self-reported data. "Unconfirmable" means the source market is no longer publicly retrievable — we count it as unproven, never as a win. Methodology: /methodology',
+      how_to_read: 'Verified means: we re-derived this record from the wallet\'s own on-chain transactions, not from self-reported data. "Unconfirmable" means the source market is no longer publicly retrievable — we count it as unproven, never as a win. trades_counting_toward_score is usually lower than trades_in_our_record: a trade can be confirmed real yet still lack the return data required to rank it. Methodology: /methodology',
     };
 
     _publicVerifyCache.set(key, { data: payload, ts: Date.now() });

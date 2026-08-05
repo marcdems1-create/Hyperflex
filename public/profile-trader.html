@@ -381,7 +381,15 @@
                     : (v.status === 'failed' ? 'Failed verification' : 'Partially verified');
           var oc = v.on_chain || {};
           var detail = [];
-          if (oc.trades_in_our_record != null) detail.push(oc.trades_in_our_record + ' trades re-derived from this wallet\'s own transactions');
+          if (oc.trades_in_our_record != null) {
+            var d1 = oc.trades_in_our_record + ' trades re-derived from this wallet\'s own transactions';
+            // State the scoring subset when it differs, so "N verified" is
+            // never read as "N trades behind the score".
+            if (oc.trades_counting_toward_score != null && oc.trades_counting_toward_score < oc.trades_in_our_record) {
+              d1 += ' (' + oc.trades_counting_toward_score + ' carry the return data needed to rank)';
+            }
+            detail.push(d1);
+          }
           if (oc.trades_with_no_matching_on_chain_activity > 0) detail.push(oc.trades_with_no_matching_on_chain_activity + ' with no matching on-chain activity');
           var rr = v.resolutions || {};
           if (rr.graded_on_unresolved_markets > 0) detail.push(rr.graded_on_unresolved_markets + ' graded on unresolved markets');
