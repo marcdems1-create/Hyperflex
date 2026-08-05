@@ -49,6 +49,31 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-05 (verification made PUBLIC + copy-trading Gate 4 fix + full audit of the session's work)
+
+**Shipped (origin/main):**
+- `fa0961d` → `4598810` → `d8fd3b1` — **public per-trader verification.** `GET /api/verify-record/:handle` (no auth, 10-min cache) reconciles any trader against real on-chain activity and returns a plain-language verdict + counts. Reuses the exact internal reconcilers so the public proof can't drift from what we check ourselves. Badge on every trader card links to the raw check. **⚠️ `4598810` fixes a route collision I caused**: I registered `/api/verify/:handle` when `/api/verify/:userId` (documented third-party credential API, line ~11662) already existed — Express matched the earlier one, so my handler never ran and returned the incumbent's "User not found". Renamed to `/api/verify-record/`. Both routes now coexist; verified live. **11th instance of the collision class the scope audit catalogued — grep the path before registering.**
+- `d8fd3b1` — verifier distinguishes `trades_in_our_record` from `trades_counting_toward_score` (a trade can be confirmed real yet lack the return data to rank).
+- `c01b91c` — **`GET /api/integrity` (PUBLIC, no secret).** Ranked wallets, trade-base split, and the two integrity checks that must stay 0. Made public deliberately: a trust page whose own integrity check sits behind a password asks to be taken on faith.
+- `85dd432` — **open-exposure disclosure on trader cards.** A win rate counts CLOSED trades only, so a wallet that closes winners and never realises losers posts a spotless record while underwater. Cards now show open positions, capital at risk, unrealised P&L, count underwater, + "The win rate above counts closed trades only."
+- `41677eb` — **copy-trading Gate 4 fix (real, not cosmetic).** `/copy-trading` fetched `/api/whale-profiles` (ranked by capital deployed — the axis CLAUDE.md deprecated; rows carry no `durable_verified`) and called them "verified trader[s]", with H1 "Trade like the pros" directly contradicting `/methodology`'s "copying a highly ranked trader is not a strategy with a demonstrated edge". Now sources `/api/trader-cards` (the verified board), shows score+n+win rate instead of lifetime P&L, carries the style flag; H1 "Follow a verified record". Server-side downgrade guardrail was already correct — the **list** was the violation.
+- `21e363e` — rolling basket backtest (`/api/admin/score-backtest-rolling`).
+
+**🔴 ROLLING BACKTEST RESULT — no aggregate edge either.** 11 windows, 228 wallet-observations: `top_beats_bottom_rate: 0.545` (coin flip). Mean spread reads +87.5% but that is **tail-driven and not robust** — the bottom quartile still averaged +68% forward, i.e. returns are variance-driven, not skill-sortable. Do not quote the +87.5%/156% figures; the honest metric is the 54.5% beat rate. **Confirms: the score does not select forward-winning traders individually OR as a basket.** Verification/reputation is the product; predictive selection is not.
+
+**Full audit of the session's work (Marc: "audit top to bottom, don't miss a thing"):** all data-integrity guards present in HEAD; all 10 endpoints registered exactly once (no collisions); trader-card features live (bio, equity curve, risk profile, open positions, verify badge); `/methodology` 200; both `/api/verify/` routes coexisting; every CLAUDE.md correction + SESSION_STATE entry survived the other session's merges. Live `/api/integrity` at audit time: **166 ranked wallets, 38,212 trades (38,197 = 99.96% from on-chain fills, 15 resolution-graded), future-dated 0, resolution-graded-remaining 0, 1,480 resolutions archived.** Board grew 80→166 via the other session's sold-path resync — growth from verified fills, the healthy direction.
+
+**⚠️ Three suspicions I raised that did NOT hold — check before accusing:**
+1. `434a814` "kill n= notation" — feared a rule-3 violation; it replaced `n=10` with `10 trades`. Better copy, sample size intact.
+2. "34 vs 10 inconsistency" on nadmi — I compared nadmi's verifier count against **endxd's** board row. Different traders. No inconsistency; nadmi is 34 everywhere.
+3. Stavenson 100% win rate on n=40 — verified genuinely clean (40 real trades, on-chain matched, $4 open underwater). **But the check produced the most valuable feature of the batch (open-exposure disclosure) — a suspicion that doesn't pan out still finds the gap next to it.**
+
+**Open (Marc's calls, raised and not taken):**
+- **`n=10` floor for the #1 slot.** `endxd` tops the board AND the copy list at score 245.7 on exactly 10 trades, while `/methodology` says "a short lucky streak cannot top the board". `CATEGORY_KING_MIN_N = 20` already exists for category leaders; the overall #1 has no equivalent. Thin records ARE disclosed (verdict says "small sample, big swings") so nobody is misled — but the default copy suggestion is the thinnest record on the board.
+- Style flag is `null` on all current copy-list traders (all mixed books; fires only at ≥80% sold or ≤25%). Correct silence, not a bug — don't force a label the data won't support.
+
+
+
 ## 2026-08-05 (Homepage nav connection bugs + trader-card content hierarchy — branch `claude/homepage-nav-connection-bugs-zyuljc`)
 
 **Shipped (with hashes):**
