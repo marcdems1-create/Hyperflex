@@ -47142,13 +47142,31 @@ function _segmentActivityEvents(events) {
         if (lot.shares <= 0.0000001) lots.shift();
       }
       seg.lastCloseAt = ts;
-      if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
+      // ⚠️ FLAT IS A TOLERANCE, NOT AN EXACT ZERO (fixed 2026-08-05).
+      // `lots.length === 0` alone discarded entire closed positions over
+      // floating-point dust. Live example: a wallet closed 800,779.93 shares
+      // of "US forces enter Iran by April 30?" for a +$290,189 realized win,
+      // left 0.0015 shares of rounding remnant, so this never fired and the
+      // whole segment — the entire win — was thrown away. 97% of wallets
+      // carrying a flex_score were affected by this and the trailing-segment
+      // drop below.
+      // Tolerance is one share (worth at most $1, since prices are 0–1) or
+      // one part per million of the closed size, whichever is larger. A
+      // genuine partial exit stays open: the same wallet's 3,953 shares left
+      // open against 2.2M closed is 1.8e-3, far above the threshold, and is
+      // correctly treated as a real open position rather than dust.
+      const openShares = lots.reduce((a, l) => a + l.shares, 0);
+      if (lots.length === 0 || openShares <= Math.max(1, seg.totalSharesClosed * 1e-6)) {
+        lots = [];                     // discard the remnant; the position is closed
+        segments.push(seg); seg = null; // flat — next BUY starts a new segment
+      }
     }
   }
 
-  // The trailing segment is NOT pushed into `segments` — that would change
-  // ingestion behaviour, which is a platform-wide scoring change and not
-  // something to slip in alongside a diagnostic. Returned separately.
+  // `trailing` is a still-open position that has nonetheless booked REAL
+  // realized P&L on the shares it did sell. It is returned separately rather
+  // than pushed into `segments` so callers stay explicit about writing it —
+  // ingestion now does (see backfillRealizedTrades), the tracer reports it.
   return {
     segments,
     trailing: seg && seg.totalSharesClosed > 0
@@ -47177,6 +47195,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   let fetchError = null;
   let activityPagesFetched = 0;
   console.log(`[backfill] fetching activity for proxy=${proxyLower} (user=${userId.slice(0,8)})`);
+  let activityTruncated = false;
   try {
     let offset = 0;
     const PAGE_LIMIT = 500;
@@ -47191,7 +47210,10 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       trades = trades.concat(page);
       if (page.length < PAGE_LIMIT) break; // last page
       offset += PAGE_LIMIT;
-      if (offset >= 10000) break; // safety cap — no legitimate wallet has 10,000+ trade events
+      // Safety cap. If we hit it, this wallet's history is INCOMPLETE — the
+      // computed segment set is not authoritative and must not be used to
+      // delete existing rows (see the group reconcile below).
+      if (offset >= 10000) { activityTruncated = true; break; }
     }
   } catch (e) {
     fetchError = e.message;
@@ -47238,7 +47260,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
 
   let imported = 0, resolvedCount = 0;
 
+  if (activityTruncated) {
+    console.warn(`[backfillRealizedTrades] user=${userId.slice(0,8)} activity TRUNCATED at 10k events — skipping sold-path writes to avoid double-counting against un-migrated rows. Wallet keeps its existing rows.`);
+  }
+
   for (const group of groups.values()) {
+    if (activityTruncated) break; // incomplete history — see the reconcile note below
     // Sort ascending by timestamp so FIFO is correct. Date.parse on a raw
     // Unix-seconds int returns NaN, so the previous comparator collapsed
     // every event to 0 and FIFO degraded to "API order" — fine in practice
@@ -47263,14 +47290,55 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     // round-trips on one market over months could show a multi-month span
     // and get misclassified 'durable'. A segment boundary is "lots
     // returned to flat" — the next BUY after that starts a fresh segment. ──
-    // ⚠️ `trailing` is deliberately NOT written — see _segmentActivityEvents.
-    // A wallet that scales in and exits only part of the position keeps that
-    // realized P&L in `trailing`, so it never reaches the record. Known gap,
-    // measurable via /api/admin/segment-trace, not yet corrected because
-    // changing it moves scores platform-wide.
-    const { segments } = _segmentActivityEvents(group.events);
+    // ── Trailing open segments ARE written as of 2026-08-05. ──────────────
+    // A wallet that scales into a position and exits only part of it has
+    // booked real realized P&L on the shares it sold; dropping it erased a
+    // −$225,899 loss on one traced wallet alone, and made records look
+    // better than reality. The closed portion is a real trade and counts;
+    // the shares still held are simply an open position.
+    const { segments: closedSegs, trailing } = _segmentActivityEvents(group.events);
+    const segments = trailing ? [...closedSegs, trailing] : closedSegs;
 
-    for (const s of segments) {
+    // Keys for every segment in this group, positionally indexed. Index is
+    // stable across re-runs because past events are immutable and new
+    // activity only appends — segment 0 stays segment 0 forever. That is
+    // what makes a trailing segment safely UPDATE-able: as it accumulates
+    // further sells it keeps the SAME key and refreshes in place, instead of
+    // minting a new row per backfill (which is exactly what keying on
+    // lastCloseAt would have done, double-counting every earlier partial).
+    const segKeys = segments.map((_, idx) => `pm-act3:${userId}:${group.condId}:${group.outcome}:${idx}`);
+
+    // Reconcile this group: drop any pm-act3 row we did NOT just compute.
+    // Makes the backfill authoritative per group and self-healing — a
+    // segment that merges or disappears after a data correction can't leave
+    // an orphan row behind inflating the record.
+    //
+    // ⚠️ This delete is ALSO the migration off the two older key formats.
+    // Without it, writing pm-act3 rows would leave the wallet's existing
+    // pm-act/pm-act2 rows in place for the same underlying trades and
+    // DOUBLE-COUNT every one of them. Old formats are cleared for this group
+    // in the same statement that reconciles the new one, so a group is never
+    // momentarily represented twice.
+    //
+    // ⚠️ If the activity feed was truncated we do neither the delete NOR the
+    // writes (see the guard on the enclosing loop): with incomplete history
+    // the computed set is not authoritative, deleting against it would
+    // destroy good rows, and writing without deleting would double-count.
+    // Such a wallet keeps its existing rows untouched — stale, but never
+    // silently doubled.
+    try {
+      await dbQuery(
+        `DELETE FROM realized_trades
+         WHERE user_id = $1::uuid AND condition_id = $2 AND side = $3
+           AND close_reason IN ('sold-profit','sold-loss')
+           AND ( external_sync_id LIKE 'pm-act:%'
+              OR external_sync_id LIKE 'pm-act2:%'
+              OR (external_sync_id LIKE 'pm-act3:%' AND NOT (external_sync_id = ANY($4::text[]))) )`,
+        [userId, group.condId, group.outcome, segKeys]);
+    } catch (e) { console.warn('[backfillRealizedTrades] group reconcile', group.condId, e.message); }
+
+    for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+      const s = segments[segIdx];
       if (s.totalSharesClosed <= 0) continue;
       resolvedCount++;
 
@@ -47291,7 +47359,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       // fragile parsing to tell old 4-part keys from new 5-part ones —
       // especially since the new suffix is an ISO timestamp, which
       // contains colons itself.
-      const externalSyncId = `pm-act2:${userId}:${group.condId}:${group.outcome}:${s.lastCloseAt}`;
+      const externalSyncId = segKeys[segIdx];
       const marketDurability = classifyMarketDurability(group.question, s.firstOpenAt, s.lastCloseAt);
 
       try {
@@ -47301,7 +47369,17 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
             shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
             realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-          ON CONFLICT (external_sync_id) DO NOTHING
+          -- DO UPDATE, not DO NOTHING: a trailing open segment grows as the
+          -- wallet sells more of the position, and its row must refresh in
+          -- place. DO NOTHING would freeze it at its first-seen partial
+          -- exit — the same class of silent staleness this whole fix exists
+          -- to remove.
+          ON CONFLICT (external_sync_id) DO UPDATE SET
+            shares = EXCLUDED.shares, entry_price = EXCLUDED.entry_price, exit_price = EXCLUDED.exit_price,
+            entry_cost_usd = EXCLUDED.entry_cost_usd, exit_value_usd = EXCLUDED.exit_value_usd,
+            realized_pnl = EXCLUDED.realized_pnl, realized_roi = EXCLUDED.realized_roi,
+            opened_at = EXCLUDED.opened_at, closed_at = EXCLUDED.closed_at,
+            close_reason = EXCLUDED.close_reason, market_durability = EXCLUDED.market_durability
           RETURNING id`,
           [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
            +s.totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
@@ -64264,7 +64342,11 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       -- repair mechanism rather than a migration: an already-migrated
       -- wallet whose numbers are still wrong matches no LIKE pattern and
       -- would otherwise be permanently unreachable.
-      AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.user_id::text = ANY($${fp}::text[]))
+      -- Anything NOT yet on the current key format needs rebuilding: both
+      -- 'pm-act:' (pre-segmentation aggregate) and 'pm-act2:' (segmented but
+      -- built by the exact-zero flat check, which discarded whole closed
+      -- positions over rounding dust and dropped every partial exit).
+      AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.external_sync_id LIKE 'pm-act2:%' OR rt.user_id::text = ANY($${fp}::text[]))
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
     ORDER BY is_flagged DESC, is_public DESC, user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
@@ -64282,30 +64364,38 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       // only go up: segments split an aggregate, never merge one).
       const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const beforeN = before[0] ? before[0].n : 0;
-      // Format-aware delete. For an un-migrated wallet, only old-format rows
-      // are cleared (new-format rows on the same wallet are already correct
-      // and re-deriving them is wasted API calls). For a verifier-FLAGGED
-      // wallet, both formats go: its rows are wrong in the new format too,
-      // and deleting only 'pm-act:%' would leave the bad rows in place, let
-      // the re-backfill no-op against them via ON CONFLICT DO NOTHING, and
-      // report a confident "fixed" having changed nothing at all.
-      const deleted = await dbQuery(
-        u.is_flagged
-          ? `DELETE FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss') AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%') RETURNING id`
-          : `DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`,
-        [u.user_id]);
-      oldRowsDeleted += deleted.length;
+      // ⚠️ NO pre-delete. backfillRealizedTrades now reconciles each group
+      // itself — it clears that group's old-format rows in the same
+      // statement that writes the new ones, so a group is never momentarily
+      // represented twice and never momentarily absent.
+      //
+      // Deleting here first was actively dangerous once backfill gained its
+      // truncation guard: a wallet with >10k activity events has its writes
+      // skipped, so a blanket pre-delete would wipe the record and leave
+      // nothing behind. Measuring the old-format rows instead of destroying
+      // them keeps the metric without the failure mode.
+      const oldBefore = await dbQuery(
+        `SELECT COUNT(*)::int AS n FROM realized_trades
+         WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')
+           AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%')`, [u.user_id]);
       const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
-      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); failed++; continue; }
+      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), resync: 'proxy_derivation_failed' }); failed++; continue; }
       const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
       const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const afterN = after[0] ? after[0].n : 0;
       const gained = afterN - beforeN;
-      // How many rows the backfill actually put back for the ones we removed.
-      // gained alone can't distinguish "rebuilt identically" (the signature
-      // of a repair that did nothing) from "rebuilt into a different shape
-      // that happens to have the same count".
-      const rebuilt = afterN - (beforeN - deleted.length);
+      // Old-format rows retired by backfill's own per-group reconcile. This
+      // is the migration signal: a wallet is done when it holds none.
+      const oldAfterRows = await dbQuery(
+        `SELECT COUNT(*)::int AS n FROM realized_trades
+         WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')
+           AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%')`, [u.user_id]);
+      const oldRetired = (oldBefore[0] ? oldBefore[0].n : 0) - (oldAfterRows[0] ? oldAfterRows[0].n : 0);
+      oldRowsDeleted += oldRetired;
+      // Did this run change anything at all? Either the row count moved or
+      // old-format rows were retired. Both zero means the rebuild produced
+      // exactly what was already there.
+      const changed = gained !== 0 || oldRetired !== 0;
       nGained += gained;
       fixed++;
       // Retire it from the priority set — but only claim the repair worked
@@ -64319,7 +64409,7 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       let attempts = 0;
       if (u.is_flagged) {
         attempts = (_resyncPriority.get(u.user_id) || 0) + 1;
-        if (gained !== 0 || rebuilt !== deleted.length) {
+        if (changed) {
           _resyncPriority.delete(u.user_id); // genuinely changed — let the verifier re-flag if still wrong
         } else if (attempts >= RESYNC_MAX_ATTEMPTS) {
           _resyncPriority.delete(u.user_id);
@@ -64330,7 +64420,7 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       } else {
         _resyncPriority.delete(u.user_id);
       }
-      results.push({ user_id: u.user_id.slice(0, 8), flagged: !!u.is_flagged, attempts: attempts || undefined, sold_rows_before: beforeN, old_format_deleted: deleted.length, rows_rebuilt: rebuilt, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
+      results.push({ user_id: u.user_id.slice(0, 8), flagged: !!u.is_flagged, attempts: attempts || undefined, sold_rows_before: beforeN, old_format_rows_retired: oldRetired, sold_rows_after: afterN, n_gained: gained, changed, backfill: backfillResult });
     } catch (e) {
       failed++;
       results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
@@ -64578,7 +64668,8 @@ app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, 
     const totalsRows = await dbQuery(`
       SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
       FROM realized_trades rt
-      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      WHERE rt.close_reason IN ('sold-profit','sold-loss')
+        AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.external_sync_id LIKE 'pm-act2:%')
     `).catch(() => []);
     res.json({
       running: _soldResyncRunning,
