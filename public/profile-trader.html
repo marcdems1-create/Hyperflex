@@ -67,6 +67,18 @@
     .chart-lbl{font-family:var(--mono);font-size:21px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim)}
     svg.spark{width:100%;height:340px;display:block}
 
+    /* Verification badge */
+    .verify{display:flex;align-items:flex-start;gap:14px;margin-top:22px;padding:16px 20px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.02);max-width:900px}
+    .verify.ok{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)}
+    .verify.part{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.06)}
+    .verify.bad{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.07)}
+    .verify-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-top:8px;background:var(--dim)}
+    .verify.ok .verify-dot{background:var(--green)}
+    .verify.part .verify-dot{background:#f59e0b}
+    .verify.bad .verify-dot{background:var(--red)}
+    .verify-label{font-size:21px;font-weight:600;color:var(--ink);line-height:1.3}
+    .verify-detail{font-size:17px;color:var(--soft);line-height:1.55;margin-top:5px}
+
     /* Open positions — the copyable layer */
     .open-side{display:inline-block;font-family:var(--mono);font-size:19px;font-weight:700;padding:3px 12px;border-radius:6px;background:rgba(34,211,238,0.12);color:var(--cyan);margin-right:14px;vertical-align:2px}
     .open-live{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:19px;color:var(--green);text-transform:none;letter-spacing:0}
@@ -196,12 +208,18 @@
 
       var bio = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
 
+      // Verification badge — filled async by loadVerification(). The card
+      // asserts this record is reconciled against on-chain activity; this
+      // is where a visitor can actually see that check's result rather
+      // than take it on trust.
+      var verifySlot = '<div id="verifySlot"></div>';
+
       var hero =
         '<div class="hero">' +
           '<div class="score-row">' +
             '<span class="score' + (flexNum==='—'?' mute':'') + '">' + flexNum + '</span>' +
             '<span class="score-lbl">flex score</span>' +
-          '</div>' + bio +
+          '</div>' + verifySlot + bio +
         '</div>';
 
       // ── stat quad
@@ -317,6 +335,7 @@
         '<div class="card">' + head + hero + quad + strip + risk + chart + openSlot + ledger + foot + '</div>';
 
       if (d.polymarket_address) loadOpenPositions(d.polymarket_address, d.durable_verified === true, d.id);
+      loadVerification(name);
     }
 
     // Internal market page keeps the trade on our builder-fee path; falls
@@ -345,6 +364,35 @@
       var params = ['from=trader', 'side=' + side, 'size=' + COPY_DEFAULT_USD];
       if (traderId) params.push('copy_user_id=' + encodeURIComponent(traderId));
       return '/market/' + m[1] + '?' + params.join('&');
+    }
+
+    // Public verification badge. The card claims this record is reconciled
+    // against on-chain activity — this shows the actual result of that
+    // check, including when it's only partial. Never rounds "unconfirmable"
+    // up to "verified".
+    function loadVerification(handle){
+      fetch('/api/verify/' + encodeURIComponent(handle))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(v){
+          var slot = document.getElementById('verifySlot');
+          if (!slot || !v || !v.status) return;
+          var cls = v.status === 'verified' ? 'ok' : (v.status === 'failed' ? 'bad' : 'part');
+          var label = v.status === 'verified' ? 'Verified against on-chain activity'
+                    : (v.status === 'failed' ? 'Failed verification' : 'Partially verified');
+          var oc = v.on_chain || {};
+          var detail = [];
+          if (oc.trades_in_our_record != null) detail.push(oc.trades_in_our_record + ' trades re-derived from this wallet\'s own transactions');
+          if (oc.trades_with_no_matching_on_chain_activity > 0) detail.push(oc.trades_with_no_matching_on_chain_activity + ' with no matching on-chain activity');
+          var rr = v.resolutions || {};
+          if (rr.graded_on_unresolved_markets > 0) detail.push(rr.graded_on_unresolved_markets + ' graded on unresolved markets');
+          slot.innerHTML = '<div class="verify ' + cls + '">' +
+            '<span class="verify-dot"></span>' +
+            '<div><div class="verify-label">' + esc(label) + '</div>' +
+            '<div class="verify-detail">' + esc(detail.join(' · ') || v.summary) +
+            ' · <a href="/api/verify/' + encodeURIComponent(handle) + '" style="color:var(--cyan)">see the check</a>' +
+            ' · <a href="/methodology" style="color:var(--cyan)">method</a></div></div></div>';
+        })
+        .catch(function(){});
     }
 
     function loadOpenPositions(addr, copyable, traderId){

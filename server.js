@@ -65268,6 +65268,89 @@ async function _reconcileWalletRedeemed(userId) {
   };
 }
 
+// ── PUBLIC VERIFICATION ──────────────────────────────────────────────────
+// /methodology tells visitors records are "reconciled against on-chain
+// fills". Until now that was only checkable behind an admin secret — the
+// claim was public, the proof was not, which is the same
+// trust-us-we-checked posture the product exists to replace. This endpoint
+// makes the proof public and per-trader: anyone can reconcile any wallet's
+// record against its real on-chain activity and see the result.
+//
+// Reuses the EXACT reconcilers the internal audit uses (_reconcileWallet,
+// _reconcileWalletRedeemed) so the public proof can never drift from what
+// we check ourselves. Read-only. Rate-limited by a short cache because each
+// call fans out to Polymarket + gamma.
+const _publicVerifyCache = new Map(); // handle -> { data, ts }
+app.get('/api/verify/:handle', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    const key = String(req.params.handle || '').toLowerCase();
+    const cached = _publicVerifyCache.get(key);
+    if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
+
+    const user = await _resolveTraderHandle(req.params.handle);
+    if (!user) return res.status(404).json({ error: 'trader not found' });
+
+    const [sold, redeemed] = await Promise.all([
+      _reconcileWallet(user.id, user.polymarket_address).catch(e => ({ error: e.message })),
+      _reconcileWalletRedeemed(user.id).catch(e => ({ error: e.message })),
+    ]);
+
+    // Plain-language verdict a non-technical visitor can act on. "verified"
+    // requires the sold path to reconcile AND no fabricated/inverted grade
+    // on the redeemed path. Anything unprovable is stated as unprovable —
+    // never rounded up to verified.
+    const soldOk     = sold && sold.verdict === 'clean';
+    const soldCapped = sold && sold.verdict === 'UNVERIFIABLE_CAPPED';
+    const redOk      = !redeemed || redeemed.verdict === 'clean' || redeemed.verdict === 'clean_partial' || redeemed.verdict === 'no_redeemed_rows';
+    const redBad     = redeemed && (redeemed.verdict === 'FABRICATED_RESOLUTION' || redeemed.verdict === 'INVERTED_GRADE');
+
+    let status, summary;
+    if (redBad) {
+      status = 'failed';
+      summary = 'This record contains grades we could not confirm against the market\'s actual resolution. It is excluded from ranking until corrected.';
+    } else if (soldOk && redOk) {
+      status = 'verified';
+      summary = 'Every trade in this record matches this wallet\'s real on-chain activity, and every held-to-resolution outcome we could check matched the market\'s actual result.';
+    } else if (soldCapped) {
+      status = 'partial';
+      summary = 'This wallet trades at a volume beyond what we can fully re-check in one pass. The portion we verified reconciles; the remainder is unconfirmed rather than assumed correct.';
+    } else {
+      status = 'partial';
+      summary = 'Part of this record reconciles against on-chain activity; part could not be independently confirmed. We report the gap rather than assume it is fine.';
+    }
+
+    const payload = {
+      handle: user.handle || user.username || null,
+      address: user.polymarket_address || null,
+      status, summary,
+      checked_at: new Date().toISOString(),
+      on_chain: sold && !sold.error ? {
+        trades_in_our_record: sold.our_durable_rows,
+        markets_in_our_record: sold.our_durable_conditions,
+        on_chain_trade_events_examined: sold.onchain_trade_events,
+        trades_with_no_matching_on_chain_activity: sold.fabricated_count,
+        pnl_direction_disagreements: sold.pnl_sign_mismatch_count,
+        coverage_complete: sold.coverage_capped === false,
+      } : null,
+      resolutions: redeemed && !redeemed.error ? {
+        held_to_resolution_rows: redeemed.redeemed_rows,
+        outcomes_confirmed: redeemed.verified,
+        outcomes_unconfirmable: redeemed.unverifiable,
+        graded_on_unresolved_markets: redeemed.fabricated_resolution_count,
+        graded_against_actual_outcome: redeemed.inverted_grade_count,
+      } : null,
+      how_to_read: 'Verified means: we re-derived this record from the wallet\'s own on-chain transactions, not from self-reported data. "Unconfirmable" means the source market is no longer publicly retrievable — we count it as unproven, never as a win. Methodology: /methodology',
+    };
+
+    _publicVerifyCache.set(key, { data: payload, ts: Date.now() });
+    res.json(payload);
+  } catch (e) {
+    console.error('[public-verify]', e.message);
+    res.status(500).json({ error: 'verification unavailable' });
+  }
+});
+
 // GET /api/admin/verify-promoted-redeemed — resolution check on the
 // promoted set's held-to-resolution positions, against live gamma.
 app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, res) => {
