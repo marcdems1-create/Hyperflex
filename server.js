@@ -64149,6 +64149,20 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
 // (run/status split, single in-memory "is it running" flag, cron tick).
 const SOLD_RESYNC_BATCH = 50;
 const SOLD_RESYNC_THROTTLE_MS = 400;
+// ── Self-healing link between detection and repair ───────────────────────
+// The verifier finds wallets whose stored P&L disagrees with their on-chain
+// fills; the resync is what actually repairs them. Until now those were
+// disconnected — a wallet could be publicly flagged "partial" while waiting
+// its turn in a queue that had no idea it was broken. This set is the link:
+// _reconcileWallet adds any wallet it catches, and the resync drains this
+// set FIRST.
+//
+// Deliberately an in-memory Set, populated from a read-only public endpoint:
+// no DB write happens on the public path, so hammering /api/verify-record
+// can't trigger repeated deletes/reinserts. It only influences ordering of
+// work the cron was going to do anyway. Lost on restart, which is fine —
+// the underlying WHERE clause still finds these wallets regardless.
+const _resyncPriority = new Set();
 let _soldResyncRunning = false;
 let _soldResyncLastRun = null;
 // Cumulative across every tick since this process booted — in-memory only,
@@ -64179,9 +64193,17 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
     JOIN users u ON u.id = rt.user_id::text
     WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-    ORDER BY (u.flex_score IS NOT NULL OR u.is_whale = true) DESC, rt.user_id
+    ORDER BY
+      -- Verifier-flagged wallets first: confirmed wrong in public, not
+      -- merely un-migrated. Must be ordered INSIDE the query — sorting the
+      -- returned rows would only reshuffle whatever LIMIT already picked,
+      -- so a flagged wallet outside that window would never surface.
+      (rt.user_id::text = ANY($${targetUserId ? 2 : 1}::text[])) DESC,
+      (u.flex_score IS NOT NULL OR u.is_whale = true) DESC,
+      rt.user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
-  `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
+  `, targetUserId ? [targetUserId, [..._resyncPriority]] : [[..._resyncPriority]])
+    .catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
   if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
 
   const results = [];
@@ -64204,6 +64226,10 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       const gained = afterN - beforeN;
       nGained += gained;
       fixed++;
+      // Repaired — drop it from the priority set so the set stays small and
+      // doesn't keep re-prioritising wallets that are already correct. If it
+      // is still wrong, the next verification will simply re-add it.
+      _resyncPriority.delete(u.user_id);
       results.push({ user_id: u.user_id.slice(0, 8), sold_rows_before: beforeN, old_format_deleted: deleted.length, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
     } catch (e) {
       failed++;
@@ -65195,6 +65221,12 @@ async function _reconcileWallet(userId, address) {
         && Math.abs(g.pnl) > 50 && Math.abs(fillNet) > 50) {
       pnlMismatch.push({ condition_id: cond, our_pnl: Math.round(g.pnl), onchain_fill_net_usdc: Math.round(fillNet), rows: g.rows });
     }
+  }
+
+  // Queue this wallet for priority repair if we caught a real disagreement.
+  // Detection without repair is just a nicer way to be wrong in public.
+  if (pnlMismatch.length || fabricated.length) {
+    try { _resyncPriority.add(userId); } catch {}
   }
 
   const soldChecked = ourByCond.size - redeemedUnchecked;
