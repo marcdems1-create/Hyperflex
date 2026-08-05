@@ -64394,17 +64394,16 @@ setTimeout(() => fireSoldResyncTick('boot'), 5000);
 //
 //   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>"
 //   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>&condition_id=0x..."
-app.get('/api/admin/segment-trace', requireAdminSecret, async (req, res) => {
-  try {
-    if (!pool) return res.json({ error: 'no_pool' });
-    const userId = String(req.query.user_id || '').trim();
-    const condFilter = String(req.query.condition_id || '').trim().toLowerCase();
-    if (!userId) return res.status(400).json({ error: 'user_id required' });
+// Shared by the single-wallet tracer and the platform-wide scan below, so
+// both report the same number by construction.
+async function _traceWalletSegments(userId, condFilter) {
+  {
+    if (!pool) return { error: 'no_pool' };
 
     const urow = await dbQuery(`SELECT id, polymarket_address FROM users WHERE id = $1 LIMIT 1`, [userId]).catch(() => []);
-    if (!urow.length || !urow[0].polymarket_address) return res.status(404).json({ error: 'user or address not found' });
+    if (!urow.length || !urow[0].polymarket_address) return { error: 'user or address not found' };
     const proxy = await ensureProxyStored(userId, urow[0].polymarket_address);
-    if (!proxy) return res.status(500).json({ error: 'proxy_derivation_failed' });
+    if (!proxy) return { error: 'proxy_derivation_failed' };
 
     // Same paginated /activity pull ingestion uses.
     let trades = [], offset = 0;
@@ -64477,18 +64476,96 @@ app.get('/api/admin/segment-trace', requireAdminSecret, async (req, res) => {
     }
 
     out.sort((a, b) => Math.abs((b.dropped_trailing?.realized_pnl) || 0) - Math.abs((a.dropped_trailing?.realized_pnl) || 0));
-    res.json({
+    // Dust vs genuine partial exit. A segment left holding a rounding
+    // remnant (fractions of one share out of hundreds of thousands) is a
+    // CLOSED position we discarded on a floating-point technicality — that
+    // subset is safely fixable with a tolerance. A segment still holding a
+    // real position is the harder case. Counted separately so the fix can be
+    // staged by risk instead of all-or-nothing.
+    const dust = out.filter(g => g.dropped_trailing && g.dropped_trailing.still_open_shares < 1);
+    return {
       user_id: userId, proxy, activity_events: trades.length,
       groups_examined: groups.size,
       groups_with_dropped_trailing: groupsWithDrop,
       total_dropped_realized_pnl_usd: +droppedPnlTotal.toFixed(2),
+      dropped_from_rounding_dust: {
+        groups: dust.length,
+        realized_pnl_usd: +dust.reduce((a, g) => a + g.dropped_trailing.realized_pnl, 0).toFixed(2),
+        note: 'Positions effectively fully closed (<1 share left) whose entire realized result was discarded because the flat check is an exact zero.',
+      },
       note: 'READ-ONLY. total_dropped_realized_pnl_usd is realized profit/loss this wallet actually booked that never entered its record, because the position never returned to exactly flat. Sorted by largest dropped amount first.',
       groups: out.slice(0, 40),
-    });
+    };
+  }
+}
+
+app.get('/api/admin/segment-trace', requireAdminSecret, async (req, res) => {
+  try {
+    const userId = String(req.query.user_id || '').trim();
+    if (!userId) return res.status(400).json({ error: 'user_id required' });
+    const r = await _traceWalletSegments(userId, String(req.query.condition_id || '').trim().toLowerCase());
+    res.json(r);
   } catch (e) {
     console.error('[segment-trace]', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Platform-wide blast radius ───────────────────────────────────────────
+// READ-ONLY. How much realized P&L is missing from the RANKED set — the
+// wallets we actually promote. Runs in the background (one wallet is several
+// paginated Polymarket calls; 167 of them will not finish inside an HTTP
+// request) and reports through a status endpoint, same shape as the resync.
+//
+//   curl -X POST "https://hyperflex.network/api/admin/measure-dropped-pnl?secret=$ADMIN_SECRET&confirm=1"
+//   curl "https://hyperflex.network/api/admin/measure-dropped-pnl/status?secret=$ADMIN_SECRET"
+let _droppedScan = { running: false, started_at: null, finished_at: null, scanned: 0, total: 0, wallets: [], totals: null };
+app.post('/api/admin/measure-dropped-pnl', requireAdminSecret, async (req, res) => {
+  if (String(req.query.confirm || '') !== '1') return res.json({ dry_run: true, note: 'Add &confirm=1 to start. Read-only scan — writes nothing.' });
+  if (_droppedScan.running) return res.json({ already_running: true, scanned: _droppedScan.scanned, total: _droppedScan.total });
+  const rows = await dbQuery(`
+    SELECT DISTINCT u.id::text AS user_id, COALESCE(u.username, u.display_name) AS handle
+    FROM users u JOIN realized_trades rt ON rt.user_id::text = u.id
+    WHERE u.flex_score IS NOT NULL AND rt.close_reason IN ('sold-profit','sold-loss')
+  `).catch(() => []);
+  _droppedScan = { running: true, started_at: new Date().toISOString(), finished_at: null, scanned: 0, total: rows.length, wallets: [], totals: null };
+  res.json({ started: true, wallets_to_scan: rows.length, note: 'Poll /api/admin/measure-dropped-pnl/status' });
+  (async () => {
+    for (const r of rows) {
+      try {
+        const t = await _traceWalletSegments(r.user_id, '');
+        if (!t.error && t.total_dropped_realized_pnl_usd !== 0) {
+          _droppedScan.wallets.push({
+            user_id: r.user_id, handle: r.handle,
+            groups_affected: t.groups_with_dropped_trailing,
+            dropped_pnl_usd: t.total_dropped_realized_pnl_usd,
+            dust_pnl_usd: t.dropped_from_rounding_dust.realized_pnl_usd,
+          });
+        }
+      } catch {}
+      _droppedScan.scanned++;
+      await new Promise(s => setTimeout(s, 300));
+    }
+    const w = _droppedScan.wallets;
+    _droppedScan.totals = {
+      wallets_with_missing_pnl: w.length,
+      wallets_scanned: _droppedScan.scanned,
+      total_dropped_pnl_usd: +w.reduce((a, x) => a + x.dropped_pnl_usd, 0).toFixed(2),
+      total_dust_pnl_usd: +w.reduce((a, x) => a + x.dust_pnl_usd, 0).toFixed(2),
+      worst: [...w].sort((a, b) => Math.abs(b.dropped_pnl_usd) - Math.abs(a.dropped_pnl_usd)).slice(0, 15),
+    };
+    _droppedScan.running = false;
+    _droppedScan.finished_at = new Date().toISOString();
+    console.log(`[dropped-pnl-scan] done — ${w.length}/${_droppedScan.scanned} ranked wallets missing realized P&L`);
+  })();
+});
+app.get('/api/admin/measure-dropped-pnl/status', requireAdminSecret, (req, res) => {
+  res.json({
+    running: _droppedScan.running, started_at: _droppedScan.started_at, finished_at: _droppedScan.finished_at,
+    progress: `${_droppedScan.scanned}/${_droppedScan.total}`,
+    wallets_with_missing_pnl_so_far: _droppedScan.wallets.length,
+    totals: _droppedScan.totals,
+  });
 });
 
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
