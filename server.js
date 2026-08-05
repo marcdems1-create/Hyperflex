@@ -47097,6 +47097,66 @@ function _toIsoTs(v) {
 // the moment a winning position is redeemed. We FIFO-match BUY/SELL events
 // per (conditionId, outcome) to compute realized PnL on closed-out
 // positions. Idempotent via external_sync_id UNIQUE constraint.
+// ── Round-trip segmentation (pure) ───────────────────────────────────────
+// Extracted from backfillRealizedTrades 2026-08-05 so the SAME code can be
+// inspected read-only by /api/admin/segment-trace. Duplicating this logic in
+// a debug endpoint would let the tracer and the ingester drift, and a
+// diagnostic that doesn't reproduce the real code path is worse than none.
+//
+// Returns { segments, trailing }:
+//   segments — round-trips that returned to FLAT (position fully closed)
+//   trailing — a segment still holding open lots when events ran out. It may
+//              carry REAL realized closes (partial exits). backfill currently
+//              writes `segments` only, so any realized P&L inside `trailing`
+//              is silently dropped from the record. Surfaced here so the size
+//              of that gap is measurable before anything about scoring is
+//              changed.
+function _segmentActivityEvents(events) {
+  let lots = []; // { shares, price }
+  const segments = [];
+  let seg = null;
+  const freshSeg = () => ({ totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null });
+
+  for (const t of events) {
+    const side = String(t.side || '').toUpperCase();
+    const shares = parseFloat(t.size || t.shares || 0);
+    const price = parseFloat(t.price || 0);
+    const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
+    if (shares <= 0) continue;
+
+    if (side === 'BUY') {
+      if (!seg) seg = freshSeg();
+      if (!seg.firstOpenAt) seg.firstOpenAt = ts;
+      lots.push({ shares, price });
+    } else if (side === 'SELL') {
+      if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
+      let remaining = shares;
+      while (remaining > 0 && lots.length > 0) {
+        const lot = lots[0];
+        const take = Math.min(lot.shares, remaining);
+        seg.totalCost += take * lot.price;
+        seg.totalProceeds += take * price;
+        seg.totalSharesClosed += take;
+        remaining -= take;
+        lot.shares -= take;
+        if (lot.shares <= 0.0000001) lots.shift();
+      }
+      seg.lastCloseAt = ts;
+      if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
+    }
+  }
+
+  // The trailing segment is NOT pushed into `segments` — that would change
+  // ingestion behaviour, which is a platform-wide scoring change and not
+  // something to slip in alongside a diagnostic. Returned separately.
+  return {
+    segments,
+    trailing: seg && seg.totalSharesClosed > 0
+      ? { ...seg, open_lots: lots.length, open_shares: +lots.reduce((a, l) => a + l.shares, 0).toFixed(4) }
+      : null,
+  };
+}
+
 async function backfillRealizedTrades(userId, eoa, proxy) {
   if (!pool || !userId || !proxy) return { imported: 0, scanned: 0 };
   const proxyLower = proxy.toLowerCase();
@@ -47203,39 +47263,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     // round-trips on one market over months could show a multi-month span
     // and get misclassified 'durable'. A segment boundary is "lots
     // returned to flat" — the next BUY after that starts a fresh segment. ──
-    let lots = []; // { shares, price }
-    const segments = [];
-    let seg = null;
-    function freshSeg() { return { totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null }; }
-
-    for (const t of group.events) {
-      const side = String(t.side || '').toUpperCase();
-      const shares = parseFloat(t.size || t.shares || 0);
-      const price = parseFloat(t.price || 0);
-      const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
-      if (shares <= 0) continue;
-
-      if (side === 'BUY') {
-        if (!seg) seg = freshSeg();
-        if (!seg.firstOpenAt) seg.firstOpenAt = ts;
-        lots.push({ shares, price });
-      } else if (side === 'SELL') {
-        if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
-        let remaining = shares;
-        while (remaining > 0 && lots.length > 0) {
-          const lot = lots[0];
-          const take = Math.min(lot.shares, remaining);
-          seg.totalCost += take * lot.price;
-          seg.totalProceeds += take * price;
-          seg.totalSharesClosed += take;
-          remaining -= take;
-          lot.shares -= take;
-          if (lot.shares <= 0.0000001) lots.shift();
-        }
-        seg.lastCloseAt = ts;
-        if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
-      }
-    }
+    // ⚠️ `trailing` is deliberately NOT written — see _segmentActivityEvents.
+    // A wallet that scales in and exits only part of the position keeps that
+    // realized P&L in `trailing`, so it never reaches the record. Known gap,
+    // measurable via /api/admin/segment-trace, not yet corrected because
+    // changing it moves scores platform-wide.
+    const { segments } = _segmentActivityEvents(group.events);
 
     for (const s of segments) {
       if (s.totalSharesClosed <= 0) continue;
@@ -64346,6 +64379,117 @@ cron.schedule('*/5 * * * *', () => fireSoldResyncTick('cron'));
 // its own mark. 5s delay, not 0, so this doesn't compete with whatever
 // else fires synchronously at boot.
 setTimeout(() => fireSoldResyncTick('boot'), 5000);
+
+// ── GET /api/admin/segment-trace ─────────────────────────────────────────
+// READ-ONLY. Writes nothing, changes nothing. Re-runs the REAL segmentation
+// (_segmentActivityEvents — the same function ingestion uses, deliberately
+// shared so a diagnostic can't drift from the thing it diagnoses) against
+// live Polymarket activity, and prints what we stored beside it.
+//
+// Exists because three separate times this session a wallet's wrong number
+// was explained by guessing at the pipeline instead of looking at it. The
+// `dropped_trailing` block is the specific thing to read: realized P&L that
+// segmentation computed and ingestion then threw away because the position
+// never returned to exactly flat.
+//
+//   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>"
+//   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>&condition_id=0x..."
+app.get('/api/admin/segment-trace', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.json({ error: 'no_pool' });
+    const userId = String(req.query.user_id || '').trim();
+    const condFilter = String(req.query.condition_id || '').trim().toLowerCase();
+    if (!userId) return res.status(400).json({ error: 'user_id required' });
+
+    const urow = await dbQuery(`SELECT id, polymarket_address FROM users WHERE id = $1 LIMIT 1`, [userId]).catch(() => []);
+    if (!urow.length || !urow[0].polymarket_address) return res.status(404).json({ error: 'user or address not found' });
+    const proxy = await ensureProxyStored(userId, urow[0].polymarket_address);
+    if (!proxy) return res.status(500).json({ error: 'proxy_derivation_failed' });
+
+    // Same paginated /activity pull ingestion uses.
+    let trades = [], offset = 0;
+    while (true) {
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${String(proxy).toLowerCase()}&limit=500&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) break;
+      const j = await r.json();
+      const page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      if (!page.length) break;
+      trades = trades.concat(page);
+      if (page.length < 500) break;
+      offset += 500;
+      if (offset >= 10000) break;
+    }
+
+    const groups = new Map();
+    for (const t of trades) {
+      const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+      let outcome = String(t.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+        if (idx === 0) outcome = 'YES'; else if (idx === 1) outcome = 'NO';
+      }
+      if (!condId || !outcome) continue;
+      if (condFilter && condId !== condFilter) continue;
+      const key = `${condId}:${outcome}`;
+      if (!groups.has(key)) groups.set(key, { condId, outcome, events: [], question: String(t.title || t.question || t.market || '').slice(0, 200) });
+      groups.get(key).events.push(t);
+    }
+
+    const stored = await dbQuery(
+      `SELECT condition_id, side, entry_price, exit_price, realized_pnl, close_reason, external_sync_id
+       FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [userId]).catch(() => []);
+
+    const out = [];
+    let droppedPnlTotal = 0, groupsWithDrop = 0;
+    for (const g of groups.values()) {
+      g.events.sort((a, b) => (Date.parse(_toIsoTs(a.timestamp || a.created_at || a.time)) || 0) - (Date.parse(_toIsoTs(b.timestamp || b.created_at || b.time)) || 0));
+      const { segments, trailing } = _segmentActivityEvents(g.events);
+      const buys = g.events.filter(e => String(e.side).toUpperCase() === 'BUY');
+      const sells = g.events.filter(e => String(e.side).toUpperCase() === 'SELL');
+      const sum = (arr, f) => +arr.reduce((a, e) => a + f(e), 0).toFixed(2);
+      const storedRows = stored.filter(s => String(s.condition_id).toLowerCase() === g.condId && String(s.side).toUpperCase() === g.outcome);
+      const droppedPnl = trailing ? +(trailing.totalProceeds - trailing.totalCost).toFixed(2) : 0;
+      if (trailing) { droppedPnlTotal += droppedPnl; groupsWithDrop++; }
+      out.push({
+        condition_id: g.condId, outcome: g.outcome, question: g.question,
+        on_chain: {
+          buy_events: buys.length, buy_usdc: sum(buys, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)),
+          sell_events: sells.length, sell_usdc: sum(sells, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)),
+          fill_net_usdc: +(sum(sells, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)) - sum(buys, e => parseFloat(e.size || 0) * parseFloat(e.price || 0))).toFixed(2),
+        },
+        segments_written: segments.map(s => ({
+          realized_pnl: +(s.totalProceeds - s.totalCost).toFixed(2),
+          avg_entry: s.totalSharesClosed > 0 ? +(s.totalCost / s.totalSharesClosed).toFixed(4) : null,
+          avg_exit: s.totalSharesClosed > 0 ? +(s.totalProceeds / s.totalSharesClosed).toFixed(4) : null,
+          shares_closed: +s.totalSharesClosed.toFixed(2), first_open: s.firstOpenAt, last_close: s.lastCloseAt,
+        })),
+        // THE GAP: computed, then never written.
+        dropped_trailing: trailing ? {
+          realized_pnl: droppedPnl,
+          avg_entry: +(trailing.totalCost / trailing.totalSharesClosed).toFixed(4),
+          avg_exit: +(trailing.totalProceeds / trailing.totalSharesClosed).toFixed(4),
+          shares_closed: +trailing.totalSharesClosed.toFixed(2),
+          still_open_shares: trailing.open_shares,
+          why: 'position never returned to flat, so this segment was discarded along with its realized closes',
+        } : null,
+        stored_rows: storedRows.map(s => ({ entry_price: s.entry_price, exit_price: s.exit_price, realized_pnl: s.realized_pnl, close_reason: s.close_reason, key_format: String(s.external_sync_id || '').startsWith('pm-act2:') ? 'new' : 'old' })),
+      });
+    }
+
+    out.sort((a, b) => Math.abs((b.dropped_trailing?.realized_pnl) || 0) - Math.abs((a.dropped_trailing?.realized_pnl) || 0));
+    res.json({
+      user_id: userId, proxy, activity_events: trades.length,
+      groups_examined: groups.size,
+      groups_with_dropped_trailing: groupsWithDrop,
+      total_dropped_realized_pnl_usd: +droppedPnlTotal.toFixed(2),
+      note: 'READ-ONLY. total_dropped_realized_pnl_usd is realized profit/loss this wallet actually booked that never entered its record, because the position never returned to exactly flat. Sorted by largest dropped amount first.',
+      groups: out.slice(0, 40),
+    });
+  } catch (e) {
+    console.error('[segment-trace]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                              (dry run — counts only)

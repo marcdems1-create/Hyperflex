@@ -66,6 +66,11 @@
 
 **Process lesson (third time this session):** I twice built queue machinery on the assumption a wallet was merely *waiting*. Both times the real cause was that it was never selected at all. **Before optimizing the order of a queue, verify the item is in the queue.**
 
+**⚠️ OPEN — ROOT CAUSE FOUND, NOT FIXED: `backfillRealizedTrades` silently drops realized P&L on positions that never return to flat.** Live proof the queue fix works AND that the defect is downstream of it: targeted resync of TheQuietRisk ran clean — `old_format_deleted: 33, rows_rebuilt: 33, n_gained: 0`. Deleted and rebuilt *identically*, so the queue is doing its job and the bug is in ingestion.
+- In the FIFO segmentation, a segment is pushed **only** when `lots.length === 0` (position exactly flat). There is no push after the event loop. So a wallet that scales into a position and exits only part of it keeps all of that segment's realized closes in a trailing object that is **discarded**. Systematic, affects any partial exit, and biases the record by dropping exactly the trades where someone took partial profit/loss.
+- **Shipped (read-only, zero behaviour change):** segmentation extracted to pure `_segmentActivityEvents(events)` returning `{ segments, trailing }` — shared by ingestion and by the new `GET /api/admin/segment-trace?user_id=&condition_id=`, deliberately the same function so the diagnostic cannot drift from what it diagnoses. Ingestion still writes `segments` only. The tracer reports `total_dropped_realized_pnl_usd` per wallet.
+- **NOT done, needs Marc's call — this moves scores platform-wide.** Writing the trailing segment is not a one-line change: the key is `pm-act2:user:cond:outcome:<lastCloseAt>`, and a trailing segment's `lastCloseAt` advances on every new partial sell, so naively emitting it creates a NEW row each backfill while the old one survives → double-counted P&L. A correct fix needs either a stable key component (`firstOpenAt`) plus a new prefix + full resync, or per-group reconciliation (delete rows for that group not in the freshly-computed key set). Measure with segment-trace first.
+
 ## 2026-08-05 (verification made PUBLIC + copy-trading Gate 4 fix + full audit of the session's work)
 
 **Shipped (origin/main):**
