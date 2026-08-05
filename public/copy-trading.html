@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Copy Trading — HYPERFLEX</title>
-<meta name="description" content="Trade like the pros. Get notified the moment a verified Polymarket trader opens a position, then copy it yourself in one tap.">
+<meta name="description" content="Get notified the moment a trader with a verified on-chain record opens a position, then decide for yourself. Your wallet signs every order.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -78,6 +78,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var
 .btn-copy.active{border-color:rgba(0,230,138,.4);background:rgba(0,230,138,.08);color:var(--green);}
 .btn-profile{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;text-decoration:none;transition:all .15s;display:inline-flex;align-items:center;}
 .btn-profile:hover{color:var(--ink);border-color:rgba(255,255,255,.15);}
+.whale-style{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5;}
 .copying-badge{display:none;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:10px;background:rgba(0,230,138,.1);color:var(--green);border:1px solid rgba(0,230,138,.2);}
 .whale-card.copying .copying-badge{display:inline-block;}
 
@@ -144,7 +145,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var
 
 <div class="hero">
   <div class="hero-kicker">Polymarket · Copy Trading</div>
-  <h1 class="hero-title">Trade like the pros</h1>
+  <h1 class="hero-title">Follow a verified record</h1>
   <p class="hero-sub">Get notified the moment a verified trader opens a position, then copy it yourself in one tap. Your wallet signs every order — nothing fires without you.</p>
 </div>
 
@@ -156,7 +157,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var
   <!-- LEFT: WHALE LIST -->
   <div>
     <div class="section-head">
-      <div class="section-title">Top whales by P&amp;L</div>
+      <div class="section-title">Verified traders</div>
       <div class="section-count" id="whaleCount">—</div>
     </div>
     <div class="whale-list" id="whaleList">
@@ -317,10 +318,38 @@ async function stopCopy(subId, whaleName) {
 }
 
 async function loadWhales() {
-  var r = await fetch('/api/whale-profiles?limit=12');
+  // Source the copy list from the VERIFIED DURABLE BOARD, not
+  // /api/whale-profiles. That endpoint ranks by capital deployed / P&L —
+  // the axis CLAUDE.md deprecated because it "selects for volume, not
+  // skill" — and its rows carry no durable_verified field at all. This
+  // page nonetheless described them as "verified" and invited you to copy
+  // them, which is the Gate 4 rule inverted: the copy affordance must only
+  // ever render on a wallet actually on the verified board. The server
+  // already refuses priority/auto handling for non-verified whales; this
+  // makes the list itself agree with that guardrail instead of advertising
+  // capital-selected wallets under the word "verified".
+  var r = await fetch('/api/trader-cards?limit=12');
   var data = await r.json();
-  _whales = data.whales || [];
-  document.getElementById('whaleCount').textContent = _whales.length + ' whales';
+  _whales = (data.cards || []).map(function (c) {
+    return {
+      id: c.user_id,
+      display_name: c.display_name,
+      username: c.username,
+      polymarket_address: c.polymarket_address,
+      // Score + n travel together (rule 3) — the list must never show a
+      // rank without the sample behind it.
+      score_pct: c.score_pct,
+      n: c.n,
+      win_rate_pct: c.win_rate_pct,
+      scope_label: c.scope_label,
+      verdict: c.verdict,
+      style_flag: c.style_flag,
+      durable_verified: true, // by construction: this board IS the verified set
+      profile_url: c.username ? '/@' + c.username : '/@' + (c.display_name || ''),
+    };
+  });
+  document.getElementById('whaleCount').textContent =
+    _whales.length + ' verified trader' + (_whales.length === 1 ? '' : 's');
 }
 
 async function loadSubs() {
@@ -339,19 +368,21 @@ async function loadSubs() {
 function renderWhales() {
   var el = document.getElementById('whaleList');
   if (!_whales.length) {
-    el.innerHTML = '<div class="empty-state">No whales ranked yet. Check back after the next leaderboard refresh.</div>';
+    el.innerHTML = '<div class="empty-state">No traders currently meet the verification bar. Check back after the next board refresh.</div>';
     return;
   }
   el.innerHTML = _whales.map(function(w, i) {
     var addr = w.polymarket_address || '';
     var sub = _subs[addr] || _subs[w.id];
     var isCopying = !!sub;
-    var pnl = w.whale_pnl;
-    var pnlStr = pnl != null ? _fmt(pnl) : '—';
-    var pnlCls = pnl != null ? (pnl >= 0 ? 'pos' : 'neg') : '';
-    var acc = w.accuracy != null ? w.accuracy + '%' : '—';
-    var initial = (w.display_name || 'W').charAt(0).toUpperCase();
-    var rankLabel = w.whale_rank ? 'Rank #' + w.whale_rank : (addr ? _short(addr) : 'Whale');
+    // Verified-board fields (score + n + win rate), not capital-deployed P&L.
+    var sc = w.score_pct;
+    var scStr = sc != null ? (sc >= 0 ? '+' : '') + Number(sc).toFixed(1) + '%' : '—';
+    var scCls = sc != null ? (sc >= 0 ? 'pos' : 'neg') : '';
+    var wr = w.win_rate_pct != null ? Number(w.win_rate_pct).toFixed(0) + '%' : '—';
+    var initial = (w.display_name || 'T').charAt(0).toUpperCase();
+    // Rank line carries the sample size — score and n never travel apart.
+    var rankLabel = w.n != null ? w.n + ' verified trades' : (addr ? _short(addr) : 'Trader');
     return '<div class="whale-card' + (isCopying ? ' copying' : '') + '">' +
       '<div class="whale-top">' +
         '<div class="whale-avatar">' + initial + '</div>' +
@@ -362,10 +393,13 @@ function renderWhales() {
         '<span class="copying-badge">Copying</span>' +
       '</div>' +
       '<div class="whale-stats">' +
-        '<div class="whale-stat"><div class="whale-stat-label">All-time P&L</div><div class="whale-stat-val ' + pnlCls + '">' + pnlStr + '</div></div>' +
-        '<div class="whale-stat"><div class="whale-stat-label">Accuracy</div><div class="whale-stat-val">' + acc + '</div></div>' +
-        '<div class="whale-stat"><div class="whale-stat-label">Takes</div><div class="whale-stat-val">' + (w.take_count || 0) + '</div></div>' +
+        '<div class="whale-stat"><div class="whale-stat-label">Score</div><div class="whale-stat-val ' + scCls + '">' + scStr + '</div></div>' +
+        '<div class="whale-stat"><div class="whale-stat-label">Win rate</div><div class="whale-stat-val">' + wr + '</div></div>' +
+        '<div class="whale-stat"><div class="whale-stat-label">Trades</div><div class="whale-stat-val">' + (w.n != null ? w.n : '—') + '</div></div>' +
       '</div>' +
+      // How they trade — a copier is choosing a style, not just a number.
+      (w.style_flag && w.style_flag.text
+        ? '<div class="whale-style">' + escHtml(w.style_flag.text) + '</div>' : '') +
       '<div class="whale-actions">' +
         '<button class="btn-copy' + (isCopying ? ' active' : '') + '" onclick="openModal(' + escAttr(JSON.stringify(w)) + ')">' +
           (isCopying ? 'Edit copy settings' : 'Copy') +
