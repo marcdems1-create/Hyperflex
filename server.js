@@ -65112,14 +65112,23 @@ async function _reconcileWallet(userId, address) {
   // OUT (buyShares≈sellShares) from one HELD TO RESOLUTION and redeemed
   // (sellShares≪buyShares) — the redemption payout is not a TRADE event, so
   // only traded-out positions are reconcilable from this feed.
-  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
-  const onchainConds = new Set();
+  // Keyed by conditionId + OUTCOME, not conditionId alone. A wallet can
+  // trade both Yes and No on the same market; our realized_trades records
+  // per-outcome, so aggregating both sides into one bucket compares a
+  // one-side P&L against a both-sides net and reports a disagreement that
+  // isn't one. (Caught 2026-08-05 on TheQuietRisk: "US forces enter Iran by
+  // March 31?" — 61 fills across both Yes and No, flagged as a mismatch
+  // purely by this bug.)
+  const ockey = (cond, outcome) => cond + '|' + String(outcome || '').toUpperCase().trim();
+  const onchainByCond = new Map(); // cond|OUTCOME -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
+  const onchainConds = new Set();  // bare conditionIds, for the existence check
   for (const e of events) {
     const cond = String(e.conditionId || '').toLowerCase();
     if (!cond) continue;
     onchainConds.add(cond);
-    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
-    const g = onchainByCond.get(cond);
+    const k = ockey(cond, e.outcome);
+    if (!onchainByCond.has(k)) onchainByCond.set(k, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
+    const g = onchainByCond.get(k);
     const usdc = Number(e.usdcSize) || 0;
     const px = Number(e.price) || 0;
     const sh = px > 0 ? usdc / px : 0;
@@ -65130,11 +65139,13 @@ async function _reconcileWallet(userId, address) {
 
   // Our rows grouped by conditionId, so the pnl-sign check aggregates all
   // round-trips on a market rather than mis-partitioning a single one.
+  // Keyed the same way as the on-chain side: condition + OUTCOME.
   const ourByCond = new Map();
   for (const r of ourRows) {
     const cond = String(r.condition_id || '').toLowerCase();
-    if (!ourByCond.has(cond)) ourByCond.set(cond, { pnl: 0, rows: 0, anyRedeemed: false });
-    const g = ourByCond.get(cond);
+    const k = ockey(cond, r.side);
+    if (!ourByCond.has(k)) ourByCond.set(k, { cond: cond, pnl: 0, rows: 0, anyRedeemed: false });
+    const g = ourByCond.get(k);
     g.pnl += Number(r.realized_pnl) || 0;
     g.rows++;
     if (String(r.close_reason || '').startsWith('redeemed')) g.anyRedeemed = true;
@@ -65153,12 +65164,16 @@ async function _reconcileWallet(userId, address) {
   const fabricated = [];   // SOLD-path conditionId with zero on-chain TRADE presence
   const pnlMismatch = [];  // SOLD-path, fully traded out, sign disagreement vs fills
   let redeemedUnchecked = 0;
-  for (const [cond, g] of ourByCond) {
+  for (const [key, g] of ourByCond) {
+    const cond = g.cond;
     if (g.anyRedeemed) { redeemedUnchecked++; continue; } // out of scope for a TRADE-only check
     // FABRICATION (sold-path): a position we say was SOLD must have TRADE
     // fills. Absence = fabricated — but only assertable with full coverage.
     if (!onchainConds.has(cond)) { if (!capped) fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
-    const oc = onchainByCond.get(cond);
+    const oc = onchainByCond.get(key);
+    // No fills for this specific outcome (we hold a row for a side the
+    // wallet never traded) — can't compare; don't invent a verdict.
+    if (!oc) continue;
     // PNL-sign only when the position was genuinely TRADED OUT: shares
     // bought ≈ shares sold (within 10%). If shares remain, the exit was a
     // redemption whose payout isn't in this feed, so fill_net understates
