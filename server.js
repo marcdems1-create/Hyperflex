@@ -64538,6 +64538,56 @@ const SETTLEMENT_CACHE_FIX_TS = '2026-07-29T00:48:21Z'; // commit 888a713
 // the 2026-07-29 cache purge, where the actual platform-wide impact was
 // unmeasurable because the numbers only existed in the purge response and
 // a second invocation overwrote it with zeros.
+// GET /api/integrity — PUBLIC, no auth. The same integrity facts
+// /methodology already asserts in prose, as checkable numbers: how many
+// wallets qualify, how the trade base splits, and whether the two failure
+// modes we corrected (fabricated resolutions, future-dated closes) are
+// still at zero. Nothing sensitive — it is the public claim, quantified.
+// Deliberately public because a trust page whose own integrity check is
+// behind a password is asking to be taken on faith, which is the posture
+// this product exists to replace.
+app.get('/api/integrity', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    const [board, trades, future, redeemedOpenish, archive] = await Promise.all([
+      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE close_reason IN ('sold-profit','sold-loss'))::int AS from_real_fills,
+               COUNT(*) FILTER (WHERE close_reason IN ('redeemed-win','redeemed-loss'))::int AS from_resolutions,
+               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS scoreable,
+               COUNT(DISTINCT user_id)::int AS wallets
+        FROM realized_trades WHERE closed_at IS NOT NULL
+      `).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE closed_at > NOW()`).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades
+               WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'`).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM market_resolutions`).catch(() => []),
+    ]);
+    const t = trades[0] || {};
+    res.json({
+      ranked_wallets: board ? board.rows.length : null,
+      minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+      wallets_tracked: t.wallets ?? null,
+      trades: {
+        total: t.total ?? null,
+        verified_from_on_chain_fills: t.from_real_fills ?? null,
+        graded_from_market_resolutions: t.from_resolutions ?? null,
+        eligible_for_scoring: t.scoreable ?? null,
+      },
+      integrity_checks: {
+        trades_dated_in_the_future: future[0] ? future[0].n : null,        // must be 0
+        resolution_graded_trades_remaining: redeemedOpenish[0] ? redeemedOpenish[0].n : null,
+        resolutions_permanently_archived: archive[0] ? archive[0].n : null,
+      },
+      note: 'Public integrity snapshot. trades_dated_in_the_future must be 0 — a trade cannot close in the future; an hourly sweep removes any that appear. verified_from_on_chain_fills are re-derived from wallet transactions. On 29 July 2026 we removed every resolution-graded trade after finding they could not be confirmed against real market settlements; the count here reflects only records added since, under a stricter check. Verify any individual trader at /api/verify-record/{handle}. Methodology: /methodology',
+    });
+  } catch (e) {
+    console.error('[public-integrity]', e.message);
+    res.status(500).json({ error: 'unavailable' });
+  }
+});
+
 app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
