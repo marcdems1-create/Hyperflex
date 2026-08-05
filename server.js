@@ -65280,8 +65280,16 @@ async function _reconcileWalletRedeemed(userId) {
 // _reconcileWalletRedeemed) so the public proof can never drift from what
 // we check ourselves. Read-only. Rate-limited by a short cache because each
 // call fans out to Polymarket + gamma.
+// ⚠️ Path is /api/verify-record/, NOT /api/verify/ — a public
+// /api/verify/:userId already exists (line ~11662, UUID-keyed credential
+// API consumed by third parties). Registering a second /api/verify/:handle
+// silently shadowed nothing and was itself shadowed: Express matches the
+// earlier registration, so this handler never ran and every call returned
+// the incumbent's "User not found". That's the duplicate-route hazard
+// CLAUDE.md names explicitly and the 11th instance of the collision class
+// the scope audit found. Distinct path, both routes intact.
 const _publicVerifyCache = new Map(); // handle -> { data, ts }
-app.get('/api/verify/:handle', async (req, res) => {
+app.get('/api/verify-record/:handle', async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'unavailable' });
     const key = String(req.params.handle || '').toLowerCase();

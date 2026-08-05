@@ -371,7 +371,7 @@
     // check, including when it's only partial. Never rounds "unconfirmable"
     // up to "verified".
     function loadVerification(handle){
-      fetch('/api/verify/' + encodeURIComponent(handle))
+      fetch('/api/verify-record/' + encodeURIComponent(handle))
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(v){
           var slot = document.getElementById('verifySlot');
@@ -389,7 +389,7 @@
             '<span class="verify-dot"></span>' +
             '<div><div class="verify-label">' + esc(label) + '</div>' +
             '<div class="verify-detail">' + esc(detail.join(' · ') || v.summary) +
-            ' · <a href="/api/verify/' + encodeURIComponent(handle) + '" style="color:var(--cyan)">see the check</a>' +
+            ' · <a href="/api/verify-record/' + encodeURIComponent(handle) + '" style="color:var(--cyan)">see the check</a>' +
             ' · <a href="/methodology" style="color:var(--cyan)">method</a></div></div></div>';
         })
         .catch(function(){});
