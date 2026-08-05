@@ -64157,12 +64157,30 @@ const SOLD_RESYNC_THROTTLE_MS = 400;
 // _reconcileWallet adds any wallet it catches, and the resync drains this
 // set FIRST.
 //
-// Deliberately an in-memory Set, populated from a read-only public endpoint:
-// no DB write happens on the public path, so hammering /api/verify-record
-// can't trigger repeated deletes/reinserts. It only influences ordering of
-// work the cron was going to do anyway. Lost on restart, which is fine —
-// the underlying WHERE clause still finds these wallets regardless.
-const _resyncPriority = new Set();
+// Deliberately in-memory, populated from a read-only public endpoint: no DB
+// write happens on the public path, so hammering /api/verify-record can't
+// trigger repeated deletes/reinserts.
+//
+// ⚠️ CORRECTED 2026-08-05 — this comment previously claimed the set was
+// "lost on restart, which is fine — the underlying WHERE clause still finds
+// these wallets regardless." That was FALSE, and it was the whole bug. The
+// scan selects wallets carrying OLD-format ('pm-act:%') rows; a successful
+// resync rewrites those rows to 'pm-act2:%', so a wallet that has already
+// been resynced and is STILL wrong can never be selected again. For exactly
+// the population this set exists to serve, the WHERE clause finds nothing.
+// Flagged wallets are therefore matched in the WHERE clause itself now, not
+// merely sorted to the front of a queue they were never in.
+//
+// Map, not Set: value is the number of repair attempts, so a wallet that
+// rebuilds to the identical (still-wrong) rows stops being retried every
+// 5 minutes forever instead of hammering Polymarket's API in a loop.
+const _resyncPriority = new Map(); // userId -> attempts
+// Flagged, repaired, and STILL unchanged after RESYNC_MAX_ATTEMPTS. Parked
+// here so an unfixable wallet is visible in status rather than silently
+// looping or silently forgotten — if a wallet lands here, the disagreement
+// is in the backfill logic, not the queue, and needs a human.
+const _resyncUnrepairable = new Map(); // userId -> { attempts, at, sold_rows }
+const RESYNC_MAX_ATTEMPTS = 3;
 let _soldResyncRunning = false;
 let _soldResyncLastRun = null;
 // Cumulative across every tick since this process booted — in-memory only,
@@ -64186,23 +64204,38 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
   // aggregation bug. Stale data on an unranked wallet is a backlog item;
   // the same staleness on a wallet we actively promote is a wrong number in
   // public, so it goes to the front of the queue.
+  // $-index of the flagged-wallet array (targeted mode puts user_id at $1).
+  const fp = targetUserId ? 2 : 1;
+  // An explicit ?user_id= is treated as flagged whether or not the verifier
+  // caught it. Asking for one wallet by name is an override — it must be
+  // able to force a full rebuild of a wallet that already migrated, which is
+  // precisely the case where the automatic path finds nothing to do.
+  const flagged = [...new Set(targetUserId ? [..._resyncPriority.keys(), targetUserId] : [..._resyncPriority.keys()])];
+  // ⚠️ Every ORDER BY expression is ALSO a select-list column, deliberately.
+  // Under SELECT DISTINCT, Postgres rejects an ORDER BY expression that
+  // isn't in the select list ("for SELECT DISTINCT, ORDER BY expressions
+  // must appear in select list"). The previous revision ordered by a bare
+  // `(rt.user_id = ANY(...))` that appeared nowhere in the select list —
+  // which threw on every single tick, was swallowed by the .catch below,
+  // and silently killed the entire platform-wide resync. Ordering by the
+  // output aliases keeps that structurally impossible to reintroduce.
   const affected = await dbQuery(`
     SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address,
-           (u.flex_score IS NOT NULL OR u.is_whale = true) AS is_public
+           (u.flex_score IS NOT NULL OR u.is_whale = true) AS is_public,
+           (rt.user_id::text = ANY($${fp}::text[])) AS is_flagged
     FROM realized_trades rt
     JOIN users u ON u.id = rt.user_id::text
-    WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+    WHERE rt.close_reason IN ('sold-profit','sold-loss')
+      -- Un-migrated wallets (old key format) OR wallets the verifier caught
+      -- disagreeing with the chain. The second arm is what makes this a
+      -- repair mechanism rather than a migration: an already-migrated
+      -- wallet whose numbers are still wrong matches no LIKE pattern and
+      -- would otherwise be permanently unreachable.
+      AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.user_id::text = ANY($${fp}::text[]))
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-    ORDER BY
-      -- Verifier-flagged wallets first: confirmed wrong in public, not
-      -- merely un-migrated. Must be ordered INSIDE the query — sorting the
-      -- returned rows would only reshuffle whatever LIMIT already picked,
-      -- so a flagged wallet outside that window would never surface.
-      (rt.user_id::text = ANY($${targetUserId ? 2 : 1}::text[])) DESC,
-      (u.flex_score IS NOT NULL OR u.is_whale = true) DESC,
-      rt.user_id
+    ORDER BY is_flagged DESC, is_public DESC, user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
-  `, targetUserId ? [targetUserId, [..._resyncPriority]] : [[..._resyncPriority]])
+  `, targetUserId ? [targetUserId, flagged] : [flagged])
     .catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
   if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
 
@@ -64216,7 +64249,18 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       // only go up: segments split an aggregate, never merge one).
       const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const beforeN = before[0] ? before[0].n : 0;
-      const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
+      // Format-aware delete. For an un-migrated wallet, only old-format rows
+      // are cleared (new-format rows on the same wallet are already correct
+      // and re-deriving them is wasted API calls). For a verifier-FLAGGED
+      // wallet, both formats go: its rows are wrong in the new format too,
+      // and deleting only 'pm-act:%' would leave the bad rows in place, let
+      // the re-backfill no-op against them via ON CONFLICT DO NOTHING, and
+      // report a confident "fixed" having changed nothing at all.
+      const deleted = await dbQuery(
+        u.is_flagged
+          ? `DELETE FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss') AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%') RETURNING id`
+          : `DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`,
+        [u.user_id]);
       oldRowsDeleted += deleted.length;
       const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
       if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); failed++; continue; }
@@ -64224,13 +64268,36 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const afterN = after[0] ? after[0].n : 0;
       const gained = afterN - beforeN;
+      // How many rows the backfill actually put back for the ones we removed.
+      // gained alone can't distinguish "rebuilt identically" (the signature
+      // of a repair that did nothing) from "rebuilt into a different shape
+      // that happens to have the same count".
+      const rebuilt = afterN - (beforeN - deleted.length);
       nGained += gained;
       fixed++;
-      // Repaired — drop it from the priority set so the set stays small and
-      // doesn't keep re-prioritising wallets that are already correct. If it
-      // is still wrong, the next verification will simply re-add it.
-      _resyncPriority.delete(u.user_id);
-      results.push({ user_id: u.user_id.slice(0, 8), sold_rows_before: beforeN, old_format_deleted: deleted.length, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
+      // Retire it from the priority set — but only claim the repair worked
+      // if the rows actually CHANGED. A flagged wallet that deletes and
+      // rebuilds to the identical row count almost certainly rebuilt the
+      // identical (still-wrong) data, which means the defect is in
+      // backfillRealizedTrades, not in this queue. Retrying that every 5
+      // minutes forever would hammer Polymarket's API to no effect and mask
+      // a real bug behind a busy-looking cron, so it gets a few attempts and
+      // is then parked where a human can see it.
+      let attempts = 0;
+      if (u.is_flagged) {
+        attempts = (_resyncPriority.get(u.user_id) || 0) + 1;
+        if (gained !== 0 || rebuilt !== deleted.length) {
+          _resyncPriority.delete(u.user_id); // genuinely changed — let the verifier re-flag if still wrong
+        } else if (attempts >= RESYNC_MAX_ATTEMPTS) {
+          _resyncPriority.delete(u.user_id);
+          _resyncUnrepairable.set(u.user_id, { attempts, at: new Date().toISOString(), sold_rows: afterN });
+        } else {
+          _resyncPriority.set(u.user_id, attempts);
+        }
+      } else {
+        _resyncPriority.delete(u.user_id);
+      }
+      results.push({ user_id: u.user_id.slice(0, 8), flagged: !!u.is_flagged, attempts: attempts || undefined, sold_rows_before: beforeN, old_format_deleted: deleted.length, rows_rebuilt: rebuilt, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
     } catch (e) {
       failed++;
       results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
@@ -64296,6 +64363,11 @@ app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, 
       running: _soldResyncRunning,
       last_run: _soldResyncLastRun,
       cumulative_since_boot: _soldResyncCumulative,
+      // Verifier-flagged wallets awaiting repair, and wallets repair could
+      // not change. A non-empty `unrepairable` is the signal that the defect
+      // has moved from this queue into backfillRealizedTrades itself.
+      verifier_flagged_queue: [..._resyncPriority.entries()].map(([user_id, attempts]) => ({ user_id, attempts })),
+      unrepairable: [..._resyncUnrepairable.entries()].map(([user_id, v]) => ({ user_id, ...v })),
       wallets_remaining: totalsRows[0] ? totalsRows[0].wallets : null,
       old_format_rows_remaining: totalsRows[0] ? totalsRows[0].rows : null,
     });
@@ -65225,8 +65297,12 @@ async function _reconcileWallet(userId, address) {
 
   // Queue this wallet for priority repair if we caught a real disagreement.
   // Detection without repair is just a nicer way to be wrong in public.
-  if (pnlMismatch.length || fabricated.length) {
-    try { _resyncPriority.add(userId); } catch {}
+  // Already tried and provably unfixable by resync — re-adding it would just
+  // restart a loop that already failed RESYNC_MAX_ATTEMPTS times. It stays
+  // publicly flagged (this function still returns the disagreement), it just
+  // stops consuming repair capacity.
+  if ((pnlMismatch.length || fabricated.length) && !_resyncUnrepairable.has(userId)) {
+    try { if (!_resyncPriority.has(userId)) _resyncPriority.set(userId, 0); } catch {}
   }
 
   const soldChecked = ourByCond.size - redeemedUnchecked;

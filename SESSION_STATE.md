@@ -49,6 +49,23 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-05b (⛔ I BROKE THE PLATFORM-WIDE RESYNC, then found the repair queue was structurally unable to fix already-migrated wallets)
+
+**Trigger:** Marc asked to audit the detection→repair mechanism as a whole after TheQuietRisk stayed unrepaired through several deploys. Two separate defects, one of them mine from an hour earlier.
+
+**⛔ Defect 1 — `31e995d` killed `runSoldTradesResyncBatch` entirely (self-inflicted, same session).** I added `ORDER BY (rt.user_id::text = ANY($1::text[])) DESC` to a `SELECT DISTINCT` **without putting that expression in the select list**. Postgres rejects this outright ("for SELECT DISTINCT, ORDER BY expressions must appear in select list"), the scan's `.catch()` swallowed it into `{ error: 'scan_query_failed' }`, and **every tick from that deploy onward did nothing** — boot tick and all `*/5` cron ticks, across the whole 1,576-wallet backlog, not just the wallet I was chasing. It looked like "the cron hasn't reached it yet." It was dead.
+- **This is the second time tonight I hit this exact Postgres rule** (first: `SELECT DISTINCT condition_id … ORDER BY random()`, fixed in `2b59a7c`). Same swallow-the-error shape both times. **A `.catch()` that returns null on a scan query converts a hard failure into an invisible no-op — the cron kept logging "fired" and "tick done" while accomplishing nothing.**
+- Fix: order by the output aliases (`is_flagged`, `is_public`, `user_id`), all of which are select-list columns, so the failure mode is structurally unavailable.
+
+**⛔ Defect 2 — the repair queue could never touch the wallets that most needed it.** The scan selects wallets carrying OLD-format `external_sync_id LIKE 'pm-act:%'` rows. A successful resync rewrites those to `pm-act2:%`. So a wallet that was already resynced **and is still wrong** matches no pattern and is permanently unreachable. `_resyncPriority` only fed `ORDER BY`, never `WHERE` — so flagging such a wallet was a no-op forever, and my own code comment asserting "lost on restart, which is fine — the underlying WHERE clause still finds these wallets regardless" was **false, and was the bug**.
+- Even if selected, the `DELETE` only removed `pm-act:%` rows, so the re-backfill would `ON CONFLICT DO NOTHING` against the surviving bad rows and report a confident "fixed" having changed nothing.
+
+**Shipped:** flagged wallets now matched in the `WHERE` clause (not merely sorted); format-aware `DELETE` clears both key formats for a flagged wallet; `_resyncPriority` is a Map with an attempt counter (max 3) so a wallet that rebuilds identically stops looping against Polymarket's API; unfixable wallets park in `_resyncUnrepairable` and surface in `/api/admin/resync-sold-trades/status` alongside the pending queue; explicit `?user_id=` is treated as flagged so admin override can force a rebuild of an already-migrated wallet.
+
+**Interpretation that matters:** a non-empty `unrepairable` list means the defect has moved out of this queue and into `backfillRealizedTrades` itself. That is the next thing to chase if TheQuietRisk lands there.
+
+**Process lesson (third time this session):** I twice built queue machinery on the assumption a wallet was merely *waiting*. Both times the real cause was that it was never selected at all. **Before optimizing the order of a queue, verify the item is in the queue.**
+
 ## 2026-08-05 (verification made PUBLIC + copy-trading Gate 4 fix + full audit of the session's work)
 
 **Shipped (origin/main):**
