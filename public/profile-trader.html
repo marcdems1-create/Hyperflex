@@ -85,6 +85,8 @@
     .open-live::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--green)}
     .row-link{color:var(--cyan)}
     .row-link:hover{text-decoration:underline}
+    .open-exposure{padding:0 52px 20px;font-size:20px;color:var(--soft);line-height:1.55;max-width:1100px}
+    .open-exposure b{color:var(--ink);font-weight:600}
     .row-copy{border-color:rgba(34,197,94,0.35);color:var(--green)}
     .row-copy:hover{border-color:var(--green);background:rgba(34,197,94,0.08)}
 
@@ -424,9 +426,39 @@
               'No open positions — nothing live to follow right now.</div></div>';
             return;
           }
+          // ── Open exposure vs the closed record ────────────────────────
+          // A win rate counts CLOSED trades only, so a wallet that closes
+          // winners and simply never realises losers shows a spotless
+          // record while underwater. The closed number isn't wrong; it's
+          // incomplete. Sum what's still open and say so whenever real
+          // money is sitting at a loss, so the record can't imply more
+          // than it measures. (Checked on the board's 100%-win-rate
+          // wallet — it came back genuinely clean, but nothing was
+          // detecting this, and it's precisely how a perfect record gets
+          // manufactured without a single fabricated trade.)
+          var allOpen = all.filter(function(p){ return !p.settled; });
+          var openCost = 0, openPnl = 0, underwater = 0, underwaterPnl = 0;
+          allOpen.forEach(function(p){
+            var cb = num(p.cost_basis) || 0, pl = num(p.pnl) || 0;
+            openCost += cb; openPnl += pl;
+            if (pl < 0) { underwater++; underwaterPnl += pl; }
+          });
+          var exposure = '';
+          if (allOpen.length) {
+            var expCls = openPnl >= 0 ? 'pos' : 'neg';
+            exposure = '<div class="open-exposure">' +
+              'Still open: <b>' + allOpen.length + '</b> position' + (allOpen.length === 1 ? '' : 's') +
+              ', ' + usd(openCost) + ' at risk, ' +
+              '<span class="' + expCls + '">' + signedUsd(openPnl) + '</span> unrealised' +
+              (underwater > 0
+                ? ' · <span class="neg">' + underwater + ' underwater (' + signedUsd(underwaterPnl) + ')</span>'
+                : '') +
+              '. The win rate above counts closed trades only.</div>';
+          }
+
           slot.innerHTML =
             '<div class="led-head with-live"><span>open positions</span>' +
-            '<span class="open-live">' + open.length + ' live</span></div>' +
+            '<span class="open-live">' + open.length + ' live</span></div>' + exposure +
             open.map(function(p){
               var pnl = num(p.pnl), pnlPct = num(p.pnl_pct);
               var cls = pnl == null ? '' : (pnl > 0 ? 'pos' : (pnl < 0 ? 'neg' : ''));
