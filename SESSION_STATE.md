@@ -49,6 +49,29 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-05 (Homepage nav connection bugs + trader-card content hierarchy — branch `claude/homepage-nav-connection-bugs-zyuljc`)
+
+**Shipped (with hashes):**
+- `2cd9ac7` — nav.js: "Sign in" (legacy JWT login) was gated only on `hf_token`/`hf_creator_token`, independent of wallet-connect state, so it kept showing next to a connected wallet's address pill. Gated on `isAuthed = isLoggedIn || walletConnected` instead, synced live on connect/disconnect via `syncSigninVisibility()`. Also: the connected pill linked to `/creator/dashboard#portfolio` (dead anchor, no portfolio view wired up) — now routes to `/trader/:address` (existing resolve-to-`/@handle` route, same pattern used elsewhere). Fixed in both desktop and mobile nav. Verified via a static-file Playwright harness (not the app server) simulating connected/disconnected/JWT-only states — did not have production access to confirm live (proxy blocks `hyperflex.network` from this environment).
+- `434a814` — trader-card.js hero is now `card.flex_score` (bounded 0-100 composite, `lib/flex-score.js`) instead of raw ROI%; win rate/ROI/trade count demoted to a small muted stat row beneath it (`.tcard-flexhero`/`.tcard-stats` in trader-card.css). `_computeRoiLeaderboard` and `_computeCategoryRoiLeaderboards` (server.js) now select `flex_score` and pass it through `_buildTraderCards` so every card/category-king/leaderboard-row carries it; falls back to `—` (never fabricated) if a wallet's nightly flex-score recompute hasn't run. Killed "n=" notation → plain "N trades" everywhere it was user-facing: trader-card.js, profile-trader.html, connect.html (scoreline/specialty tiles/similar-traders tag), feed.html + home-kings.html (category win-card badges), trader.html (CLV strip), and the three server-side `scope_label` generators (`durableScopeLabel`, category leaderboard, similar-traders). Sample size itself unchanged, only the label. Verified via `node --check`, `new Function()` parse on every inline `<script>`, and a Playwright render test confirming hero (56px) > verdict (26px) and no literal `n=\d` left in rendered output.
+
+**Found, not fixed (informational / doc-drift):**
+- **CLAUDE.md's file map is stale**: it says `home.html` serves `/` and is "untouched." The live route (`server.js:763`) has served `home-kings.html` at `/` since 2026-07-26 — `home.html` is unrouted/orphaned (only reachable via a direct `/home.html` static path nobody links to). Its `.vcard` hero component (shows `win_rate_pct`, not even ROI) was therefore left untouched as out-of-scope/dead. Worth a CLAUDE.md fix so the next session doesn't burn time on the wrong file.
+- **`trader-profile.html`** (older, separate file from `profile-trader.html`) is dead code — its route (`server.js:14158`, `app.get('/trader/:handle', ...)`) is registered *after* `/trader/:address` (`server.js:12067`), which always matches first for any `/trader/*` path, so the later handler is unreachable. Left untouched. Still has "n=" notation and a raw-ROI hero if it's ever resurrected.
+- **Stale "95" qualifying-wallet count** (asked to find/fix): dispatched a thorough Explore-agent search covering every cache, cron, DB table, and template that touches the durable leaderboard's row count. Found no live code path serving it — every leaderboard-count surface computes fresh per request or reads a self-clearing 120s cache (`_roiLbCache`, explicitly `.clear()`'d by the purge admin endpoints). The only place "95" appears in the repo is as historical narrative text in CLAUDE.md/SESSION_STATE.md itself ("95 → 80"). No fix shipped because no live bug was found — flagged to Marc as likely a stale browser/CDN cache rather than an app bug.
+
+**Active blockers:** none.
+
+**Queued:** none from this arc.
+
+**Open questions / unverified:**
+- Neither fix has been confirmed against the actual live site — this environment's outbound proxy 403s all requests to `hyperflex.network`. Both were verified via local static-file Playwright harnesses against the real modified files instead. Worth a real eyeball pass once this branch deploys.
+- `flex_score`'s own internal sample (`settled_events`, from `_fetchFlexStats`) counts ALL realized_trades (durable + ephemeral, deduped vs `polymarket_trades`), not just the durable-market subset the card's displayed "N trades" count reflects. This is pre-existing, not introduced here, but means the hero number and the sample-size caption beside it are computed over slightly different (overlapping, not identical) populations. Not surfaced as a discrepancy anywhere in copy — worth deciding if that needs disclosure.
+
+**Notes for next session:**
+- If Marc's "nudge" pass on the new card hierarchy wants the Flex Score hero bigger/smaller/different color, it's all in `trader-card.css`'s `.tcard-flexhero`/`.tcard-flexscore`/`.tcard-stats` block — one place, not scattered.
+- `home.html` vs `home-kings.html` confusion is worth resolving in CLAUDE.md directly, not just noting here again next time.
+
 ## 2026-08-04e (⛔ REAL GAP FOUND + FIXED — category leaderboards / GET /api/kings' category-king promotion completely bypassed the anti-farming gate)
 
 **Ask:** "keep building" — continued auditing the same integrity surface for consistency after closing the profile-disclosure gap, rather than picking a new unrelated task.

@@ -13627,6 +13627,12 @@ app.get('/api/feed/category-wins', async (req, res) => {
               user_id: userId, display_name: card.display_name, username: card.username,
               polymarket_address: card.polymarket_address,
               score_pct: card.score_pct, n: card.n, scope_label: card.scope_label,
+              // Same Flex Score hero fields the rest of the homepage cards
+              // carry (2026-08-05) — win_rate_pct/raw_weighted_roi_pct are
+              // the supporting-row stats, flex_score is the hero number.
+              flex_score: card.flex_score != null ? card.flex_score : null,
+              win_rate_pct: card.win_rate_pct != null ? card.win_rate_pct : null,
+              raw_weighted_roi_pct: card.raw_weighted_roi_pct != null ? card.raw_weighted_roi_pct : null,
               win: {
                 question: t.market_question, side: (t.side || '').toUpperCase(),
                 entry_price: t.entry_price != null ? Number(t.entry_price) : null,

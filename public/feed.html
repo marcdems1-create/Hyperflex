@@ -96,6 +96,19 @@ body {
    scoreline. n rides along inside the badge, small — still never
    rendered without it (rule 3), just no longer flat muted text. ── */
 .wcard-who { display: flex; align-items: center; gap: 8px; }
+/* ── Flex Score badge (2026-08-05) — same hero treatment as trader-card.js's
+   .tcard-flexhero and home-kings.html's category board: gold, prominent,
+   the number the eye lands on first. Replaces the old raw-ROI% pill. ── */
+.wcard-flexbadge { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 9px; border-radius: 8px; flex-shrink: 0; min-width: 54px; background: rgba(201,146,13,.14); border: 1px solid rgba(201,146,13,.35); }
+.wcard-flexbadge .num { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800; line-height: 1.1; color: var(--gold); white-space: nowrap; }
+.wcard-flexbadge.is-mute .num { color: var(--muted); }
+.wcard-flexbadge .lbl { font-family: 'Inter', sans-serif; font-size: 7.5px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; line-height: 1.1; }
+/* ── supporting stat row — win rate / ROI / trade count, small and muted,
+   underneath the Flex Score badge. ── */
+.wcard-substats { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ── legacy score+n badge — no longer emitted by winCardHtml(), kept in
+   case anything else still references it. Safe to delete once confirmed
+   unused. ── */
 .wcard-score-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 9px; border-radius: 8px; flex-shrink: 0; min-width: 54px; }
 .wcard-score-badge.positive { background: rgba(0,230,138,.14); border: 1px solid rgba(0,230,138,.35); }
 .wcard-score-badge.negative { background: rgba(255,77,106,.12); border: 1px solid rgba(255,77,106,.32); }
@@ -160,6 +173,7 @@ function fmtUsd(n) {
   return (n < 0 ? '-' : '') + s;
 }
 function fmtPct(p) { if (p == null) return '—'; return (p >= 0 ? '+' : '') + p.toFixed(1) + '%'; }
+function fmtPlainPct(p) { if (p == null) return '—'; return p.toFixed(1) + '%'; }
 function tAgo(ts) {
   if (!ts) return '';
   var ms = Date.now() - new Date(ts).getTime();
@@ -255,17 +269,23 @@ function winCardHtml(e, accent) {
   var verb = win.side === 'SELL' ? 'Sold' : 'Bought';
   var entryC = win.entry_price != null ? Math.round(win.entry_price * 100) + '¢' : null;
   var multText = win.multiplier != null ? win.multiplier + 'x' : fmtPct(win.roi_pct);
-  var scorePositive = (e.score_pct != null ? e.score_pct : 0) >= 0;
+  var flexKnown = e.flex_score != null;
+  var flexText = flexKnown ? String(e.flex_score) : '—';
   // Canonical trader profile is /@handle, not /trader/<uuid> — same bug
   // and same fix as trader-card.js's HFXTraderCard.render() (this card
   // markup is a separate implementation, doesn't route through that
   // shared component, so it needed the identical fix applied here too).
   var href = e.username ? '/@' + esc(e.username) : e.polymarket_address ? '/trader/' + esc(e.polymarket_address) : '#';
+  // Same Flex Score hero treatment as every other card on the homepage/feed
+  // (2026-08-05): gold, prominent badge is the hero; win rate/ROI/trade
+  // count are the smaller supporting row directly beneath. The specific win
+  // (mult/entry/question) is this card's own evidence — kept as-is below.
   return '<a class="wcard" style="--accent:' + accent + '" href="' + href + '">'
     + '<div class="wcard-who">'
-      + '<div class="wcard-score-badge ' + (scorePositive ? 'positive' : 'negative') + '"><span class="pct">' + esc(fmtPct(e.score_pct)) + '</span><span class="nn">' + esc(e.n) + ' trades</span></div>'
+      + '<div class="wcard-flexbadge' + (flexKnown ? '' : ' is-mute') + '"><span class="num">' + esc(flexText) + '</span><span class="lbl">Flex</span></div>'
       + '<div class="wcard-handle">' + esc(handle) + '</div>'
     + '</div>'
+    + '<div class="wcard-substats">' + esc(fmtPlainPct(e.win_rate_pct)) + ' WR · ' + esc(fmtPct(e.raw_weighted_roi_pct)) + ' ROI · ' + esc(e.n) + ' trades</div>'
     + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
     + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
     + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
