@@ -65409,6 +65409,24 @@ app.get('/api/verify-record/:handle', async (req, res) => {
         trades_with_no_matching_on_chain_activity: sold.fabricated_count,
         pnl_direction_disagreements: sold.pnl_sign_mismatch_count,
         coverage_complete: sold.coverage_capped === false,
+        // Receipts for a non-clean verdict. Saying "partial" without showing
+        // WHICH trades could not be confirmed is the same take-our-word-for-it
+        // posture this endpoint exists to replace — so the specific markets
+        // are listed, with our figure beside the on-chain figure, for anyone
+        // who wants to check the disagreement themselves.
+        unconfirmed_trades: [
+          ...(sold.fabricated || []).map(f => ({
+            reason: 'no matching on-chain activity',
+            condition_id: f.condition_id,
+            our_pnl_usd: f.our_pnl,
+          })),
+          ...(sold.pnl_mismatch || []).map(m => ({
+            reason: 'our profit/loss direction disagrees with on-chain fills',
+            condition_id: m.condition_id,
+            our_pnl_usd: m.our_pnl,
+            onchain_net_usd: m.onchain_fill_net_usdc,
+          })),
+        ].slice(0, 25),
       } : null,
       resolutions: redeemed && !redeemed.error ? {
         held_to_resolution_rows: redeemed.redeemed_rows,
