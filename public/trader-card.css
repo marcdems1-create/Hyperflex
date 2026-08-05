@@ -47,7 +47,32 @@
 .tcard-compact .tcard-verdict { font-size: 16px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .tcard-feed .tcard-verdict { font-size: 22px; }
 
-/* ── score + n — one inseparable unit ── */
+/* ── FLEX SCORE — the hero number (2026-08-05 content-hierarchy pass).
+   Composite, sample-adjusted 0-100 rating (lib/flex-score.js) — replaces
+   raw ROI% as the card's largest element. ── */
+.tcard-flexhero { display: flex; align-items: baseline; gap: 10px; }
+.tcard-flexscore { font-family: 'JetBrains Mono', monospace; font-size: 40px; font-weight: 800; color: #c9920d; line-height: 1; letter-spacing: -.02em; }
+.tcard-flexhero.is-mute .tcard-flexscore { color: rgba(240,240,245,.3); }
+.tcard-flexlabel { font-family: 'Inter', -apple-system, sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(240,240,245,.4); }
+.tcard-hero .tcard-flexscore { font-size: 56px; }
+.tcard-compact .tcard-flexscore { font-size: 26px; }
+.tcard-compact .tcard-flexlabel { font-size: 9px; }
+
+/* ── supporting stat row — win rate / realized ROI / trade count. Smaller
+   and muted; the Flex Score above is what the eye lands on first. n (trade
+   count) still always renders here — the honesty guarantee stays, only the
+   "n=" notation is gone in favor of plain language. ── */
+.tcard-stats { display: flex; gap: 16px; }
+.tcard-stat { display: flex; flex-direction: column; gap: 2px; }
+.tcard-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: rgba(240,240,245,.7); }
+.tcard-stat-val.is-positive { color: #00e68a; }
+.tcard-stat-val.is-negative { color: #ff4d6a; }
+.tcard-stat-lbl { font-family: 'Inter', -apple-system, sans-serif; font-size: 9.5px; color: rgba(240,240,245,.4); text-transform: uppercase; letter-spacing: .04em; }
+.tcard-compact .tcard-stat-val { font-size: 11px; }
+
+/* ── legacy score+n unit — no longer emitted by render() as of the hero
+   change above (kept so nothing errors if an old cached page still has
+   this markup inline; safe to delete once confirmed unused). ── */
 .tcard-scoreline {
   display: inline-flex; align-items: baseline; gap: 8px; width: fit-content;
   padding: 7px 12px; border-radius: 8px;

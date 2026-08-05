@@ -12720,7 +12720,7 @@ async function _computeRoiLeaderboard(window, minN) {
   // eligibility math stays untouched — this is a display-layer exclusion,
   // same as pulling display_name/username/polymarket_address.
   const userRows = await dbQuery(
-    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out, flex_score FROM users WHERE id = ANY($1)`,
     [userIds]
   ).catch(() => []);
   const userById = new Map(userRows.map(u => [u.id, u]));
@@ -12757,6 +12757,16 @@ async function _computeRoiLeaderboard(window, minN) {
       total_capital_usd: Math.round(Number(r.total_capital) || 0),
       raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
       score_pct: Math.round(shrunk * 1000) / 10,
+      // Hero number on trader cards (2026-08-05 hierarchy pass): the bounded
+      // 0-100 Flex Score (lib/flex-score.js — accuracy+calibration+pnl+
+      // consistency+breadth), NOT this row's own score_pct (which is a raw/
+      // shrunk ROI% and now demoted to the supporting stat row). Computed
+      // nightly by recomputeAllFlexScores off realized_trades (durable +
+      // ephemeral, deduped vs polymarket_trades) for every wallet with a
+      // polymarket_address, so every durable-board qualifier has one. Can
+      // still be null for a wallet that hasn't had its nightly recompute run
+      // yet — callers must handle null (render '—', never fake a number).
+      flex_score: u.flex_score != null ? Math.round(Number(u.flex_score)) : null,
       trend: trendByUser.get(r.user_id) || null,
       scope_label: durableScopeLabel(n),
       ...integrity,
@@ -13080,7 +13090,7 @@ function classifyMarketDurability(question, openedAt, closedAt) {
 // is durable-markets-only as of 2026-07-20; this is the honest label for
 // that scope, not a caveat buried in a tooltip.
 function durableScopeLabel(n) {
-  return 'Ranked on durable markets — resolving weeks or months out — n=' + n;
+  return 'Ranked on durable markets — resolving weeks or months out — ' + n + ' trades';
 }
 
 // Rules-based verdict line — thresholds only, no LLM. Ordered cascade: most
@@ -13291,6 +13301,7 @@ async function _buildTraderCards(roiRows) {
       polymarket_address: row.polymarket_address,
       whale_rank: row.whale_rank,
       n, score_pct: row.score_pct, raw_weighted_roi_pct: row.raw_weighted_roi_pct,
+      flex_score: row.flex_score != null ? row.flex_score : null,
       total_capital_usd: row.total_capital_usd, trend: row.trend,
       verdict, evidence, form, streak,
       specialty: specialty ? {
@@ -13370,7 +13381,7 @@ async function _computeCategoryRoiLeaderboards() {
   // included.
   const allUserIds = [...new Set(rows.map(r => r.user_id))];
   const userRows = allUserIds.length ? await dbQuery(
-    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out, flex_score FROM users WHERE id = ANY($1)`,
     [allUserIds]
   ).catch(() => []) : [];
   const userById = new Map(userRows.map(u => [u.id, u]));
@@ -13415,7 +13426,8 @@ async function _computeCategoryRoiLeaderboards() {
         total_capital_usd: Math.round(u.totalCapital),
         raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
         score_pct: Math.round(shrunk * 1000) / 10,
-        scope_label: 'Ranked on durable ' + category + ' markets — n=' + u.n,
+        flex_score: (userRow && userRow.flex_score != null) ? Math.round(Number(userRow.flex_score)) : null,
+        scope_label: 'Ranked on durable ' + category + ' markets — ' + u.n + ' trades',
       });
     }
     catResult.sort((a, b) => b.score_pct - a.score_pct);
@@ -14107,7 +14119,7 @@ async function computeSimilarBetterTraders(userId) {
       // it's headlining is thinly sampled on either side.
       confidence: headlineMinN != null ? _matchConfidenceTier(headlineMinN) : null,
       confidence_n: headlineMinN,
-      scope_label: 'Ranked on durable markets — n=' + shared.reduce((s, k) => s + c.catN[k], 0),
+      scope_label: 'Ranked on durable markets — ' + shared.reduce((s, k) => s + c.catN[k], 0) + ' trades',
     });
   }
 

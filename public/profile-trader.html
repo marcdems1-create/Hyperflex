@@ -216,13 +216,13 @@
             '<div class="q-sub">avg ' + cents(d.clv_avg_cents) + '</div></div>' +
           '<div class="q"><div class="q-lbl">win rate</div>' +
             '<div class="q-val">' + pct(winRate, 0) + '</div>' +
-            '<div class="q-sub">' + (nCount != null ? 'n = ' + nCount : '—') + '</div></div>' +
+            '<div class="q-sub">' + (nCount != null ? nCount + ' trades' : '—') + '</div></div>' +
           '<div class="q"><div class="q-lbl">realized ROI</div>' +
             '<div class="q-val ' + (roi == null ? '' : (roi >= 0 ? 'pos' : 'neg')) + '">' + signedPct(roi) + '</div>' +
             '<div class="q-sub">' + (c && c.total_staked_usd ? usd(c.total_staked_usd) + ' staked' : 'all time') + '</div></div>' +
           '<div class="q"><div class="q-lbl">wallet class</div>' +
             '<div class="q-val cy">' + (CLASS_LABEL[wc] || '—') + '</div>' +
-            '<div class="q-sub">' + (d.clv_sample_size ? 'n = ' + d.clv_sample_size : 'unrated') + '</div></div>' +
+            '<div class="q-sub">' + (d.clv_sample_size ? d.clv_sample_size + ' trades' : 'unrated') + '</div></div>' +
         '</div>';
 
       // ── meta strip
