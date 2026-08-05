@@ -263,7 +263,7 @@ function winCardHtml(e, accent) {
   var href = e.username ? '/@' + esc(e.username) : e.polymarket_address ? '/trader/' + esc(e.polymarket_address) : '#';
   return '<a class="wcard" style="--accent:' + accent + '" href="' + href + '">'
     + '<div class="wcard-who">'
-      + '<div class="wcard-score-badge ' + (scorePositive ? 'positive' : 'negative') + '"><span class="pct">' + esc(fmtPct(e.score_pct)) + '</span><span class="nn">n=' + esc(e.n) + '</span></div>'
+      + '<div class="wcard-score-badge ' + (scorePositive ? 'positive' : 'negative') + '"><span class="pct">' + esc(fmtPct(e.score_pct)) + '</span><span class="nn">' + esc(e.n) + ' trades</span></div>'
       + '<div class="wcard-handle">' + esc(handle) + '</div>'
     + '</div>'
     + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'

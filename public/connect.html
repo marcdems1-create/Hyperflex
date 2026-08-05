@@ -673,7 +673,7 @@ function renderVerified(p){
       + (profileHref ? '<a class="p-profile-link" href="'+esc(profileHref)+'">View profile →</a>' : '')
     + '</div>'
     + '<div class="p-verdict' + (eligible ? '' : ' is-ineligible') + '">' + esc(verdictText) + '</div>'
-    + (eligible ? '<div class="p-scoreline '+scoreCls+'"><span class="p-score">'+esc(fmtPct(p.score_pct))+'</span><span class="p-n">n='+esc(p.n)+'</span></div>' : '')
+    + (eligible ? '<div class="p-scoreline '+scoreCls+'"><span class="p-score">'+esc(fmtPct(p.score_pct))+'</span><span class="p-n">'+esc(p.n)+' trades</span></div>' : '')
     + (eligible && p.scope_label ? '<div class="p-scope">'+esc(p.scope_label)+'</div>' : '');
 
   // Non-qualifying: a progress bar, not a rejection. Parsed from
@@ -687,7 +687,7 @@ function renderVerified(p){
   if (!eligible && p.provisional) {
     var pv = p.provisional;
     var pvScoreCls = pv.score_pct >= 0 ? 'is-positive' : 'is-negative';
-    html += '<div class="p-scoreline ' + pvScoreCls + ' is-provisional"><span class="p-score">' + esc(fmtPct(pv.score_pct)) + '</span><span class="p-n">n=' + esc(pv.n) + '</span></div>'
+    html += '<div class="p-scoreline ' + pvScoreCls + ' is-provisional"><span class="p-score">' + esc(fmtPct(pv.score_pct)) + '</span><span class="p-n">' + esc(pv.n) + ' trades</span></div>'
       + '<div class="p-provisional-label">' + esc(pv.label) + '</div>'
       + '<div class="stat-row">'
         + '<div class="stat-tile"><div class="stat-label">Realized ROI</div><div class="stat-value ' + pvScoreCls + '">' + esc(fmtPct(pv.raw_weighted_roi_pct)) + '</div></div>'
@@ -744,7 +744,7 @@ function renderVerified(p){
           return '<div class="'+tileCls+'">'
             + '<div class="specialty-cat">'+esc(s.category)+'</div>'
             + '<div class="specialty-wr '+wrCls+'">'+esc(s.win_rate_pct.toFixed(1))+'%</div>'
-            + '<div class="specialty-n">n='+esc(s.n)+(s.avg_roi_pct!=null?' · avg '+esc(fmtPct(s.avg_roi_pct)):'')+'</div>'
+            + '<div class="specialty-n">'+esc(s.n)+' trades'+(s.avg_roi_pct!=null?' · avg '+esc(fmtPct(s.avg_roi_pct)):'')+'</div>'
             + (s.small_sample ? '<div class="specialty-small-tag">small sample</div>' : '')
           + '</div>';
         }).join('')
@@ -1049,7 +1049,7 @@ function loadSimilarTraders(handle){
             var isThin = m.confidence === 'thin';
             var edgeCls = 'sim-edge' + (isThin ? ' is-thin' : ' is-positive');
             var sampleTag = isThin
-              ? '<span class="sim-sample-tag">small sample · n='+esc(m.confidence_n)+'</span>'
+              ? '<span class="sim-sample-tag">small sample · '+esc(m.confidence_n)+' trades</span>'
               : '';
             return '<div class="sim-row">'
               + '<div class="sim-main">'

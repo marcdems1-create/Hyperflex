@@ -54,6 +54,12 @@
     return (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
   }
 
+  // Plain (unsigned) percentage — for win rate, which isn't a +/- delta.
+  function fmtPlainPct(p) {
+    if (p == null) return '—';
+    return p.toFixed(1) + '%';
+  }
+
   function evidenceLine(ev) {
     if (!ev) return null;
     var verb = ev.side === 'SELL' ? 'Sold' : 'Bought';
@@ -71,9 +77,9 @@
   function render(card, variant) {
     variant = variant || 'feed';
     var cls = 'tcard tcard-' + variant;
-    var scorePositive = (card.score_pct != null ? card.score_pct : 0) >= 0;
-    var scoreLineCls = 'tcard-scoreline ' + (scorePositive ? 'is-positive' : 'is-negative');
-    var scoreDisplay = fmtPct(card.score_pct);
+    var roiPositive = (card.raw_weighted_roi_pct != null ? card.raw_weighted_roi_pct : 0) >= 0;
+    var flexKnown = card.flex_score != null;
+    var flexDisplay = flexKnown ? String(card.flex_score) : '—';
     var ev = evidenceLine(card.evidence);
     var streakCls = card.streak && card.streak.type ? ('tcard-streak is-' + card.streak.type) : '';
     var streakText = card.streak && card.streak.count
@@ -99,11 +105,24 @@
       + (card.whale_rank ? '<div class="tcard-rank">#' + esc(card.whale_rank) + '</div>' : '')
       + '</div>';
 
+    // Hero number = Flex Score (composite, sample-adjusted 0-100 rating —
+    // lib/flex-score.js), not raw ROI. '—' when this wallet's nightly
+    // recompute hasn't produced one yet; never fabricate a number.
+    html += '<div class="tcard-flexhero' + (flexKnown ? '' : ' is-mute') + '">'
+      + '<span class="tcard-flexscore">' + esc(flexDisplay) + '</span>'
+      + '<span class="tcard-flexlabel">Flex Score</span>'
+      + '</div>';
+
     html += '<div class="tcard-verdict">' + esc(card.verdict) + '</div>';
 
-    html += '<div class="' + scoreLineCls + '">'
-      + '<span class="tcard-score">' + esc(scoreDisplay) + '</span>'
-      + '<span class="tcard-n">n=' + esc(card.n) + '</span>'
+    // Supporting stat row — win rate, realized ROI, trade count. Smaller and
+    // muted; the Flex Score above is what the eye lands on first. n stays
+    // visible (score never renders without its sample size) as plain
+    // language ("N trades") instead of "n=" notation.
+    html += '<div class="tcard-stats">'
+      + '<div class="tcard-stat"><span class="tcard-stat-val">' + esc(fmtPlainPct(card.win_rate_pct)) + '</span><span class="tcard-stat-lbl">win rate</span></div>'
+      + '<div class="tcard-stat"><span class="tcard-stat-val ' + (roiPositive ? 'is-positive' : 'is-negative') + '">' + esc(fmtPct(card.raw_weighted_roi_pct)) + '</span><span class="tcard-stat-lbl">ROI</span></div>'
+      + '<div class="tcard-stat"><span class="tcard-stat-val">' + esc(card.n) + '</span><span class="tcard-stat-lbl">trades</span></div>'
       + '</div>';
 
     if (card.scope_label) {
