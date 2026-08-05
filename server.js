@@ -64163,13 +64163,23 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
   limit = Math.min(50, Math.max(1, limit || SOLD_RESYNC_BATCH));
   const startedAt = new Date().toISOString();
 
+  // Drain PUBLICLY VISIBLE wallets first. `ORDER BY user_id` is alphabetical
+  // by UUID — effectively random — so a promoted, ranked wallet could sit
+  // behind ~1,300 unranked ones for hours while showing stale pre-fix
+  // numbers on the homepage. Found 2026-08-05: TheQuietRisk (ranked #5)
+  // recorded +$92 on a market where the chain shows a $63,415 realized loss
+  // — the first round-trip kept, every later one dropped by the pre-fix
+  // aggregation bug. Stale data on an unranked wallet is a backlog item;
+  // the same staleness on a wallet we actively promote is a wrong number in
+  // public, so it goes to the front of the queue.
   const affected = await dbQuery(`
-    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
+    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address,
+           (u.flex_score IS NOT NULL OR u.is_whale = true) AS is_public
     FROM realized_trades rt
     JOIN users u ON u.id = rt.user_id::text
     WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-    ORDER BY user_id
+    ORDER BY (u.flex_score IS NOT NULL OR u.is_whale = true) DESC, rt.user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
   `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
   if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
