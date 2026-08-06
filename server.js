@@ -634,7 +634,23 @@ if (!CREATOR_PLATFORM_ENABLED) {
   app.use('/api/community', creatorSaasOff);
   app.use('/api/user/community-balance', creatorSaasOff);
   app.use('/api/user/community', creatorSaasOff);
-  app.use('/creator', (req, res) => res.redirect(302, '/'));
+  app.use('/creator', (req, res, next) => {
+    // /creator/login, /creator/signup, /creator/dashboard, /creator/terms are
+    // general account auth (Google/email sign-in, signup) and the real
+    // trading dashboard (Portfolio, Quick Trade — see the CLOB trading
+    // reference in CLAUDE.md) — not the disabled per-community SaaS product,
+    // despite living under the same URL prefix. This catch-all was blocking
+    // them too, which meant every "Sign in" click on the site silently
+    // redirected home instead of showing the login page. Exempted here so
+    // those keep working; the community-management tabs inside the
+    // dashboard still fail gracefully via the /api/community*/api/creator*
+    // blocks above, unchanged. Using req.originalUrl (not req.path) since
+    // app.use(prefix, fn) rebases req.path relative to the mount point.
+    const path = req.originalUrl.split('?')[0];
+    const exempt = ['/creator/login', '/creator/signup', '/creator/dashboard', '/creator/terms'];
+    if (exempt.includes(path)) return next();
+    return res.redirect(302, '/');
+  });
 }
 
 // ── robots.txt — explicit route so Cloudflare can't override ──
