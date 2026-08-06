@@ -378,16 +378,20 @@
   // Explore leads now: the intelligence/discovery surface lives at /explore
   // as a first-class route. The homepage (/) will be rebuilt into the
   // townsquare per spec §6; once that lands the two URLs diverge.
+  // 'My Score' and 'World Cup' dropped 2026-08-06 (Marc): redundant with the
+  // 'Profile' entry point (nav-auth dropdown here, bottom-nav on mobile) now
+  // that _goToMyProfile()/the bottom-nav resolver both fall back to /connect
+  // for a wallet-only visitor — one consistent "your score" destination
+  // instead of two. 'Predictors' renamed 'Leaderboard' same pass, matching
+  // the mobile bottom-nav label already in place.
   var primaryLinks = [
-    { href: '/connect', label: 'My Score', gold: true },
     { href: '/traders', label: 'Traders', gold: true },
-    { href: '/worldcup', label: '⚽ World Cup', gold: true },
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenge', label: 'Challenge' },
-    { href: '/predictors', label: 'Predictors' },
+    { href: '/predictors', label: 'Leaderboard' },
     { href: '/finance', label: 'Markets' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
@@ -396,9 +400,17 @@
   // /api/user/me.profile_url (which returns /@handle when set). This
   // bypasses the /m/:userId → /@handle 302 hop so browsers never cache
   // a stale redirect from a previous handle.
+  // Wallet-only visitors (connected via /connect, no login/JWT) are cached
+  // under a separate key namespace — see connect.html's CONNECT_CACHE_*.
+  // /connect itself auto-resumes from that cache and re-renders the score,
+  // so it's the correct destination for "my profile" here, same as /m/:uid
+  // is for a logged-in user.
+  function _hasConnectCache() {
+    return !!(localStorage.getItem('hf_connect_user_id') || localStorage.getItem('hf_connect_address'));
+  }
   window._goToMyProfile = async function() {
     var tok = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    if (!tok) { window.location.href = '/creator/login'; return; }
+    if (!tok) { window.location.href = _hasConnectCache() ? '/connect' : '/creator/login'; return; }
     try {
       var r = await fetch('/api/user/me', { headers: { Authorization: 'Bearer ' + tok } });
       if (r.ok) {
@@ -790,7 +802,7 @@
       { name: 'My Score', desc: 'Connect your wallet — see your real Polymarket trading record', href: '/connect', icon: '👤' },
       { name: 'Traders', desc: 'Trader scoreboard — real records, verified against durable markets', href: '/traders', icon: '🏆' },
       { name: 'Whales', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
-      { name: 'Predictors', desc: 'Top predictor leaderboard', href: '/predictors', icon: '🏆' },
+      { name: 'Leaderboard', desc: 'Top predictor leaderboard', href: '/predictors', icon: '🏆' },
       { name: 'Odds', desc: 'Cross-platform odds comparison', href: '/odds', icon: '🎲' },
       { name: 'AI Brief', desc: 'Daily AI market briefing', href: '/brief', icon: '🧠' },
       { name: 'Daily Brief', desc: 'Daily AI market briefing', href: '/brief', icon: '🧠' },
@@ -841,7 +853,7 @@
         '<div class="hfx-search-browse-pills">' +
           '<a class="hfx-search-pill" href="/alpha"><svg viewBox="0 0 24 24" fill="none" stroke="#00e68a" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg> Top Edges</a>' +
           '<a class="hfx-search-pill" href="/whales"><svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 008 0" stroke-linecap="round"/></svg> Whale Intel</a>' +
-          '<a class="hfx-search-pill" href="/predictors"><svg viewBox="0 0 24 24" fill="none" stroke="#c9920d" stroke-width="2"><path d="M12 2L15 8.5 22 9.5 17 14.5 18 21.5 12 18 6 21.5 7 14.5 2 9.5 9 8.5z" stroke-linejoin="round"/></svg> Predictors</a>' +
+          '<a class="hfx-search-pill" href="/predictors"><svg viewBox="0 0 24 24" fill="none" stroke="#c9920d" stroke-width="2"><path d="M12 2L15 8.5 22 9.5 17 14.5 18 21.5 12 18 6 21.5 7 14.5 2 9.5 9 8.5z" stroke-linejoin="round"/></svg> Leaderboard</a>' +
         '</div>' +
       '</div>';
 
@@ -1278,10 +1290,15 @@ window.showSkeletons = function(containerId, count, type) {
       { label: 'More',      icon: '☰',  more: true }, // opens the full nav-mobile-menu overlay
     ];
 
-    // Resolve profile link
+    // Resolve profile link. Logged-in (full JWT) takes priority; a
+    // wallet-only /connect visitor (no login) falls back to /connect
+    // itself, which auto-resumes from its own cache and re-renders their
+    // score — the equivalent of a profile page for that user. Only a
+    // visitor with neither falls through to sign-in.
     var uid = localStorage.getItem('hf_user_id') || localStorage.getItem('hfx_user_id') || '';
     var uname = localStorage.getItem('hf_username') || localStorage.getItem('hfx_username') || '';
-    items[4].href = uid ? ('/m/' + uid) : (uname ? ('/@' + uname) : '/creator/login');
+    var hasConnectCache = !!(localStorage.getItem('hf_connect_user_id') || localStorage.getItem('hf_connect_address'));
+    items[4].href = uid ? ('/m/' + uid) : (uname ? ('/@' + uname) : (hasConnectCache ? '/connect' : '/creator/login'));
 
     var nav = document.createElement('nav');
     nav.className = 'bottom-nav';

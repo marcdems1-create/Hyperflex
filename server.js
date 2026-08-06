@@ -16375,6 +16375,64 @@ app.get('/api/predictors/:userId/follow-status', optionalAuth, async (req, res) 
   res.json({ follower_count: count || 0, is_following: isFollowing });
 });
 
+// Comment thread on a trader's card/profile — schema ensured at boot
+// (trader_comments, see startup block near the `challenges` table).
+app.get('/api/predictors/:userId/comments', async (req, res) => {
+  const targetId = req.params.userId;
+  if (!pool) return res.json({ comments: [] });
+  try {
+    const rows = await dbQuery(
+      `SELECT trader_comments.id, trader_comments.content, trader_comments.created_at,
+              trader_comments.author_id, users.username, users.display_name
+       FROM trader_comments
+       LEFT JOIN users ON users.id = trader_comments.author_id
+       WHERE trader_comments.target_user_id = $1
+       ORDER BY trader_comments.created_at DESC
+       LIMIT 30`,
+      [targetId]
+    );
+    res.json({ comments: rows.map(r => ({
+      id: r.id,
+      content: r.content,
+      created_at: r.created_at,
+      author_id: r.author_id,
+      author: r.username ? '@' + r.username : (r.display_name || 'Trader'),
+    })) });
+  } catch (err) {
+    console.error('[trader comments GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/predictors/:userId/comments', requireAuth, async (req, res) => {
+  const targetId = req.params.userId;
+  const content = ((req.body && req.body.content) || '').trim().slice(0, 500);
+  if (!content) return res.status(400).json({ error: 'Comment text required' });
+  if (!pool) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const rows = await dbQuery(
+      'INSERT INTO trader_comments (target_user_id, author_id, content) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [targetId, req.user.id, content]
+    );
+    if (targetId !== req.user.id) {
+      let authorName = 'Someone';
+      try {
+        const u = await dbQuery('SELECT display_name, username FROM users WHERE id = $1 LIMIT 1', [req.user.id]).catch(() => []);
+        if (u.length) authorName = u[0].display_name || (u[0].username ? '@' + u[0].username : 'Someone');
+      } catch (e) {}
+      await pushNotification(
+        targetId, 'trader_comment', authorName + ' commented on your profile',
+        content.length > 120 ? content.slice(0, 120) + '…' : content,
+        null, null, { refType: 'trader_comment', refId: rows[0].id }
+      );
+    }
+    res.json({ comment: { id: rows[0].id, created_at: rows[0].created_at, content } });
+  } catch (err) {
+    console.error('[trader comments POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Toggle copy trade subscription
 app.post('/api/predictors/:userId/copy-trade', requireAuth, async (req, res) => {
   const subscriberId = req.user.id;
@@ -61604,6 +61662,18 @@ if (pool) {
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenged ON challenges(challenged_id, status, created_at DESC)').catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenger ON challenges(challenger_id, status, created_at DESC)').catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_condition ON challenges(condition_id) WHERE condition_id IS NOT NULL').catch(() => {});
+
+      // Lightweight comment thread on a trader's card/profile — Follow and
+      // Challenge already had endpoints (predictor_follows, challenges);
+      // this was the missing third leg for the card action row.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS trader_comments (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        target_user_id TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery('CREATE INDEX IF NOT EXISTS idx_trader_comments_target ON trader_comments(target_user_id, created_at DESC)').catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS creator_wall (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

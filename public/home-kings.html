@@ -533,6 +533,45 @@
   a.section-more{text-decoration:none;}
 
   .connect-err{color:var(--red);font-size:.8rem;margin:10px 0 0;line-height:1.4;}
+
+  /* ── card action row — Comment / Follow / Challenge, sits BELOW the card
+     link (never inside the <a>, since a nested interactive control inside
+     an anchor is invalid and would double-fire navigation on tap). The
+     wrapper keeps the existing .trader-card entrance-animation/scroll-snap
+     behavior untouched — data-observe and rail sizing still target the
+     inner <a>'s own layout via this wrapper. ── */
+  .trader-card-block{display:flex;flex-direction:column;gap:10px;}
+  .rail .trader-card-block{flex:0 0 84%;scroll-snap-align:start;}
+  .card-actions{display:flex;gap:6px;}
+  .card-actions button{flex:1;font-family:var(--font-sans);font-size:11px;font-weight:700;padding:8px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);cursor:pointer;transition:border-color .15s,color .15s,background .15s;white-space:nowrap;}
+  .card-actions button:hover{color:var(--ink);border-color:var(--ink-faint);}
+  .card-actions button.is-active{background:var(--green-soft);border-color:var(--green);color:var(--green);}
+  .card-actions button.hfx-act-challenge:hover{border-color:var(--red);color:var(--red);}
+
+  /* ── shared modal shell — Comment + Challenge reuse this ── */
+  .hfx-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(8px);z-index:9998;align-items:center;justify-content:center;padding:16px;}
+  .hfx-modal-overlay.open{display:flex;}
+  .hfx-modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto;}
+  .hfx-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;}
+  .hfx-modal-title{font-family:var(--font-sans);font-size:15px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .hfx-modal-close{background:none;border:0;color:var(--ink-muted);font-size:20px;line-height:1;cursor:pointer;padding:2px 6px;flex-shrink:0;}
+  .hfx-modal-close:hover{color:var(--ink);}
+  .hfx-modal-sub{font-family:var(--font-sans);font-size:12px;color:var(--ink-muted);line-height:1.5;margin-bottom:14px;}
+  .hfx-modal-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--ink);font-family:var(--font-sans);font-size:13px;resize:none;min-height:80px;margin-bottom:12px;outline:none;}
+  .hfx-modal-submit{width:100%;font-family:var(--font-sans);font-size:13px;font-weight:800;color:#151109;background:linear-gradient(180deg,var(--gold-bright),var(--gold));border:1px solid var(--gold);border-radius:var(--radius-sm);padding:11px;cursor:pointer;}
+  .hfx-modal-submit:hover{filter:brightness(1.05);}
+  .hfx-modal-submit:disabled{opacity:.6;cursor:default;}
+  .hfx-comment-list{max-height:200px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:10px;}
+  .hfx-comment-item{font-family:var(--font-sans);font-size:12.5px;line-height:1.5;color:var(--ink);border-bottom:1px solid var(--border);padding-bottom:8px;}
+  .hfx-comment-author{font-weight:700;color:var(--ink);margin-right:5px;}
+  .hfx-comment-time{font-size:10.5px;color:var(--ink-faint);margin-left:5px;}
+  .hfx-comment-empty{font-family:var(--font-sans);font-size:12px;color:var(--ink-muted);text-align:center;padding:12px 0;}
+  .hfx-side-row{display:flex;gap:8px;margin-bottom:12px;}
+  .hfx-side-row button{flex:1;font-family:var(--font-sans);font-size:12px;font-weight:700;padding:9px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);color:var(--ink-muted);cursor:pointer;}
+  .hfx-side-row button.active-yes{background:var(--green-soft);border-color:var(--green);color:var(--green);}
+  .hfx-side-row button.active-no{background:var(--red-soft);border-color:var(--red);color:var(--red);}
+  .hfx-stake-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--font-sans);font-size:12px;color:var(--ink-muted);}
+  .hfx-stake-row input[type=range]{flex:1;}
 </style>
 </head>
 <body>
@@ -617,6 +656,41 @@
     <p>SCORED ON DURABLE MARKETS ONLY &middot; LOSSES ARE NEVER HIDDEN</p>
   </footer>
 
+</div>
+
+<!-- Comment modal — shared across every card's Comment button -->
+<div class="hfx-modal-overlay" id="commentModal">
+  <div class="hfx-modal-box">
+    <div class="hfx-modal-head">
+      <div class="hfx-modal-title">Comment on <span id="commentTargetHandle"></span></div>
+      <button type="button" class="hfx-modal-close" id="commentCloseBtn">&times;</button>
+    </div>
+    <div class="hfx-comment-list" id="commentList"><div class="hfx-comment-empty">Loading…</div></div>
+    <textarea id="commentInput" maxlength="500" placeholder="Add a comment…"></textarea>
+    <button type="button" class="hfx-modal-submit" id="commentSubmitBtn">Post comment</button>
+  </div>
+</div>
+
+<!-- Challenge modal — same fields/endpoint as member.html's challenge flow -->
+<div class="hfx-modal-overlay" id="challengeModal">
+  <div class="hfx-modal-box">
+    <div class="hfx-modal-head">
+      <div class="hfx-modal-title">Challenge <span id="challengeTargetHandle"></span></div>
+      <button type="button" class="hfx-modal-close" id="challengeCloseBtn">&times;</button>
+    </div>
+    <div class="hfx-modal-sub">Publicly counter one of their calls. Posted to their notifications — the market resolution decides it, not a vote.</div>
+    <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis — what do you think actually happens?"></textarea>
+    <div class="hfx-side-row">
+      <button type="button" id="challengeSideYes">YES</button>
+      <button type="button" id="challengeSideNo">NO</button>
+    </div>
+    <div class="hfx-stake-row">
+      <span>Stake</span>
+      <input type="range" id="challengeStake" min="0" max="100" step="5" value="0">
+      <span><span id="challengeStakeLabel">0</span> Flex</span>
+    </div>
+    <button type="button" class="hfx-modal-submit" id="challengeSubmitBtn">Send challenge</button>
+  </div>
 </div>
 
 <script>
@@ -776,7 +850,7 @@ function cardArticleHtml(card, isHero){
   var trend = (card.form && card.form.length >= 2) ? card.form.map(function(v){ return Math.round(v * 100); }).join(',') : null;
   var ev = card.evidence;
 
-  var html = '<a class="trader-card' + (isHero ? ' hero-card' : '') + '" href="' + esc(hrefOf(card)) + '" data-observe>';
+  var html = '<div class="trader-card-block"><a class="trader-card' + (isHero ? ' hero-card' : '') + '" href="' + esc(hrefOf(card)) + '" data-observe>';
 
   html += '<div class="card-top"><div class="card-id">'
     + '<div class="card-id-row"><span class="avatar">' + initial + '</span>'
@@ -824,6 +898,8 @@ function cardArticleHtml(card, isHero){
     + '<span><span class="dot-sep">&middot;</span>' + esc(card.n) + ' resolved<span class="dot-sep">&middot;</span>' + esc(relFromDays(ev ? ev.days_ago : null) || '—') + '</span></div>';
 
   html += '</a>';
+  html += cardActionsHtml(card.user_id, handle);
+  html += '</div>';
   return html;
 }
 
@@ -893,6 +969,170 @@ document.getElementById('pasteBtn').addEventListener('click', function(){
   location.href = '/connect?address=' + encodeURIComponent(v);
 });
 document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('pasteBtn').click(); });
+
+/* ── Comment / Follow / Challenge — the action row under every card.
+   Markup lives outside the card's own <a> (see .trader-card-block above)
+   so these controls are never nested inside an anchor. Clicks are
+   delegated off document since cards re-render on every poll cycle. ── */
+function cardActionsHtml(uid, handle){
+  if (!uid) return '';
+  return '<div class="card-actions" data-uid="' + esc(uid) + '" data-handle="' + esc(handle || 'this trader') + '">'
+    + '<button type="button" class="hfx-act-comment">Comment</button>'
+    + '<button type="button" class="hfx-act-follow">Follow</button>'
+    + '<button type="button" class="hfx-act-challenge">Challenge</button>'
+    + '</div>';
+}
+
+function hfxToken(){
+  return localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || localStorage.getItem('hf_creator_token');
+}
+function hfxAuthExpired(){
+  localStorage.removeItem('hf_token'); localStorage.removeItem('hf_member_token');
+  alert('Session expired. Sign in again.');
+}
+function fmtRelTime(iso){
+  var d = new Date(iso), s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+// ── Follow ──
+function hfxFollow(uid, btn){
+  var token = hfxToken();
+  if (!token) { alert('Sign in to follow predictors.'); return; }
+  btn.disabled = true;
+  fetch('/api/predictors/' + encodeURIComponent(uid) + '/follow', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token }
+  }).then(function(r){
+    if (r.status === 401 || r.status === 403) { hfxAuthExpired(); throw new Error('auth'); }
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.json();
+  }).then(function(d){
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.classList.toggle('is-active', !!d.following);
+  }).catch(function(e){
+    if (e.message !== 'auth') alert('Follow failed. Try again.');
+  }).finally(function(){ btn.disabled = false; });
+}
+
+// ── Comment ──
+var _commentTargetUid = null;
+function hfxOpenComments(uid, handle){
+  _commentTargetUid = uid;
+  document.getElementById('commentTargetHandle').textContent = handle;
+  document.getElementById('commentInput').value = '';
+  document.getElementById('commentList').innerHTML = '<div class="hfx-comment-empty">Loading…</div>';
+  document.getElementById('commentModal').classList.add('open');
+  fetch('/api/predictors/' + encodeURIComponent(uid) + '/comments')
+    .then(function(r){ return r.ok ? r.json() : { comments: [] }; })
+    .then(function(d){
+      var list = document.getElementById('commentList');
+      var comments = (d && d.comments) || [];
+      if (!comments.length) { list.innerHTML = '<div class="hfx-comment-empty">No comments yet. Be first.</div>'; return; }
+      list.innerHTML = comments.map(function(c){
+        return '<div class="hfx-comment-item"><span class="hfx-comment-author">' + esc(c.author) + '</span>' + esc(c.content)
+          + '<span class="hfx-comment-time">' + esc(fmtRelTime(c.created_at)) + '</span></div>';
+      }).join('');
+    })
+    .catch(function(){ document.getElementById('commentList').innerHTML = '<div class="hfx-comment-empty">Could not load comments.</div>'; });
+}
+function hfxCloseComments(){ document.getElementById('commentModal').classList.remove('open'); _commentTargetUid = null; }
+function hfxSubmitComment(){
+  var token = hfxToken();
+  if (!token) { alert('Sign in to comment.'); return; }
+  var input = document.getElementById('commentInput');
+  var content = (input.value || '').trim();
+  if (!content) { input.focus(); return; }
+  if (!_commentTargetUid) return;
+  var btn = document.getElementById('commentSubmitBtn');
+  btn.disabled = true;
+  fetch('/api/predictors/' + encodeURIComponent(_commentTargetUid) + '/comments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ content: content })
+  }).then(function(r){
+    if (r.status === 401 || r.status === 403) { hfxAuthExpired(); throw new Error('auth'); }
+    if (!r.ok) { return r.json().catch(function(){ return {}; }).then(function(e){ throw new Error(e.error || 'http ' + r.status); }); }
+    return r.json();
+  }).then(function(){
+    input.value = '';
+    hfxOpenComments(_commentTargetUid, document.getElementById('commentTargetHandle').textContent);
+  }).catch(function(e){
+    if (e.message !== 'auth') alert(e.message || 'Comment failed. Try again.');
+  }).finally(function(){ btn.disabled = false; });
+}
+document.getElementById('commentCloseBtn').addEventListener('click', hfxCloseComments);
+document.getElementById('commentModal').addEventListener('click', function(e){ if (e.target.id === 'commentModal') hfxCloseComments(); });
+document.getElementById('commentSubmitBtn').addEventListener('click', hfxSubmitComment);
+
+// ── Challenge — same fields/endpoint as member.html's challenge flow ──
+var _challengeTargetUid = null, _challengeSide = null;
+function hfxOpenChallenge(uid, handle){
+  _challengeTargetUid = uid; _challengeSide = null;
+  document.getElementById('challengeTargetHandle').textContent = handle;
+  document.getElementById('challengeThesis').value = '';
+  document.getElementById('challengeStake').value = 0;
+  document.getElementById('challengeStakeLabel').textContent = '0';
+  document.getElementById('challengeSideYes').classList.remove('active-yes');
+  document.getElementById('challengeSideNo').classList.remove('active-no');
+  document.getElementById('challengeModal').classList.add('open');
+}
+function hfxCloseChallenge(){ document.getElementById('challengeModal').classList.remove('open'); _challengeTargetUid = null; }
+document.getElementById('challengeSideYes').addEventListener('click', function(){
+  _challengeSide = 'YES';
+  document.getElementById('challengeSideYes').classList.add('active-yes');
+  document.getElementById('challengeSideNo').classList.remove('active-no');
+});
+document.getElementById('challengeSideNo').addEventListener('click', function(){
+  _challengeSide = 'NO';
+  document.getElementById('challengeSideNo').classList.add('active-no');
+  document.getElementById('challengeSideYes').classList.remove('active-yes');
+});
+document.getElementById('challengeStake').addEventListener('input', function(){
+  document.getElementById('challengeStakeLabel').textContent = this.value;
+});
+document.getElementById('challengeCloseBtn').addEventListener('click', hfxCloseChallenge);
+document.getElementById('challengeModal').addEventListener('click', function(e){ if (e.target.id === 'challengeModal') hfxCloseChallenge(); });
+document.getElementById('challengeSubmitBtn').addEventListener('click', function(){
+  var token = hfxToken();
+  if (!token) { alert('Sign in to challenge predictors.'); return; }
+  var thesis = (document.getElementById('challengeThesis').value || '').trim();
+  if (!thesis) { document.getElementById('challengeThesis').focus(); return; }
+  if (!_challengeSide) { alert('Pick YES or NO — the side you\'re staking.'); return; }
+  if (!_challengeTargetUid) return;
+  var stake = parseInt(document.getElementById('challengeStake').value || '0', 10) || 0;
+  var handle = document.getElementById('challengeTargetHandle').textContent;
+  var btn = document.getElementById('challengeSubmitBtn');
+  btn.disabled = true;
+  fetch('/api/challenges', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ challenged_id: _challengeTargetUid, thesis: thesis, challenger_side: _challengeSide, stake_flex: stake })
+  }).then(function(r){
+    if (r.status === 401 || r.status === 403) { hfxAuthExpired(); throw new Error('auth'); }
+    if (!r.ok) { return r.json().catch(function(){ return {}; }).then(function(e){ throw new Error(e.error || 'http ' + r.status); }); }
+    return r.json();
+  }).then(function(){
+    hfxCloseChallenge();
+    setTimeout(function(){ alert('Challenge sent to ' + handle + '. They\'ll see it in their notifications.'); }, 150);
+  }).catch(function(e){
+    if (e.message !== 'auth') alert(e.message || 'Challenge failed. Try again.');
+  }).finally(function(){ btn.disabled = false; });
+});
+
+// Delegated click handler for every card's action row (cards re-render on
+// each poll, so binding per-button at render time would leak listeners).
+document.addEventListener('click', function(e){
+  var row = e.target.closest('.card-actions');
+  if (!row || !e.target.closest('button')) return;
+  e.preventDefault(); e.stopPropagation();
+  var uid = row.getAttribute('data-uid'), handle = row.getAttribute('data-handle');
+  if (e.target.classList.contains('hfx-act-comment')) hfxOpenComments(uid, handle);
+  else if (e.target.classList.contains('hfx-act-follow')) hfxFollow(uid, e.target);
+  else if (e.target.classList.contains('hfx-act-challenge')) hfxOpenChallenge(uid, handle);
+});
 </script>
 </body>
 </html>
