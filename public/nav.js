@@ -309,13 +309,24 @@
       '.nav-search-btn span{font-family:"Inter",-apple-system,sans-serif;font-size:11px;color:#8888a0;white-space:nowrap}' +
       '.nav-search-btn kbd{font-family:"Inter",-apple-system,sans-serif;font-size:10px;color:#666680;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:4px;padding:1px 5px;margin-left:4px}' +
       '@media(max-width:768px){.nav-search-btn kbd{display:none}.nav-search-btn span{display:none}}' +
-      /* Desktop scale-up (>=1024px) — the topbar was tiny site-wide at every
+      /* Desktop scale-up (>=1900px) — the topbar was tiny site-wide at every
          width (11-12px link/pill text, 18px logo, 6px gaps). Placed after
          every base rule it overrides (including .nav-search-btn above) —
          a media query does NOT win on specificity alone; a later
          equal-specificity unconditional rule would otherwise clobber it.
-         Mobile (<1024px, see the max-width:768px blocks above) is untouched. */
-      '@media(min-width:1024px){' +
+         Mobile (<768px, see the max-width:768px blocks above) is untouched.
+         Threshold raised 1024->1900 (2026-08-06): at 1024px the scale-up's
+         24px links + 40px logo + full search pill + wallet pill measured
+         out to ~1900px of required width with the current primaryLinks
+         count — every real laptop viewport (1280-1728px) was silently
+         overflowing the search button and wallet pill off-canvas past the
+         right edge, invisible unless you measured getBoundingClientRect
+         instead of just checking the accessibility tree. The compact style
+         below (12px/6px-10px) comfortably fits ~1050px total even at 10
+         primaryLinks, confirmed at 1000px viewport — so it's now the
+         default for the entire realistic desktop range, and the scale-up
+         only engages on genuinely wide monitors where it actually fits. */
+      '@media(min-width:1900px){' +
         '.topbar{padding:30px 40px}' +
         '.topbar-logo{font-size:40px}' +
         '.nav-links{gap:18px}' +
@@ -392,6 +403,7 @@
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
+    { href: '/incentives', label: 'Yield', gold: true },
     { href: '/finance', label: 'Markets' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
@@ -446,7 +458,6 @@
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
     { href: '/challenges', label: '⚔ Challenges', gold: true },
-    { href: '/incentives', label: '💸 Incentives', gold: true },
     { href: '/brief', label: '🧠 AI Brief', gold: true },
     { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/methodology', label: '✓ Track Record', gold: true },
