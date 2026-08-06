@@ -49,6 +49,34 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-05c (wallet-position-schema merge confirmed live; mobile nav hamburger shipped; found + parked a stash conflict)
+
+**Shipped (with hashes):**
+- `5fa8536` (pushed to `main`, verified live) — mobile bottom nav gets a 6th "More" (☰) item that opens the existing `#navMobileMenu` overlay. The bottom-nav bar (added after the desktop hamburger) hides `.nav-hamburger`/`.nav-links` below 768px but only ever exposed 5 fixed destinations (Home/Feed/Alpha/Leaderboard/Profile) — mobile users had no way to reach Traders/Explore/Messages/Connect Wallet/sign-in/etc. Reused the already-built full-link overlay instead of duplicating its link list. Bumped `nav.js?v=26→27` across all 42 pages that load it. Verified live: More opens the overlay, close button closes it, correct link list rendered (screenshot-checked at 375px).
+- `9d7341d`+follow-ups (`GET /api/admin/wallet-position-schema`) — **not shipped this session**, was already merged to `main` (via `666cb5c`) before this session started. Confirmed deployed and functioning (no-secret request returns clean `403 {"error":"Forbidden"}`, not a crash).
+
+**Active blockers:**
+- **`GET /api/admin/wallet-position-schema` verification curl still not run.** Marc asked for the full JSON dump; Claude has no `ADMIN_SECRET` in this environment (not in shell env, not in local `.env`, no Railway CLI access) and cannot fabricate/guess it. Marc tried running it himself and got a raw `{"error":"Forbidden"}` (403) — meaning whatever `$ADMIN_SECRET` resolved to in his shell didn't match the real value either. **Needs Marc to run the curl with the actual secret value and paste the output back**, or share the value directly.
+- **`stash@{0}` ("pre-existing WIP: primaryLinks edit, home-kings comment/challenge modals, finance nav migration, resync backfill work") has an unresolved conflict and is NOT applied to the working tree.** Contents, all uncommitted from a prior session:
+  - `CLAUDE.md` — a full documentation section ("Shared nav bar — legacy pages silently drift out of sync") that applies cleanly, no conflict. Safe to land whenever someone commits the stash.
+  - `public/nav.js` (desktop `primaryLinks`) — removes "My Score"/"World Cup" links, renames "Predictors"→"Leaderboard". Applies cleanly against current `nav.js`.
+  - `public/finance.html` — the nav.js migration mentioned in that CLAUDE.md section (ripping out finance's hardcoded topbar). Applies cleanly.
+  - `server.js` — resync-queue no-op-skip guard (`_resyncNoop` map, `RESYNC_NOOP_SKIP_AT`) to stop the sold-trades resync from re-selecting a wallet that changes nothing every tick. Applies cleanly.
+  - `public/home-kings.html` — a substantial Comment/Follow/Challenge modal feature. **Conflicts hard** — built against the pre-redesign `home-kings.html`, and `home-kings.html` has since been fully rewritten upstream (`84ceeed`/`a6aaf57`/`ee2b0b4`/`73d26d5`, "restyle to the design artifact"). Did not attempt to auto-resolve a feature-level conflict on someone else's unfinished work.
+  - Three OLDER unrelated stashes (`stash@{1..3}`, pre-dating this session — email-blast deletion, Market Intel restructure, mobile-responsiveness pass) also still sit in the stash list, untouched, not investigated this session.
+
+**Queued (priority order):**
+1. Get the real `ADMIN_SECRET` value from Marc (or have him run the curl) to close out the wallet-position-schema ask.
+2. Decide what to do with `stash@{0}`: the CLAUDE.md doc + nav.js primaryLinks + finance.html + server.js pieces are cheap wins (clean apply, just need `git stash pop` isolated to those 4 files + a commit). The home-kings.html modal feature needs a real decision — rebuild against the new design, or drop it — before it can land.
+
+**Open questions / unverified:**
+- Whether the home-kings.html Comment/Follow/Challenge modal feature in `stash@{0}` is still wanted post-redesign, or was superseded by whatever the redesign session built instead.
+
+**Notes for next session:**
+- **Process lesson:** mid-session, another Claude instance pushed `6b41c25` (Leaderboard swap in the same bottom-nav array) while this session was investigating what looked like a Cloudflare cache-staleness issue on production. It wasn't a cache bug — it was a plain git race (local `main` was one fetch behind origin). Don't chase a CDN-caching theory before confirming `git fetch` is current; a live `curl` diffed against a stale local `git show HEAD:<file>` will always look like drift.
+- **Technique that worked well:** when a target file has unrelated uncommitted WIP already sitting dirty in the working tree, isolate your own edit by building it on top of `git show HEAD:<file>`, then stage that content directly via `git hash-object -w` + `git update-index --cacheinfo 100644,<hash>,<path>` — this stages exactly your change into the index while leaving the working-tree file (and the other person's WIP) completely untouched. Used successfully on `public/nav.js` and `public/home-kings.html` this session to avoid accidentally committing someone else's in-flight feature work.
+- nav.js bottom-nav "More" button pattern: don't rebuild the mobile link list a third time anywhere — it opens `#navMobileMenu`, the same overlay the (mobile-hidden) hamburger button already built.
+
 ## 2026-08-05b (⛔ I BROKE THE PLATFORM-WIDE RESYNC, then found the repair queue was structurally unable to fix already-migrated wallets)
 
 **Trigger:** Marc asked to audit the detection→repair mechanism as a whole after TheQuietRisk stayed unrepaired through several deploys. Two separate defects, one of them mine from an hour earlier.
