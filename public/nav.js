@@ -1291,7 +1291,7 @@ window.showSkeletons = function(containerId, count, type) {
       { label: 'Home',      icon: '⌂',  href: '/' },
       { label: 'Feed',      icon: '◈',  href: '/feed' },
       { label: 'Alpha',     icon: '⚡', href: '/alpha-live' },
-      { label: 'World Cup', icon: '⚽', href: '/worldcup' },
+      { label: 'Leaderboard', icon: '🏆', href: '/traders' },
       { label: 'Profile',   icon: '👤', href: null }, // resolved at runtime
     ];
 
