@@ -316,6 +316,16 @@
     background:var(--green);
     flex:0 0 auto;
   }
+  .card-handle{
+    font-family:var(--font-sans);
+    font-size:0.78rem;
+    font-weight:600;
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:104px;
+  }
   .scope-chip{
     font-family:var(--font-mono);
     font-size:0.62rem;
@@ -763,6 +773,7 @@ function cardArticleHtml(card, isHero){
 
   html += '<div class="card-top"><div class="card-id">'
     + '<span class="avatar">' + initial + '</span>'
+    + '<span class="card-handle">' + esc(handle) + '</span>'
     + '<span class="verified-dot" title="Verified"></span>'
     + '<span class="scope-chip">DURABLE &middot; N=' + esc(card.n) + '</span>'
     + '</div>';
