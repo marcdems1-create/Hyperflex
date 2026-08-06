@@ -47210,7 +47210,13 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       // Safety cap. If we hit it, this wallet's history is INCOMPLETE — the
       // computed segment set is not authoritative and must not be used to
       // delete existing rows (see the group reconcile below).
-      if (offset >= 10000) { activityTruncated = true; break; }
+      // Raised 10k → 40k on 2026-08-05: at 10k, high-activity wallets were
+      // being skipped entirely and could never migrate off the old key
+      // formats, so they stuck at the front of the deterministic resync
+      // ordering and blocked the queue behind them. 40k covers every wallet
+      // observed to date (largest measured: 5,501 events) with headroom,
+      // at 80 paginated requests worst case.
+      if (offset >= 40000) { activityTruncated = true; break; }
     }
   } catch (e) {
     fetchError = e.message;
@@ -47612,7 +47618,10 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   // trades>0, groups>0, closed>0, imported=0 → all already imported (ON CONFLICT)
   // trades>0, closed>0, imported>0 → working
   console.log(`[backfill] user=${userId.slice(0,8)} proxy=${proxyLower.slice(0,10)} trades=${trades.length} groups=${groups.size} closed=${resolvedCount} sold_imported=${imported - redeemedImported} redeemed_found=${redeemedCount} redeemed_imported=${redeemedImported} redeemed_unverified_skipped=${redeemedUnverifiedSkipped} future_dated_skipped=${futureDatedSkipped} total_imported=${imported}`);
-  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount, redeemed_unverified_skipped: redeemedUnverifiedSkipped, future_dated_skipped: futureDatedSkipped };
+  // `truncated` is reported so a caller can tell "nothing needed doing" apart
+  // from "we refused to write because the history was incomplete". Without
+  // it, a truncated wallet looks like an unexplained no-op.
+  return { imported, scanned: trades.length, resolved: resolvedCount, total_found: trades.length, redeemed: redeemedCount, redeemed_unverified_skipped: redeemedUnverifiedSkipped, future_dated_skipped: futureDatedSkipped, truncated: activityTruncated };
 }
 
 // ── WHALE BACKFILL CRON ─────────────────────────────────────────────────────
@@ -64283,6 +64292,17 @@ const _resyncPriority = new Map(); // userId -> attempts
 // is in the backfill logic, not the queue, and needs a human.
 const _resyncUnrepairable = new Map(); // userId -> { attempts, at, sold_rows }
 const RESYNC_MAX_ATTEMPTS = 3;
+// ⚠️ QUEUE-BLOCKING GUARD. Selection is deterministic (ORDER BY … user_id),
+// so a wallet that is selected but produces no change is selected AGAIN on
+// the very next tick — forever — and the 50-wallet batch never advances past
+// it. Observed live 2026-08-05: a wallet whose /activity feed exceeded the
+// page cap had all writes skipped by the truncation guard, so it retired no
+// old-format rows, stayed matching the WHERE clause, and would have pinned
+// the front of the queue indefinitely.
+// Wallets that change nothing twice are skipped so the backlog can drain.
+// Verifier-flagged and explicitly-targeted wallets are never skipped.
+const _resyncNoop = new Map(); // userId -> consecutive no-op count
+const RESYNC_NOOP_SKIP_AT = 2;
 let _soldResyncRunning = false;
 let _soldResyncLastRun = null;
 // Cumulative across every tick since this process booted — in-memory only,
@@ -64338,10 +64358,16 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       -- built by the exact-zero flat check, which discarded whole closed
       -- positions over rounding dust and dropped every partial exit).
       AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.external_sync_id LIKE 'pm-act2:%' OR rt.user_id::text = ANY($${fp}::text[]))
+      -- Skip wallets that changed nothing twice, unless flagged/targeted.
+      -- Without this the batch re-picks the same stuck wallets every tick.
+      AND (rt.user_id::text = ANY($${fp}::text[]) OR NOT (rt.user_id::text = ANY($${fp + 1}::text[])))
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
     ORDER BY is_flagged DESC, is_public DESC, user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
-  `, targetUserId ? [targetUserId, flagged] : [flagged])
+  `, (() => {
+    const skip = [..._resyncNoop.entries()].filter(([, n]) => n >= RESYNC_NOOP_SKIP_AT).map(([id]) => id);
+    return targetUserId ? [targetUserId, flagged, skip] : [flagged, skip];
+  })())
     .catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
   if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
 
@@ -64387,6 +64413,11 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       // old-format rows were retired. Both zero means the rebuild produced
       // exactly what was already there.
       const changed = gained !== 0 || oldRetired !== 0;
+      // Track consecutive no-ops so a wallet that cannot migrate stops
+      // occupying a batch slot on every tick. A wallet that changes is
+      // cleared immediately, so this only accumulates on genuinely stuck ones.
+      if (changed) _resyncNoop.delete(u.user_id);
+      else _resyncNoop.set(u.user_id, (_resyncNoop.get(u.user_id) || 0) + 1);
       nGained += gained;
       fixed++;
       // Retire it from the priority set — but only claim the repair worked
@@ -64669,6 +64700,10 @@ app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, 
       // Verifier-flagged wallets awaiting repair, and wallets repair could
       // not change. A non-empty `unrepairable` is the signal that the defect
       // has moved from this queue into backfillRealizedTrades itself.
+      // Wallets skipped because repeated runs changed nothing — usually an
+      // activity feed too large to reconcile, so writes are refused rather
+      // than risk a partial rebuild. These keep their existing rows.
+      skipped_no_op: [..._resyncNoop.entries()].filter(([, n]) => n >= RESYNC_NOOP_SKIP_AT).map(([user_id, n]) => ({ user_id, consecutive_no_ops: n })),
       verifier_flagged_queue: [..._resyncPriority.entries()].map(([user_id, attempts]) => ({ user_id, attempts })),
       unrepairable: [..._resyncUnrepairable.entries()].map(([user_id, v]) => ({ user_id, ...v })),
       wallets_remaining: totalsRows[0] ? totalsRows[0].wallets : null,

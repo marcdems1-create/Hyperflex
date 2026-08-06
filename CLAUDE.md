@@ -461,6 +461,20 @@ Social products compound. Every take posted is content. Every follow is a connec
 
 ---
 
+## ⚠️ Shared nav bar (`public/nav.js`) — legacy pages silently drift out of sync
+
+**Most pages get their top nav from `nav.js`, not their own markup.** It self-mounts: include `<script src="/nav.js?v=26"></script>` and it injects a `<nav class="topbar">` (logo, `primaryLinks` array, search, wallet/auth, mobile menu) as the first child of `<body>` — no placeholder markup required, though it'll use `#nav-root` if present. `primaryLinks` (nav.js, search `var primaryLinks =`) is the single source of truth for desktop nav link text/order/routes. Edit labels/links there, not per-page.
+
+**Some older pages never got wired to it and instead hand-rolled their own topbar** (`.topbar` / `.nav-tabs` / `.nav-links` markup with hardcoded `<a>` tags). These pages silently go stale every time `primaryLinks` changes — that's exactly what happened with `/finance` (fixed 2026-08-05: ripped out its hardcoded topbar, switched to `nav.js`). **Before considering any nav-copy or nav-structure change complete, re-run this and check whether any hits are pages Marc actually visits** (skip pure `/admin-*` tooling):
+```
+cd public && for f in *.html; do grep -q "nav\.js" "$f" || grep -qE "class=\"nav-tabs\"|class=\"nav-links\"|class=\"topbar\"" "$f" && echo "$f"; done
+```
+As of 2026-08-05 that lists `signals.html`, `discuss.html`, `group.html`, `ipo.html`, `messages.html`, `picks.html`, `portfolio.html`, `sports-predictors.html` (plus a few `admin-*.html` tools, lower priority) as still hand-rolled — **do not trust this list itself as still accurate**, re-run the grep, it will have moved. When migrating one of these: delete its hardcoded topbar markup + CSS, add the `nav.js` script tag near `</body>`, and re-home any page-specific header widget (e.g. a live-count pill) into a lower banner row instead of overlapping `nav.js`'s own right-side search/wallet cluster — don't hardcode a pixel offset to dodge it, that's what broke `/finance`'s first pass.
+
+**Local caveat:** the Browser pane renders `file://` pages as static snapshots (no JS execution), so you cannot verify a `nav.js` migration by opening the file directly — and CLAUDE.md rule 7 forbids starting `server.js` locally to check either. Verify by comparing against a live page that already uses the pattern (e.g. `/alpha-live` on production), and flag to Marc that a post-deploy visual check is still owed.
+
+---
+
 ## Alpha Engine (the trader-facing core)
 
 `buildAlphaList()` in `server.js` is the **single source of truth** for enriched market data. Both `/api/screener` and `/api/alpha/top` read from it. `/api/signals` cross-references the same `_screenerCache`. Add new alpha surfaces by reading `buildAlphaList()` — never duplicate the enrichment loop.
