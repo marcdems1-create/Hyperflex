@@ -110,12 +110,26 @@
       .chart-badge-val{font-size:18px}
     }
 
+    /* Verification badge */
+    .verify{display:flex;align-items:flex-start;gap:14px;margin-top:22px;padding:16px 20px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.02);max-width:900px}
+    .verify.ok{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)}
+    .verify.part{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.06)}
+    .verify.bad{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.07)}
+    .verify-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-top:8px;background:var(--dim)}
+    .verify.ok .verify-dot{background:var(--green)}
+    .verify.part .verify-dot{background:#f59e0b}
+    .verify.bad .verify-dot{background:var(--red)}
+    .verify-label{font-size:21px;font-weight:600;color:var(--ink);line-height:1.3}
+    .verify-detail{font-size:17px;color:var(--soft);line-height:1.55;margin-top:5px}
+
     /* Open positions — the copyable layer */
     .open-side{display:inline-block;font-family:var(--mono);font-size:19px;font-weight:700;padding:3px 12px;border-radius:6px;background:rgba(34,211,238,0.12);color:var(--cyan);margin-right:14px;vertical-align:2px}
     .open-live{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:19px;color:var(--green);text-transform:none;letter-spacing:0}
     .open-live::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--green)}
     .row-link{color:var(--cyan)}
     .row-link:hover{text-decoration:underline}
+    .open-exposure{padding:0 52px 20px;font-size:20px;color:var(--soft);line-height:1.55;max-width:1100px}
+    .open-exposure b{color:var(--ink);font-weight:600}
     .row-copy{border-color:rgba(34,197,94,0.35);color:var(--green)}
     .row-copy:hover{border-color:var(--green);background:rgba(34,197,94,0.08)}
 
@@ -154,7 +168,7 @@
 </head>
 <body>
   <div id="nav-root"></div>
-  <script src="/nav.js?v=25"></script>
+  <script src="/nav.js?v=26"></script>
 
   <div class="wrap">
     <div id="root"><div class="skeleton">Loading profile…</div></div>
@@ -377,12 +391,18 @@
 
       var bio = d.trade_bio ? '<div class="trade-bio">' + esc(d.trade_bio) + '</div>' : '';
 
+      // Verification badge — filled async by loadVerification(). The card
+      // asserts this record is reconciled against on-chain activity; this
+      // is where a visitor can actually see that check's result rather
+      // than take it on trust.
+      var verifySlot = '<div id="verifySlot"></div>';
+
       var hero =
         '<div class="hero">' +
           '<div class="score-row">' +
             '<span class="score' + (flexNum==='—'?' mute':'') + '">' + flexNum + '</span>' +
             '<span class="score-lbl">flex score</span>' +
-          '</div>' + bio +
+          '</div>' + verifySlot + bio +
         '</div>';
 
       // ── stat quad
@@ -397,13 +417,13 @@
             '<div class="q-sub">avg ' + cents(d.clv_avg_cents) + '</div></div>' +
           '<div class="q"><div class="q-lbl">win rate</div>' +
             '<div class="q-val">' + pct(winRate, 0) + '</div>' +
-            '<div class="q-sub">' + (nCount != null ? 'n = ' + nCount : '—') + '</div></div>' +
+            '<div class="q-sub">' + (nCount != null ? nCount + ' trades' : '—') + '</div></div>' +
           '<div class="q"><div class="q-lbl">realized ROI</div>' +
             '<div class="q-val ' + (roi == null ? '' : (roi >= 0 ? 'pos' : 'neg')) + '">' + signedPct(roi) + '</div>' +
             '<div class="q-sub">' + (c && c.total_staked_usd ? usd(c.total_staked_usd) + ' staked' : 'all time') + '</div></div>' +
           '<div class="q"><div class="q-lbl">wallet class</div>' +
             '<div class="q-val cy">' + (CLASS_LABEL[wc] || '—') + '</div>' +
-            '<div class="q-sub">' + (d.clv_sample_size ? 'n = ' + d.clv_sample_size : 'unrated') + '</div></div>' +
+            '<div class="q-sub">' + (d.clv_sample_size ? d.clv_sample_size + ' trades' : 'unrated') + '</div></div>' +
         '</div>';
 
       // ── meta strip
@@ -492,6 +512,7 @@
         '<div class="card">' + head + hero + quad + strip + risk + chart + openSlot + ledger + foot + '</div>';
 
       if (d.polymarket_address) loadOpenPositions(d.polymarket_address, d.durable_verified === true, d.id);
+      loadVerification(name);
     }
 
     // Internal market page keeps the trade on our builder-fee path; falls
@@ -522,6 +543,43 @@
       return '/market/' + m[1] + '?' + params.join('&');
     }
 
+    // Public verification badge. The card claims this record is reconciled
+    // against on-chain activity — this shows the actual result of that
+    // check, including when it's only partial. Never rounds "unconfirmable"
+    // up to "verified".
+    function loadVerification(handle){
+      fetch('/api/verify-record/' + encodeURIComponent(handle))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(v){
+          var slot = document.getElementById('verifySlot');
+          if (!slot || !v || !v.status) return;
+          var cls = v.status === 'verified' ? 'ok' : (v.status === 'failed' ? 'bad' : 'part');
+          var label = v.status === 'verified' ? 'Verified against on-chain activity'
+                    : (v.status === 'failed' ? 'Failed verification' : 'Partially verified');
+          var oc = v.on_chain || {};
+          var detail = [];
+          if (oc.trades_in_our_record != null) {
+            var d1 = oc.trades_in_our_record + ' trades re-derived from this wallet\'s own transactions';
+            // State the scoring subset when it differs, so "N verified" is
+            // never read as "N trades behind the score".
+            if (oc.trades_counting_toward_score != null && oc.trades_counting_toward_score < oc.trades_in_our_record) {
+              d1 += ' (' + oc.trades_counting_toward_score + ' carry the return data needed to rank)';
+            }
+            detail.push(d1);
+          }
+          if (oc.trades_with_no_matching_on_chain_activity > 0) detail.push(oc.trades_with_no_matching_on_chain_activity + ' with no matching on-chain activity');
+          var rr = v.resolutions || {};
+          if (rr.graded_on_unresolved_markets > 0) detail.push(rr.graded_on_unresolved_markets + ' graded on unresolved markets');
+          slot.innerHTML = '<div class="verify ' + cls + '">' +
+            '<span class="verify-dot"></span>' +
+            '<div><div class="verify-label">' + esc(label) + '</div>' +
+            '<div class="verify-detail">' + esc(detail.join(' · ') || v.summary) +
+            ' · <a href="/api/verify-record/' + encodeURIComponent(handle) + '" style="color:var(--cyan)">see the check</a>' +
+            ' · <a href="/methodology" style="color:var(--cyan)">method</a></div></div></div>';
+        })
+        .catch(function(){});
+    }
+
     function loadOpenPositions(addr, copyable, traderId){
       fetch('/api/polymarket/positions/' + encodeURIComponent(addr))
         .then(function(r){ return r.ok ? r.json() : null; })
@@ -543,9 +601,39 @@
               'No open positions — nothing live to follow right now.</div></div>';
             return;
           }
+          // ── Open exposure vs the closed record ────────────────────────
+          // A win rate counts CLOSED trades only, so a wallet that closes
+          // winners and simply never realises losers shows a spotless
+          // record while underwater. The closed number isn't wrong; it's
+          // incomplete. Sum what's still open and say so whenever real
+          // money is sitting at a loss, so the record can't imply more
+          // than it measures. (Checked on the board's 100%-win-rate
+          // wallet — it came back genuinely clean, but nothing was
+          // detecting this, and it's precisely how a perfect record gets
+          // manufactured without a single fabricated trade.)
+          var allOpen = all.filter(function(p){ return !p.settled; });
+          var openCost = 0, openPnl = 0, underwater = 0, underwaterPnl = 0;
+          allOpen.forEach(function(p){
+            var cb = num(p.cost_basis) || 0, pl = num(p.pnl) || 0;
+            openCost += cb; openPnl += pl;
+            if (pl < 0) { underwater++; underwaterPnl += pl; }
+          });
+          var exposure = '';
+          if (allOpen.length) {
+            var expCls = openPnl >= 0 ? 'pos' : 'neg';
+            exposure = '<div class="open-exposure">' +
+              'Still open: <b>' + allOpen.length + '</b> position' + (allOpen.length === 1 ? '' : 's') +
+              ', ' + usd(openCost) + ' at risk, ' +
+              '<span class="' + expCls + '">' + signedUsd(openPnl) + '</span> unrealised' +
+              (underwater > 0
+                ? ' · <span class="neg">' + underwater + ' underwater (' + signedUsd(underwaterPnl) + ')</span>'
+                : '') +
+              '. The win rate above counts closed trades only.</div>';
+          }
+
           slot.innerHTML =
             '<div class="led-head with-live"><span>open positions</span>' +
-            '<span class="open-live">' + open.length + ' live</span></div>' +
+            '<span class="open-live">' + open.length + ' live</span></div>' + exposure +
             open.map(function(p){
               var pnl = num(p.pnl), pnlPct = num(p.pnl_pct);
               var cls = pnl == null ? '' : (pnl > 0 ? 'pos' : (pnl < 0 ? 'neg' : ''));

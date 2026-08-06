@@ -454,6 +454,12 @@
   var _hfToken = localStorage.getItem('hf_token');
   var _hfCreatorToken = localStorage.getItem('hf_creator_token');
   var isLoggedIn = !!(_hfToken || _hfCreatorToken);
+  // A connected wallet is its own auth state (see /connect) — "Sign in" is
+  // the legacy JWT login and must not show alongside a connected wallet
+  // pill. isAuthed governs Sign-in visibility; isLoggedIn alone still gates
+  // JWT-only surfaces (bell, unread badges) that a wallet-only user can't use.
+  var _hfxWalletConnected = !!localStorage.getItem('hfx_wallet_address');
+  var isAuthed = isLoggedIn || _hfxWalletConnected;
 
   // Decode user ID from JWT for profile link
   var _navUserId = null;
@@ -513,9 +519,9 @@
         '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
         '<span id="navWalletLabel">Connect</span>' +
       '</button>' +
-      (isLoggedIn
+      (isAuthed
         ? ''
-        : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="nav-signin">Sign in</a>') +
+        : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="nav-signin" id="navSignin">Sign in</a>') +
     '</div>' +
     '<button class="nav-hamburger" id="navHamburger">' +
       '<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' +
@@ -526,6 +532,28 @@
     root.appendChild(nav);
   } else {
     document.body.insertBefore(nav, document.body.firstChild);
+  }
+
+  // ── Score-correction notice (added 2026-08-05) ─────────────────────────
+  // Site-wide because every score-bearing surface is affected. A defect in
+  // trade ingestion omitted realized profit and loss from closed positions:
+  // a position that didn't land on exactly zero shares had its entire result
+  // discarded, so records were incomplete and scores will move as they are
+  // rebuilt. Stated plainly rather than fixed quietly — the site's own
+  // methodology page claims records are verified against on-chain fills, and
+  // until the rebuild completes that claim is only partly true.
+  //
+  // ⛔ REMOVE THIS BLOCK once the rebuild is complete and re-verified.
+  // Single flag, single block, no other file touched, so removal is one cut.
+  var HF_SCORE_NOTICE = true;
+  if (HF_SCORE_NOTICE) {
+    var notice = document.createElement('div');
+    notice.setAttribute('role', 'status');
+    notice.style.cssText = 'background:rgba(245,158,11,.08);border-bottom:1px solid rgba(245,158,11,.28);color:#f7c774;font:500 13px/1.5 Inter,-apple-system,sans-serif;padding:9px 18px;text-align:center';
+    notice.innerHTML = 'Scores are being recomputed. A defect found 5 August 2026 left realized profit and loss out of some records; rankings will move as they rebuild. '
+      + '<a href="/methodology" style="color:#f7c774;text-decoration:underline">What changed</a>';
+    if (root) root.appendChild(notice);
+    else document.body.insertBefore(notice, nav.nextSibling);
   }
 
   // ── Unread messages badge ──
@@ -598,9 +626,9 @@
       '</div>' +
       '<div class="nav-mobile-links">' + mLinksHtml + '</div>' +
       '<div class="nav-mobile-auth">' +
-        (isLoggedIn
+        (isAuthed
           ? ''
-          : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="mob-signin">Sign in</a>') +
+          : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="mob-signin" id="mobSignin">Sign in</a>') +
       '</div>';
     document.body.appendChild(mobileMenu);
 
@@ -661,16 +689,28 @@
 
     function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : ''; }
 
+    // A connected wallet is its own auth state — hide the legacy JWT
+    // "Sign in" link the moment a wallet connects, and restore it on
+    // disconnect only if the user also isn't JWT-logged-in.
+    function syncSigninVisibility(connected) {
+      var hide = connected || isLoggedIn;
+      var signin = document.getElementById('navSignin');
+      var mobSignin = document.getElementById('mobSignin');
+      if (signin) signin.style.display = hide ? 'none' : '';
+      if (mobSignin) mobSignin.style.display = hide ? 'none' : '';
+    }
+
     function setConnected(addr) {
       if (walletBtn && walletLabel) {
         walletBtn.classList.add('connected');
-        walletBtn.title = addr;
+        walletBtn.title = 'View my profile';
         walletLabel.textContent = shortAddr(addr);
       }
       if (mobileWalletLink) {
         mobileWalletLink.innerHTML = '🔗 ' + shortAddr(addr);
-        mobileWalletLink.href = '/creator/dashboard';
+        mobileWalletLink.href = '/trader/' + encodeURIComponent(addr);
       }
+      syncSigninVisibility(true);
     }
 
     function setDisconnected() {
@@ -683,6 +723,7 @@
         mobileWalletLink.innerHTML = '🔗 Connect Wallet';
         mobileWalletLink.href = '#';
       }
+      syncSigninVisibility(false);
     }
 
     // Restore from localStorage on load
@@ -723,8 +764,11 @@
       walletBtn.addEventListener('click', function() {
         var current = localStorage.getItem(STORAGE_KEY);
         if (current) {
-          // Already connected — go to dashboard portfolio
-          window.location.href = '/creator/dashboard#portfolio';
+          // Already connected — go to the user's own trader profile.
+          // /trader/:address resolves to /@handle when one's claimed
+          // (creating the user record via ensureWhaleProfile if needed),
+          // same resolution rule used everywhere else on the site.
+          window.location.href = '/trader/' + encodeURIComponent(current);
         } else {
           connectWallet();
         }
@@ -1247,7 +1291,7 @@ window.showSkeletons = function(containerId, count, type) {
       { label: 'Home',      icon: '⌂',  href: '/' },
       { label: 'Feed',      icon: '◈',  href: '/feed' },
       { label: 'Alpha',     icon: '⚡', href: '/alpha-live' },
-      { label: 'World Cup', icon: '⚽', href: '/worldcup' },
+      { label: 'Leaderboard', icon: '🏆', href: '/traders' },
       { label: 'Profile',   icon: '👤', href: null }, // resolved at runtime
     ];
 

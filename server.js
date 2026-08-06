@@ -12720,7 +12720,7 @@ async function _computeRoiLeaderboard(window, minN) {
   // eligibility math stays untouched — this is a display-layer exclusion,
   // same as pulling display_name/username/polymarket_address.
   const userRows = await dbQuery(
-    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out, flex_score FROM users WHERE id = ANY($1)`,
     [userIds]
   ).catch(() => []);
   const userById = new Map(userRows.map(u => [u.id, u]));
@@ -12757,6 +12757,16 @@ async function _computeRoiLeaderboard(window, minN) {
       total_capital_usd: Math.round(Number(r.total_capital) || 0),
       raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
       score_pct: Math.round(shrunk * 1000) / 10,
+      // Hero number on trader cards (2026-08-05 hierarchy pass): the bounded
+      // 0-100 Flex Score (lib/flex-score.js — accuracy+calibration+pnl+
+      // consistency+breadth), NOT this row's own score_pct (which is a raw/
+      // shrunk ROI% and now demoted to the supporting stat row). Computed
+      // nightly by recomputeAllFlexScores off realized_trades (durable +
+      // ephemeral, deduped vs polymarket_trades) for every wallet with a
+      // polymarket_address, so every durable-board qualifier has one. Can
+      // still be null for a wallet that hasn't had its nightly recompute run
+      // yet — callers must handle null (render '—', never fake a number).
+      flex_score: u.flex_score != null ? Math.round(Number(u.flex_score)) : null,
       trend: trendByUser.get(r.user_id) || null,
       scope_label: durableScopeLabel(n),
       ...integrity,
@@ -13080,7 +13090,7 @@ function classifyMarketDurability(question, openedAt, closedAt) {
 // is durable-markets-only as of 2026-07-20; this is the honest label for
 // that scope, not a caveat buried in a tooltip.
 function durableScopeLabel(n) {
-  return 'Ranked on durable markets — resolving weeks or months out — n=' + n;
+  return 'Ranked on durable markets — resolving weeks or months out — ' + n + ' trades';
 }
 
 // Rules-based verdict line — thresholds only, no LLM. Ordered cascade: most
@@ -13291,6 +13301,7 @@ async function _buildTraderCards(roiRows) {
       polymarket_address: row.polymarket_address,
       whale_rank: row.whale_rank,
       n, score_pct: row.score_pct, raw_weighted_roi_pct: row.raw_weighted_roi_pct,
+      flex_score: row.flex_score != null ? row.flex_score : null,
       total_capital_usd: row.total_capital_usd, trend: row.trend,
       verdict, evidence, form, streak,
       specialty: specialty ? {
@@ -13370,7 +13381,7 @@ async function _computeCategoryRoiLeaderboards() {
   // included.
   const allUserIds = [...new Set(rows.map(r => r.user_id))];
   const userRows = allUserIds.length ? await dbQuery(
-    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out FROM users WHERE id = ANY($1)`,
+    `SELECT id, display_name, username, polymarket_address, whale_rank, leaderboard_opt_out, flex_score FROM users WHERE id = ANY($1)`,
     [allUserIds]
   ).catch(() => []) : [];
   const userById = new Map(userRows.map(u => [u.id, u]));
@@ -13415,7 +13426,8 @@ async function _computeCategoryRoiLeaderboards() {
         total_capital_usd: Math.round(u.totalCapital),
         raw_weighted_roi_pct: Math.round(weightedRoi * 1000) / 10,
         score_pct: Math.round(shrunk * 1000) / 10,
-        scope_label: 'Ranked on durable ' + category + ' markets — n=' + u.n,
+        flex_score: (userRow && userRow.flex_score != null) ? Math.round(Number(userRow.flex_score)) : null,
+        scope_label: 'Ranked on durable ' + category + ' markets — ' + u.n + ' trades',
       });
     }
     catResult.sort((a, b) => b.score_pct - a.score_pct);
@@ -13615,6 +13627,12 @@ app.get('/api/feed/category-wins', async (req, res) => {
               user_id: userId, display_name: card.display_name, username: card.username,
               polymarket_address: card.polymarket_address,
               score_pct: card.score_pct, n: card.n, scope_label: card.scope_label,
+              // Same Flex Score hero fields the rest of the homepage cards
+              // carry (2026-08-05) — win_rate_pct/raw_weighted_roi_pct are
+              // the supporting-row stats, flex_score is the hero number.
+              flex_score: card.flex_score != null ? card.flex_score : null,
+              win_rate_pct: card.win_rate_pct != null ? card.win_rate_pct : null,
+              raw_weighted_roi_pct: card.raw_weighted_roi_pct != null ? card.raw_weighted_roi_pct : null,
               win: {
                 question: t.market_question, side: (t.side || '').toUpperCase(),
                 entry_price: t.entry_price != null ? Number(t.entry_price) : null,
@@ -14107,7 +14125,7 @@ async function computeSimilarBetterTraders(userId) {
       // it's headlining is thinly sampled on either side.
       confidence: headlineMinN != null ? _matchConfidenceTier(headlineMinN) : null,
       confidence_n: headlineMinN,
-      scope_label: 'Ranked on durable markets — n=' + shared.reduce((s, k) => s + c.catN[k], 0),
+      scope_label: 'Ranked on durable markets — ' + shared.reduce((s, k) => s + c.catN[k], 0) + ' trades',
     });
   }
 
@@ -27510,6 +27528,7 @@ async function syncUserPositions(user) {
             shares: parseFloat(p.size) || 0,
             pnl: parseFloat(p.cashPnl) || 0,
             probability: parseFloat(p.curPrice) || 0,
+            avg_entry_price: parseFloat(p.avgPrice) || 0,
             market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
             updated_at: new Date().toISOString()
           });
@@ -47089,6 +47108,84 @@ function _toIsoTs(v) {
 // the moment a winning position is redeemed. We FIFO-match BUY/SELL events
 // per (conditionId, outcome) to compute realized PnL on closed-out
 // positions. Idempotent via external_sync_id UNIQUE constraint.
+// ── Round-trip segmentation (pure) ───────────────────────────────────────
+// Extracted from backfillRealizedTrades 2026-08-05 so the SAME code can be
+// inspected read-only by /api/admin/segment-trace. Duplicating this logic in
+// a debug endpoint would let the tracer and the ingester drift, and a
+// diagnostic that doesn't reproduce the real code path is worse than none.
+//
+// Returns { segments, trailing }:
+//   segments — round-trips that returned to FLAT (position fully closed)
+//   trailing — a segment still holding open lots when events ran out. It may
+//              carry REAL realized closes (partial exits). backfill currently
+//              writes `segments` only, so any realized P&L inside `trailing`
+//              is silently dropped from the record. Surfaced here so the size
+//              of that gap is measurable before anything about scoring is
+//              changed.
+function _segmentActivityEvents(events) {
+  let lots = []; // { shares, price }
+  const segments = [];
+  let seg = null;
+  const freshSeg = () => ({ totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null });
+
+  for (const t of events) {
+    const side = String(t.side || '').toUpperCase();
+    const shares = parseFloat(t.size || t.shares || 0);
+    const price = parseFloat(t.price || 0);
+    const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
+    if (shares <= 0) continue;
+
+    if (side === 'BUY') {
+      if (!seg) seg = freshSeg();
+      if (!seg.firstOpenAt) seg.firstOpenAt = ts;
+      lots.push({ shares, price });
+    } else if (side === 'SELL') {
+      if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
+      let remaining = shares;
+      while (remaining > 0 && lots.length > 0) {
+        const lot = lots[0];
+        const take = Math.min(lot.shares, remaining);
+        seg.totalCost += take * lot.price;
+        seg.totalProceeds += take * price;
+        seg.totalSharesClosed += take;
+        remaining -= take;
+        lot.shares -= take;
+        if (lot.shares <= 0.0000001) lots.shift();
+      }
+      seg.lastCloseAt = ts;
+      // ⚠️ FLAT IS A TOLERANCE, NOT AN EXACT ZERO (fixed 2026-08-05).
+      // `lots.length === 0` alone discarded entire closed positions over
+      // floating-point dust. Live example: a wallet closed 800,779.93 shares
+      // of "US forces enter Iran by April 30?" for a +$290,189 realized win,
+      // left 0.0015 shares of rounding remnant, so this never fired and the
+      // whole segment — the entire win — was thrown away. 97% of wallets
+      // carrying a flex_score were affected by this and the trailing-segment
+      // drop below.
+      // Tolerance is one share (worth at most $1, since prices are 0–1) or
+      // one part per million of the closed size, whichever is larger. A
+      // genuine partial exit stays open: the same wallet's 3,953 shares left
+      // open against 2.2M closed is 1.8e-3, far above the threshold, and is
+      // correctly treated as a real open position rather than dust.
+      const openShares = lots.reduce((a, l) => a + l.shares, 0);
+      if (lots.length === 0 || openShares <= Math.max(1, seg.totalSharesClosed * 1e-6)) {
+        lots = [];                     // discard the remnant; the position is closed
+        segments.push(seg); seg = null; // flat — next BUY starts a new segment
+      }
+    }
+  }
+
+  // `trailing` is a still-open position that has nonetheless booked REAL
+  // realized P&L on the shares it did sell. It is returned separately rather
+  // than pushed into `segments` so callers stay explicit about writing it —
+  // ingestion now does (see backfillRealizedTrades), the tracer reports it.
+  return {
+    segments,
+    trailing: seg && seg.totalSharesClosed > 0
+      ? { ...seg, open_lots: lots.length, open_shares: +lots.reduce((a, l) => a + l.shares, 0).toFixed(4) }
+      : null,
+  };
+}
+
 async function backfillRealizedTrades(userId, eoa, proxy) {
   if (!pool || !userId || !proxy) return { imported: 0, scanned: 0 };
   const proxyLower = proxy.toLowerCase();
@@ -47109,6 +47206,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
   let fetchError = null;
   let activityPagesFetched = 0;
   console.log(`[backfill] fetching activity for proxy=${proxyLower} (user=${userId.slice(0,8)})`);
+  let activityTruncated = false;
   try {
     let offset = 0;
     const PAGE_LIMIT = 500;
@@ -47123,7 +47221,10 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       trades = trades.concat(page);
       if (page.length < PAGE_LIMIT) break; // last page
       offset += PAGE_LIMIT;
-      if (offset >= 10000) break; // safety cap — no legitimate wallet has 10,000+ trade events
+      // Safety cap. If we hit it, this wallet's history is INCOMPLETE — the
+      // computed segment set is not authoritative and must not be used to
+      // delete existing rows (see the group reconcile below).
+      if (offset >= 10000) { activityTruncated = true; break; }
     }
   } catch (e) {
     fetchError = e.message;
@@ -47170,7 +47271,12 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
 
   let imported = 0, resolvedCount = 0;
 
+  if (activityTruncated) {
+    console.warn(`[backfillRealizedTrades] user=${userId.slice(0,8)} activity TRUNCATED at 10k events — skipping sold-path writes to avoid double-counting against un-migrated rows. Wallet keeps its existing rows.`);
+  }
+
   for (const group of groups.values()) {
+    if (activityTruncated) break; // incomplete history — see the reconcile note below
     // Sort ascending by timestamp so FIFO is correct. Date.parse on a raw
     // Unix-seconds int returns NaN, so the previous comparator collapsed
     // every event to 0 and FIFO degraded to "API order" — fine in practice
@@ -47195,41 +47301,55 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
     // round-trips on one market over months could show a multi-month span
     // and get misclassified 'durable'. A segment boundary is "lots
     // returned to flat" — the next BUY after that starts a fresh segment. ──
-    let lots = []; // { shares, price }
-    const segments = [];
-    let seg = null;
-    function freshSeg() { return { totalCost: 0, totalProceeds: 0, totalSharesClosed: 0, firstOpenAt: null, lastCloseAt: null }; }
+    // ── Trailing open segments ARE written as of 2026-08-05. ──────────────
+    // A wallet that scales into a position and exits only part of it has
+    // booked real realized P&L on the shares it sold; dropping it erased a
+    // −$225,899 loss on one traced wallet alone, and made records look
+    // better than reality. The closed portion is a real trade and counts;
+    // the shares still held are simply an open position.
+    const { segments: closedSegs, trailing } = _segmentActivityEvents(group.events);
+    const segments = trailing ? [...closedSegs, trailing] : closedSegs;
 
-    for (const t of group.events) {
-      const side = String(t.side || '').toUpperCase();
-      const shares = parseFloat(t.size || t.shares || 0);
-      const price = parseFloat(t.price || 0);
-      const ts = _toIsoTs(t.timestamp || t.created_at || t.time);
-      if (shares <= 0) continue;
+    // Keys for every segment in this group, positionally indexed. Index is
+    // stable across re-runs because past events are immutable and new
+    // activity only appends — segment 0 stays segment 0 forever. That is
+    // what makes a trailing segment safely UPDATE-able: as it accumulates
+    // further sells it keeps the SAME key and refreshes in place, instead of
+    // minting a new row per backfill (which is exactly what keying on
+    // lastCloseAt would have done, double-counting every earlier partial).
+    const segKeys = segments.map((_, idx) => `pm-act3:${userId}:${group.condId}:${group.outcome}:${idx}`);
 
-      if (side === 'BUY') {
-        if (!seg) seg = freshSeg();
-        if (!seg.firstOpenAt) seg.firstOpenAt = ts;
-        lots.push({ shares, price });
-      } else if (side === 'SELL') {
-        if (!seg) seg = freshSeg(); // SELL with no prior BUY in this group (pre-existing/untracked position) — nothing to match against, but still closes the (empty) segment below rather than silently merging into whatever comes next
-        let remaining = shares;
-        while (remaining > 0 && lots.length > 0) {
-          const lot = lots[0];
-          const take = Math.min(lot.shares, remaining);
-          seg.totalCost += take * lot.price;
-          seg.totalProceeds += take * price;
-          seg.totalSharesClosed += take;
-          remaining -= take;
-          lot.shares -= take;
-          if (lot.shares <= 0.0000001) lots.shift();
-        }
-        seg.lastCloseAt = ts;
-        if (lots.length === 0) { segments.push(seg); seg = null; } // flat — next BUY starts a new segment
-      }
-    }
+    // Reconcile this group: drop any pm-act3 row we did NOT just compute.
+    // Makes the backfill authoritative per group and self-healing — a
+    // segment that merges or disappears after a data correction can't leave
+    // an orphan row behind inflating the record.
+    //
+    // ⚠️ This delete is ALSO the migration off the two older key formats.
+    // Without it, writing pm-act3 rows would leave the wallet's existing
+    // pm-act/pm-act2 rows in place for the same underlying trades and
+    // DOUBLE-COUNT every one of them. Old formats are cleared for this group
+    // in the same statement that reconciles the new one, so a group is never
+    // momentarily represented twice.
+    //
+    // ⚠️ If the activity feed was truncated we do neither the delete NOR the
+    // writes (see the guard on the enclosing loop): with incomplete history
+    // the computed set is not authoritative, deleting against it would
+    // destroy good rows, and writing without deleting would double-count.
+    // Such a wallet keeps its existing rows untouched — stale, but never
+    // silently doubled.
+    try {
+      await dbQuery(
+        `DELETE FROM realized_trades
+         WHERE user_id = $1::uuid AND condition_id = $2 AND side = $3
+           AND close_reason IN ('sold-profit','sold-loss')
+           AND ( external_sync_id LIKE 'pm-act:%'
+              OR external_sync_id LIKE 'pm-act2:%'
+              OR (external_sync_id LIKE 'pm-act3:%' AND NOT (external_sync_id = ANY($4::text[]))) )`,
+        [userId, group.condId, group.outcome, segKeys]);
+    } catch (e) { console.warn('[backfillRealizedTrades] group reconcile', group.condId, e.message); }
 
-    for (const s of segments) {
+    for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+      const s = segments[segIdx];
       if (s.totalSharesClosed <= 0) continue;
       resolvedCount++;
 
@@ -47250,7 +47370,7 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
       // fragile parsing to tell old 4-part keys from new 5-part ones —
       // especially since the new suffix is an ISO timestamp, which
       // contains colons itself.
-      const externalSyncId = `pm-act2:${userId}:${group.condId}:${group.outcome}:${s.lastCloseAt}`;
+      const externalSyncId = segKeys[segIdx];
       const marketDurability = classifyMarketDurability(group.question, s.firstOpenAt, s.lastCloseAt);
 
       try {
@@ -47260,7 +47380,17 @@ async function backfillRealizedTrades(userId, eoa, proxy) {
             shares, entry_price, exit_price, entry_cost_usd, exit_value_usd,
             realized_pnl, realized_roi, opened_at, closed_at, close_reason, external_sync_id, market_durability
           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-          ON CONFLICT (external_sync_id) DO NOTHING
+          -- DO UPDATE, not DO NOTHING: a trailing open segment grows as the
+          -- wallet sells more of the position, and its row must refresh in
+          -- place. DO NOTHING would freeze it at its first-seen partial
+          -- exit — the same class of silent staleness this whole fix exists
+          -- to remove.
+          ON CONFLICT (external_sync_id) DO UPDATE SET
+            shares = EXCLUDED.shares, entry_price = EXCLUDED.entry_price, exit_price = EXCLUDED.exit_price,
+            entry_cost_usd = EXCLUDED.entry_cost_usd, exit_value_usd = EXCLUDED.exit_value_usd,
+            realized_pnl = EXCLUDED.realized_pnl, realized_roi = EXCLUDED.realized_roi,
+            opened_at = EXCLUDED.opened_at, closed_at = EXCLUDED.closed_at,
+            close_reason = EXCLUDED.close_reason, market_durability = EXCLUDED.market_durability
           RETURNING id`,
           [userId, eoaLower || null, group.condId, group.tokenId, group.question, group.outcome,
            +s.totalSharesClosed.toFixed(4), avgEntryPrice, avgExitPrice,
@@ -61705,6 +61835,7 @@ if (pool) {
 
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS shares NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS avg_entry_price NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
 
@@ -64140,6 +64271,38 @@ app.post('/api/admin/migrate-external-sync-id-scope', requireAdminSecret, async 
 // (run/status split, single in-memory "is it running" flag, cron tick).
 const SOLD_RESYNC_BATCH = 50;
 const SOLD_RESYNC_THROTTLE_MS = 400;
+// ── Self-healing link between detection and repair ───────────────────────
+// The verifier finds wallets whose stored P&L disagrees with their on-chain
+// fills; the resync is what actually repairs them. Until now those were
+// disconnected — a wallet could be publicly flagged "partial" while waiting
+// its turn in a queue that had no idea it was broken. This set is the link:
+// _reconcileWallet adds any wallet it catches, and the resync drains this
+// set FIRST.
+//
+// Deliberately in-memory, populated from a read-only public endpoint: no DB
+// write happens on the public path, so hammering /api/verify-record can't
+// trigger repeated deletes/reinserts.
+//
+// ⚠️ CORRECTED 2026-08-05 — this comment previously claimed the set was
+// "lost on restart, which is fine — the underlying WHERE clause still finds
+// these wallets regardless." That was FALSE, and it was the whole bug. The
+// scan selects wallets carrying OLD-format ('pm-act:%') rows; a successful
+// resync rewrites those rows to 'pm-act2:%', so a wallet that has already
+// been resynced and is STILL wrong can never be selected again. For exactly
+// the population this set exists to serve, the WHERE clause finds nothing.
+// Flagged wallets are therefore matched in the WHERE clause itself now, not
+// merely sorted to the front of a queue they were never in.
+//
+// Map, not Set: value is the number of repair attempts, so a wallet that
+// rebuilds to the identical (still-wrong) rows stops being retried every
+// 5 minutes forever instead of hammering Polymarket's API in a loop.
+const _resyncPriority = new Map(); // userId -> attempts
+// Flagged, repaired, and STILL unchanged after RESYNC_MAX_ATTEMPTS. Parked
+// here so an unfixable wallet is visible in status rather than silently
+// looping or silently forgotten — if a wallet lands here, the disagreement
+// is in the backfill logic, not the queue, and needs a human.
+const _resyncUnrepairable = new Map(); // userId -> { attempts, at, sold_rows }
+const RESYNC_MAX_ATTEMPTS = 3;
 let _soldResyncRunning = false;
 let _soldResyncLastRun = null;
 // Cumulative across every tick since this process booted — in-memory only,
@@ -64154,15 +64317,52 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
   limit = Math.min(50, Math.max(1, limit || SOLD_RESYNC_BATCH));
   const startedAt = new Date().toISOString();
 
+  // Drain PUBLICLY VISIBLE wallets first. `ORDER BY user_id` is alphabetical
+  // by UUID — effectively random — so a promoted, ranked wallet could sit
+  // behind ~1,300 unranked ones for hours while showing stale pre-fix
+  // numbers on the homepage. Found 2026-08-05: TheQuietRisk (ranked #5)
+  // recorded +$92 on a market where the chain shows a $63,415 realized loss
+  // — the first round-trip kept, every later one dropped by the pre-fix
+  // aggregation bug. Stale data on an unranked wallet is a backlog item;
+  // the same staleness on a wallet we actively promote is a wrong number in
+  // public, so it goes to the front of the queue.
+  // $-index of the flagged-wallet array (targeted mode puts user_id at $1).
+  const fp = targetUserId ? 2 : 1;
+  // An explicit ?user_id= is treated as flagged whether or not the verifier
+  // caught it. Asking for one wallet by name is an override — it must be
+  // able to force a full rebuild of a wallet that already migrated, which is
+  // precisely the case where the automatic path finds nothing to do.
+  const flagged = [...new Set(targetUserId ? [..._resyncPriority.keys(), targetUserId] : [..._resyncPriority.keys()])];
+  // ⚠️ Every ORDER BY expression is ALSO a select-list column, deliberately.
+  // Under SELECT DISTINCT, Postgres rejects an ORDER BY expression that
+  // isn't in the select list ("for SELECT DISTINCT, ORDER BY expressions
+  // must appear in select list"). The previous revision ordered by a bare
+  // `(rt.user_id = ANY(...))` that appeared nowhere in the select list —
+  // which threw on every single tick, was swallowed by the .catch below,
+  // and silently killed the entire platform-wide resync. Ordering by the
+  // output aliases keeps that structurally impossible to reintroduce.
   const affected = await dbQuery(`
-    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address
+    SELECT DISTINCT rt.user_id::text AS user_id, u.polymarket_address,
+           (u.flex_score IS NOT NULL OR u.is_whale = true) AS is_public,
+           (rt.user_id::text = ANY($${fp}::text[])) AS is_flagged
     FROM realized_trades rt
     JOIN users u ON u.id = rt.user_id::text
-    WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+    WHERE rt.close_reason IN ('sold-profit','sold-loss')
+      -- Un-migrated wallets (old key format) OR wallets the verifier caught
+      -- disagreeing with the chain. The second arm is what makes this a
+      -- repair mechanism rather than a migration: an already-migrated
+      -- wallet whose numbers are still wrong matches no LIKE pattern and
+      -- would otherwise be permanently unreachable.
+      -- Anything NOT yet on the current key format needs rebuilding: both
+      -- 'pm-act:' (pre-segmentation aggregate) and 'pm-act2:' (segmented but
+      -- built by the exact-zero flat check, which discarded whole closed
+      -- positions over rounding dust and dropped every partial exit).
+      AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.external_sync_id LIKE 'pm-act2:%' OR rt.user_id::text = ANY($${fp}::text[]))
       ${targetUserId ? 'AND rt.user_id = $1::uuid' : ''}
-    ORDER BY user_id
+    ORDER BY is_flagged DESC, is_public DESC, user_id
     ${targetUserId ? '' : 'LIMIT ' + limit}
-  `, targetUserId ? [targetUserId] : []).catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
+  `, targetUserId ? [targetUserId, flagged] : [flagged])
+    .catch(e => { console.error('[sold-resync] scan error:', e.message); return null; });
   if (affected == null) return { error: 'scan_query_failed', startedAt, finishedAt: new Date().toISOString() };
 
   const results = [];
@@ -64175,17 +64375,63 @@ async function runSoldTradesResyncBatch(limit, targetUserId) {
       // only go up: segments split an aggregate, never merge one).
       const before = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const beforeN = before[0] ? before[0].n : 0;
-      const deleted = await dbQuery(`DELETE FROM realized_trades WHERE user_id = $1::uuid AND external_sync_id LIKE 'pm-act:%' AND close_reason IN ('sold-profit','sold-loss') RETURNING id`, [u.user_id]);
-      oldRowsDeleted += deleted.length;
+      // ⚠️ NO pre-delete. backfillRealizedTrades now reconciles each group
+      // itself — it clears that group's old-format rows in the same
+      // statement that writes the new ones, so a group is never momentarily
+      // represented twice and never momentarily absent.
+      //
+      // Deleting here first was actively dangerous once backfill gained its
+      // truncation guard: a wallet with >10k activity events has its writes
+      // skipped, so a blanket pre-delete would wipe the record and leave
+      // nothing behind. Measuring the old-format rows instead of destroying
+      // them keeps the metric without the failure mode.
+      const oldBefore = await dbQuery(
+        `SELECT COUNT(*)::int AS n FROM realized_trades
+         WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')
+           AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%')`, [u.user_id]);
       const proxy = await ensureProxyStored(u.user_id, u.polymarket_address);
-      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), old_format_deleted: deleted.length, resync: 'proxy_derivation_failed' }); failed++; continue; }
+      if (!proxy) { results.push({ user_id: u.user_id.slice(0, 8), resync: 'proxy_derivation_failed' }); failed++; continue; }
       const backfillResult = await backfillRealizedTrades(u.user_id, u.polymarket_address, proxy);
       const after = await dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [u.user_id]);
       const afterN = after[0] ? after[0].n : 0;
       const gained = afterN - beforeN;
+      // Old-format rows retired by backfill's own per-group reconcile. This
+      // is the migration signal: a wallet is done when it holds none.
+      const oldAfterRows = await dbQuery(
+        `SELECT COUNT(*)::int AS n FROM realized_trades
+         WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')
+           AND (external_sync_id LIKE 'pm-act:%' OR external_sync_id LIKE 'pm-act2:%')`, [u.user_id]);
+      const oldRetired = (oldBefore[0] ? oldBefore[0].n : 0) - (oldAfterRows[0] ? oldAfterRows[0].n : 0);
+      oldRowsDeleted += oldRetired;
+      // Did this run change anything at all? Either the row count moved or
+      // old-format rows were retired. Both zero means the rebuild produced
+      // exactly what was already there.
+      const changed = gained !== 0 || oldRetired !== 0;
       nGained += gained;
       fixed++;
-      results.push({ user_id: u.user_id.slice(0, 8), sold_rows_before: beforeN, old_format_deleted: deleted.length, sold_rows_after: afterN, n_gained: gained, backfill: backfillResult });
+      // Retire it from the priority set — but only claim the repair worked
+      // if the rows actually CHANGED. A flagged wallet that deletes and
+      // rebuilds to the identical row count almost certainly rebuilt the
+      // identical (still-wrong) data, which means the defect is in
+      // backfillRealizedTrades, not in this queue. Retrying that every 5
+      // minutes forever would hammer Polymarket's API to no effect and mask
+      // a real bug behind a busy-looking cron, so it gets a few attempts and
+      // is then parked where a human can see it.
+      let attempts = 0;
+      if (u.is_flagged) {
+        attempts = (_resyncPriority.get(u.user_id) || 0) + 1;
+        if (changed) {
+          _resyncPriority.delete(u.user_id); // genuinely changed — let the verifier re-flag if still wrong
+        } else if (attempts >= RESYNC_MAX_ATTEMPTS) {
+          _resyncPriority.delete(u.user_id);
+          _resyncUnrepairable.set(u.user_id, { attempts, at: new Date().toISOString(), sold_rows: afterN });
+        } else {
+          _resyncPriority.set(u.user_id, attempts);
+        }
+      } else {
+        _resyncPriority.delete(u.user_id);
+      }
+      results.push({ user_id: u.user_id.slice(0, 8), flagged: !!u.is_flagged, attempts: attempts || undefined, sold_rows_before: beforeN, old_format_rows_retired: oldRetired, sold_rows_after: afterN, n_gained: gained, changed, backfill: backfillResult });
     } catch (e) {
       failed++;
       results.push({ user_id: u.user_id.slice(0, 8), error: e.message });
@@ -64235,6 +64481,194 @@ cron.schedule('*/5 * * * *', () => fireSoldResyncTick('cron'));
 // else fires synchronously at boot.
 setTimeout(() => fireSoldResyncTick('boot'), 5000);
 
+// ── GET /api/admin/segment-trace ─────────────────────────────────────────
+// READ-ONLY. Writes nothing, changes nothing. Re-runs the REAL segmentation
+// (_segmentActivityEvents — the same function ingestion uses, deliberately
+// shared so a diagnostic can't drift from the thing it diagnoses) against
+// live Polymarket activity, and prints what we stored beside it.
+//
+// Exists because three separate times this session a wallet's wrong number
+// was explained by guessing at the pipeline instead of looking at it. The
+// `dropped_trailing` block is the specific thing to read: realized P&L that
+// segmentation computed and ingestion then threw away because the position
+// never returned to exactly flat.
+//
+//   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>"
+//   curl "https://hyperflex.network/api/admin/segment-trace?secret=$ADMIN_SECRET&user_id=<uuid>&condition_id=0x..."
+// Shared by the single-wallet tracer and the platform-wide scan below, so
+// both report the same number by construction.
+async function _traceWalletSegments(userId, condFilter) {
+  {
+    if (!pool) return { error: 'no_pool' };
+
+    const urow = await dbQuery(`SELECT id, polymarket_address FROM users WHERE id = $1 LIMIT 1`, [userId]).catch(() => []);
+    if (!urow.length || !urow[0].polymarket_address) return { error: 'user or address not found' };
+    const proxy = await ensureProxyStored(userId, urow[0].polymarket_address);
+    if (!proxy) return { error: 'proxy_derivation_failed' };
+
+    // Same paginated /activity pull ingestion uses.
+    let trades = [], offset = 0;
+    while (true) {
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${String(proxy).toLowerCase()}&limit=500&offset=${offset}&type=TRADE`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) break;
+      const j = await r.json();
+      const page = Array.isArray(j) ? j : (Array.isArray(j?.data) ? j.data : []);
+      if (!page.length) break;
+      trades = trades.concat(page);
+      if (page.length < 500) break;
+      offset += 500;
+      if (offset >= 10000) break;
+    }
+
+    const groups = new Map();
+    for (const t of trades) {
+      const condId = String(t.conditionId || t.condition_id || '').toLowerCase();
+      let outcome = String(t.outcome || '').toUpperCase();
+      if (!outcome) {
+        const idx = t.outcomeIndex !== undefined ? t.outcomeIndex : t.outcome_index;
+        if (idx === 0) outcome = 'YES'; else if (idx === 1) outcome = 'NO';
+      }
+      if (!condId || !outcome) continue;
+      if (condFilter && condId !== condFilter) continue;
+      const key = `${condId}:${outcome}`;
+      if (!groups.has(key)) groups.set(key, { condId, outcome, events: [], question: String(t.title || t.question || t.market || '').slice(0, 200) });
+      groups.get(key).events.push(t);
+    }
+
+    const stored = await dbQuery(
+      `SELECT condition_id, side, entry_price, exit_price, realized_pnl, close_reason, external_sync_id
+       FROM realized_trades WHERE user_id = $1::uuid AND close_reason IN ('sold-profit','sold-loss')`, [userId]).catch(() => []);
+
+    const out = [];
+    let droppedPnlTotal = 0, groupsWithDrop = 0;
+    for (const g of groups.values()) {
+      g.events.sort((a, b) => (Date.parse(_toIsoTs(a.timestamp || a.created_at || a.time)) || 0) - (Date.parse(_toIsoTs(b.timestamp || b.created_at || b.time)) || 0));
+      const { segments, trailing } = _segmentActivityEvents(g.events);
+      const buys = g.events.filter(e => String(e.side).toUpperCase() === 'BUY');
+      const sells = g.events.filter(e => String(e.side).toUpperCase() === 'SELL');
+      const sum = (arr, f) => +arr.reduce((a, e) => a + f(e), 0).toFixed(2);
+      const storedRows = stored.filter(s => String(s.condition_id).toLowerCase() === g.condId && String(s.side).toUpperCase() === g.outcome);
+      const droppedPnl = trailing ? +(trailing.totalProceeds - trailing.totalCost).toFixed(2) : 0;
+      if (trailing) { droppedPnlTotal += droppedPnl; groupsWithDrop++; }
+      out.push({
+        condition_id: g.condId, outcome: g.outcome, question: g.question,
+        on_chain: {
+          buy_events: buys.length, buy_usdc: sum(buys, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)),
+          sell_events: sells.length, sell_usdc: sum(sells, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)),
+          fill_net_usdc: +(sum(sells, e => parseFloat(e.size || 0) * parseFloat(e.price || 0)) - sum(buys, e => parseFloat(e.size || 0) * parseFloat(e.price || 0))).toFixed(2),
+        },
+        segments_written: segments.map(s => ({
+          realized_pnl: +(s.totalProceeds - s.totalCost).toFixed(2),
+          avg_entry: s.totalSharesClosed > 0 ? +(s.totalCost / s.totalSharesClosed).toFixed(4) : null,
+          avg_exit: s.totalSharesClosed > 0 ? +(s.totalProceeds / s.totalSharesClosed).toFixed(4) : null,
+          shares_closed: +s.totalSharesClosed.toFixed(2), first_open: s.firstOpenAt, last_close: s.lastCloseAt,
+        })),
+        // THE GAP: computed, then never written.
+        dropped_trailing: trailing ? {
+          realized_pnl: droppedPnl,
+          avg_entry: +(trailing.totalCost / trailing.totalSharesClosed).toFixed(4),
+          avg_exit: +(trailing.totalProceeds / trailing.totalSharesClosed).toFixed(4),
+          shares_closed: +trailing.totalSharesClosed.toFixed(2),
+          still_open_shares: trailing.open_shares,
+          why: 'position never returned to flat, so this segment was discarded along with its realized closes',
+        } : null,
+        stored_rows: storedRows.map(s => ({ entry_price: s.entry_price, exit_price: s.exit_price, realized_pnl: s.realized_pnl, close_reason: s.close_reason, key_format: String(s.external_sync_id || '').startsWith('pm-act2:') ? 'new' : 'old' })),
+      });
+    }
+
+    out.sort((a, b) => Math.abs((b.dropped_trailing?.realized_pnl) || 0) - Math.abs((a.dropped_trailing?.realized_pnl) || 0));
+    // Dust vs genuine partial exit. A segment left holding a rounding
+    // remnant (fractions of one share out of hundreds of thousands) is a
+    // CLOSED position we discarded on a floating-point technicality — that
+    // subset is safely fixable with a tolerance. A segment still holding a
+    // real position is the harder case. Counted separately so the fix can be
+    // staged by risk instead of all-or-nothing.
+    const dust = out.filter(g => g.dropped_trailing && g.dropped_trailing.still_open_shares < 1);
+    return {
+      user_id: userId, proxy, activity_events: trades.length,
+      groups_examined: groups.size,
+      groups_with_dropped_trailing: groupsWithDrop,
+      total_dropped_realized_pnl_usd: +droppedPnlTotal.toFixed(2),
+      dropped_from_rounding_dust: {
+        groups: dust.length,
+        realized_pnl_usd: +dust.reduce((a, g) => a + g.dropped_trailing.realized_pnl, 0).toFixed(2),
+        note: 'Positions effectively fully closed (<1 share left) whose entire realized result was discarded because the flat check is an exact zero.',
+      },
+      note: 'READ-ONLY. total_dropped_realized_pnl_usd is realized profit/loss this wallet actually booked that never entered its record, because the position never returned to exactly flat. Sorted by largest dropped amount first.',
+      groups: out.slice(0, 40),
+    };
+  }
+}
+
+app.get('/api/admin/segment-trace', requireAdminSecret, async (req, res) => {
+  try {
+    const userId = String(req.query.user_id || '').trim();
+    if (!userId) return res.status(400).json({ error: 'user_id required' });
+    const r = await _traceWalletSegments(userId, String(req.query.condition_id || '').trim().toLowerCase());
+    res.json(r);
+  } catch (e) {
+    console.error('[segment-trace]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Platform-wide blast radius ───────────────────────────────────────────
+// READ-ONLY. How much realized P&L is missing from the RANKED set — the
+// wallets we actually promote. Runs in the background (one wallet is several
+// paginated Polymarket calls; 167 of them will not finish inside an HTTP
+// request) and reports through a status endpoint, same shape as the resync.
+//
+//   curl -X POST "https://hyperflex.network/api/admin/measure-dropped-pnl?secret=$ADMIN_SECRET&confirm=1"
+//   curl "https://hyperflex.network/api/admin/measure-dropped-pnl/status?secret=$ADMIN_SECRET"
+let _droppedScan = { running: false, started_at: null, finished_at: null, scanned: 0, total: 0, wallets: [], totals: null };
+app.post('/api/admin/measure-dropped-pnl', requireAdminSecret, async (req, res) => {
+  if (String(req.query.confirm || '') !== '1') return res.json({ dry_run: true, note: 'Add &confirm=1 to start. Read-only scan — writes nothing.' });
+  if (_droppedScan.running) return res.json({ already_running: true, scanned: _droppedScan.scanned, total: _droppedScan.total });
+  const rows = await dbQuery(`
+    SELECT DISTINCT u.id::text AS user_id, COALESCE(u.username, u.display_name) AS handle
+    FROM users u JOIN realized_trades rt ON rt.user_id::text = u.id
+    WHERE u.flex_score IS NOT NULL AND rt.close_reason IN ('sold-profit','sold-loss')
+  `).catch(() => []);
+  _droppedScan = { running: true, started_at: new Date().toISOString(), finished_at: null, scanned: 0, total: rows.length, wallets: [], totals: null };
+  res.json({ started: true, wallets_to_scan: rows.length, note: 'Poll /api/admin/measure-dropped-pnl/status' });
+  (async () => {
+    for (const r of rows) {
+      try {
+        const t = await _traceWalletSegments(r.user_id, '');
+        if (!t.error && t.total_dropped_realized_pnl_usd !== 0) {
+          _droppedScan.wallets.push({
+            user_id: r.user_id, handle: r.handle,
+            groups_affected: t.groups_with_dropped_trailing,
+            dropped_pnl_usd: t.total_dropped_realized_pnl_usd,
+            dust_pnl_usd: t.dropped_from_rounding_dust.realized_pnl_usd,
+          });
+        }
+      } catch {}
+      _droppedScan.scanned++;
+      await new Promise(s => setTimeout(s, 300));
+    }
+    const w = _droppedScan.wallets;
+    _droppedScan.totals = {
+      wallets_with_missing_pnl: w.length,
+      wallets_scanned: _droppedScan.scanned,
+      total_dropped_pnl_usd: +w.reduce((a, x) => a + x.dropped_pnl_usd, 0).toFixed(2),
+      total_dust_pnl_usd: +w.reduce((a, x) => a + x.dust_pnl_usd, 0).toFixed(2),
+      worst: [...w].sort((a, b) => Math.abs(b.dropped_pnl_usd) - Math.abs(a.dropped_pnl_usd)).slice(0, 15),
+    };
+    _droppedScan.running = false;
+    _droppedScan.finished_at = new Date().toISOString();
+    console.log(`[dropped-pnl-scan] done — ${w.length}/${_droppedScan.scanned} ranked wallets missing realized P&L`);
+  })();
+});
+app.get('/api/admin/measure-dropped-pnl/status', requireAdminSecret, (req, res) => {
+  res.json({
+    running: _droppedScan.running, started_at: _droppedScan.started_at, finished_at: _droppedScan.finished_at,
+    progress: `${_droppedScan.scanned}/${_droppedScan.total}`,
+    wallets_with_missing_pnl_so_far: _droppedScan.wallets.length,
+    totals: _droppedScan.totals,
+  });
+});
+
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades/status?secret=$ADMIN_SECRET"                       (progress check — no mutation)
 //   curl "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET"                              (dry run — counts only)
 //   curl -X POST "https://hyperflex.network/api/admin/resync-sold-trades?secret=$ADMIN_SECRET&confirm=1"            (execute one batch now, next 50)
@@ -64245,12 +64679,18 @@ app.get('/api/admin/resync-sold-trades/status', requireAdminSecret, async (req, 
     const totalsRows = await dbQuery(`
       SELECT COUNT(DISTINCT rt.user_id)::int AS wallets, COUNT(*)::int AS rows
       FROM realized_trades rt
-      WHERE rt.external_sync_id LIKE 'pm-act:%' AND rt.close_reason IN ('sold-profit','sold-loss')
+      WHERE rt.close_reason IN ('sold-profit','sold-loss')
+        AND (rt.external_sync_id LIKE 'pm-act:%' OR rt.external_sync_id LIKE 'pm-act2:%')
     `).catch(() => []);
     res.json({
       running: _soldResyncRunning,
       last_run: _soldResyncLastRun,
       cumulative_since_boot: _soldResyncCumulative,
+      // Verifier-flagged wallets awaiting repair, and wallets repair could
+      // not change. A non-empty `unrepairable` is the signal that the defect
+      // has moved from this queue into backfillRealizedTrades itself.
+      verifier_flagged_queue: [..._resyncPriority.entries()].map(([user_id, attempts]) => ({ user_id, attempts })),
+      unrepairable: [..._resyncUnrepairable.entries()].map(([user_id, v]) => ({ user_id, ...v })),
       wallets_remaining: totalsRows[0] ? totalsRows[0].wallets : null,
       old_format_rows_remaining: totalsRows[0] ? totalsRows[0].rows : null,
     });
@@ -64535,6 +64975,56 @@ const SETTLEMENT_CACHE_FIX_TS = '2026-07-29T00:48:21Z'; // commit 888a713
 // the 2026-07-29 cache purge, where the actual platform-wide impact was
 // unmeasurable because the numbers only existed in the purge response and
 // a second invocation overwrote it with zeros.
+// GET /api/integrity — PUBLIC, no auth. The same integrity facts
+// /methodology already asserts in prose, as checkable numbers: how many
+// wallets qualify, how the trade base splits, and whether the two failure
+// modes we corrected (fabricated resolutions, future-dated closes) are
+// still at zero. Nothing sensitive — it is the public claim, quantified.
+// Deliberately public because a trust page whose own integrity check is
+// behind a password is asking to be taken on faith, which is the posture
+// this product exists to replace.
+app.get('/api/integrity', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    const [board, trades, future, redeemedOpenish, archive] = await Promise.all([
+      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE close_reason IN ('sold-profit','sold-loss'))::int AS from_real_fills,
+               COUNT(*) FILTER (WHERE close_reason IN ('redeemed-win','redeemed-loss'))::int AS from_resolutions,
+               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS scoreable,
+               COUNT(DISTINCT user_id)::int AS wallets
+        FROM realized_trades WHERE closed_at IS NOT NULL
+      `).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades WHERE closed_at > NOW()`).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM realized_trades
+               WHERE close_reason IN ('redeemed-win','redeemed-loss') AND market_durability = 'durable'`).catch(() => []),
+      dbQuery(`SELECT COUNT(*)::int AS n FROM market_resolutions`).catch(() => []),
+    ]);
+    const t = trades[0] || {};
+    res.json({
+      ranked_wallets: board ? board.rows.length : null,
+      minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+      wallets_tracked: t.wallets ?? null,
+      trades: {
+        total: t.total ?? null,
+        verified_from_on_chain_fills: t.from_real_fills ?? null,
+        graded_from_market_resolutions: t.from_resolutions ?? null,
+        eligible_for_scoring: t.scoreable ?? null,
+      },
+      integrity_checks: {
+        trades_dated_in_the_future: future[0] ? future[0].n : null,        // must be 0
+        resolution_graded_trades_remaining: redeemedOpenish[0] ? redeemedOpenish[0].n : null,
+        resolutions_permanently_archived: archive[0] ? archive[0].n : null,
+      },
+      note: 'Public integrity snapshot. trades_dated_in_the_future must be 0 — a trade cannot close in the future; an hourly sweep removes any that appear. verified_from_on_chain_fills are re-derived from wallet transactions. On 29 July 2026 we removed every resolution-graded trade after finding they could not be confirmed against real market settlements; the count here reflects only records added since, under a stricter check. Verify any individual trader at /api/verify-record/{handle}. Methodology: /methodology',
+    });
+  } catch (e) {
+    console.error('[public-integrity]', e.message);
+    res.status(500).json({ error: 'unavailable' });
+  }
+});
+
 app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
@@ -64588,28 +65078,32 @@ app.get('/api/admin/record-integrity', requireAdminSecret, async (req, res) => {
 });
 
 // GET /api/admin/wallet-position-schema — one-shot information_schema.columns
-// dump for every table whose name matches wallet/position/snapshot/clv, so a
-// live-vs-resolved-trades question can be answered by reading the actual
+// dump for every table whose name matches wallet/position/snapshot/clv/trade,
+// so a live-vs-resolved-trades question can be answered by reading the actual
 // production schema instead of trusting migration files (which can drift
 // from prod after manual ALTERs). Read-only, single curl.
+// NOTE: pattern originally covered position/wallet/snapshot/clv only, which
+// missed realized_trades (the actual ROI-leaderboard source of truth) —
+// broadened to also catch %trade%/%fill%/%realized% table names.
 app.get('/api/admin/wallet-position-schema', requireAdminSecret, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
 
+    const NAME_FILTER = `(table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
+      OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%'
+      OR table_name ILIKE '%trade%' OR table_name ILIKE '%fill%'
+      OR table_name ILIKE '%realized%')`;
+
     const tables = await dbQuery(`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
-             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      WHERE table_schema = 'public' AND ${NAME_FILTER}
       ORDER BY table_name
     `);
 
     const columns = await dbQuery(`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND (table_name ILIKE '%position%' OR table_name ILIKE '%wallet%'
-             OR table_name ILIKE '%snapshot%' OR table_name ILIKE '%clv%')
+      WHERE table_schema = 'public' AND ${NAME_FILTER}
       ORDER BY table_name, ordinal_position
     `);
 
@@ -64625,6 +65119,63 @@ app.get('/api/admin/wallet-position-schema', requireAdminSecret, async (req, res
     });
   } catch (e) {
     console.error('[wallet-position-schema]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/wallet-position-live-check — schema alone doesn't say
+// whether a table is actually populated/actively written. This runs
+// read-only counts + freshness + samples against the two tables that
+// matter for the live-open-position question: polymarket_trades (has a
+// status/open-closed state machine) and realized_trades (resolved-only by
+// design). Single curl.
+app.get('/api/admin/wallet-position-live-check', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const [polymarketTrades, openSample, realizedTrades, cachedPositions] = await Promise.all([
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
+               COUNT(*) FILTER (WHERE status = 'closed')::int AS closed_count,
+               COUNT(DISTINCT proxy_address)::int AS distinct_wallets,
+               MAX(created_at) AS latest_created_at,
+               MAX(updated_at) AS latest_updated_at
+        FROM polymarket_trades
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT proxy_address, market_slug, side, entry_price, shares, status, created_at
+        FROM polymarket_trades
+        WHERE status = 'open'
+        ORDER BY created_at DESC
+        LIMIT 5
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE closed_at IS NOT NULL)::int AS closed_at_present,
+               COUNT(*) FILTER (WHERE closed_at IS NULL)::int AS closed_at_null,
+               MAX(created_at) AS latest_created_at
+        FROM realized_trades
+      `).catch(e => ({ error: e.message })),
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(DISTINCT user_id)::int AS distinct_wallets,
+               COUNT(*) FILTER (WHERE avg_entry_price IS NOT NULL AND avg_entry_price > 0)::int AS with_avg_entry_price,
+               COUNT(DISTINCT user_id) FILTER (WHERE avg_entry_price IS NOT NULL AND avg_entry_price > 0)::int AS wallets_with_avg_entry_price,
+               MAX(updated_at) AS latest_updated_at
+        FROM cached_positions
+      `).catch(e => ({ error: e.message })),
+    ]);
+
+    res.json({
+      polymarket_trades: polymarketTrades[0] || polymarketTrades,
+      polymarket_trades_open_sample: openSample,
+      realized_trades: realizedTrades[0] || realizedTrades,
+      cached_positions: cachedPositions[0] || cachedPositions,
+      note: 'polymarket_trades.open_count > 0 means live open positions exist and are actively tracked. realized_trades.closed_at_null should be near-zero if the table is truly resolved-only by construction (every row already represents a closed round-trip) — a large closed_at_null count would mean it also holds open-position rows despite the naming/docs. cached_positions.with_avg_entry_price / wallets_with_avg_entry_price track rollout of the avg_entry_price backfill (added 2026-08-06) — rows only pick it up as the hourly sync cron re-syncs each wallet, so this climbs toward total/distinct_wallets over ~1hr post-deploy rather than jumping instantly.',
+    });
+  } catch (e) {
+    console.error('[wallet-position-live-check]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -64974,10 +65525,18 @@ async function _reconcileWallet(userId, address) {
   if (!address) return { user_id: userId, error: 'no polymarket_address' };
 
   const ourRows = await dbQuery(`
-    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability
+    SELECT condition_id, side, close_reason, realized_pnl, entry_cost_usd, exit_value_usd, market_durability,
+           -- Score eligibility: _computeRoiLeaderboard additionally requires a
+           -- realized_roi and a positive entry cost. Surfaced so the public
+           -- verifier can distinguish "trades we checked on-chain" from
+           -- "trades that actually back the score" — without it, a profile
+           -- shows "34 verified" beside a score computed on 10 and the two
+           -- numbers silently disagree.
+           (realized_roi IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0) AS score_eligible
     FROM realized_trades
     WHERE user_id::text = $1 AND closed_at IS NOT NULL AND market_durability = 'durable'
   `, [userId]).catch(() => []);
+  const scoreEligible = ourRows.filter(r => r.score_eligible === true).length;
 
   const { events, capped } = await _fetchAllActivity(address.toLowerCase());
 
@@ -64986,14 +65545,23 @@ async function _reconcileWallet(userId, address) {
   // OUT (buyShares≈sellShares) from one HELD TO RESOLUTION and redeemed
   // (sellShares≪buyShares) — the redemption payout is not a TRADE event, so
   // only traded-out positions are reconcilable from this feed.
-  const onchainByCond = new Map(); // cond -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
-  const onchainConds = new Set();
+  // Keyed by conditionId + OUTCOME, not conditionId alone. A wallet can
+  // trade both Yes and No on the same market; our realized_trades records
+  // per-outcome, so aggregating both sides into one bucket compares a
+  // one-side P&L against a both-sides net and reports a disagreement that
+  // isn't one. (Caught 2026-08-05 on TheQuietRisk: "US forces enter Iran by
+  // March 31?" — 61 fills across both Yes and No, flagged as a mismatch
+  // purely by this bug.)
+  const ockey = (cond, outcome) => cond + '|' + String(outcome || '').toUpperCase().trim();
+  const onchainByCond = new Map(); // cond|OUTCOME -> { buyUsdc, sellUsdc, buyShares, sellShares, nEvents }
+  const onchainConds = new Set();  // bare conditionIds, for the existence check
   for (const e of events) {
     const cond = String(e.conditionId || '').toLowerCase();
     if (!cond) continue;
     onchainConds.add(cond);
-    if (!onchainByCond.has(cond)) onchainByCond.set(cond, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
-    const g = onchainByCond.get(cond);
+    const k = ockey(cond, e.outcome);
+    if (!onchainByCond.has(k)) onchainByCond.set(k, { buyUsdc: 0, sellUsdc: 0, buyShares: 0, sellShares: 0, nEvents: 0 });
+    const g = onchainByCond.get(k);
     const usdc = Number(e.usdcSize) || 0;
     const px = Number(e.price) || 0;
     const sh = px > 0 ? usdc / px : 0;
@@ -65004,11 +65572,13 @@ async function _reconcileWallet(userId, address) {
 
   // Our rows grouped by conditionId, so the pnl-sign check aggregates all
   // round-trips on a market rather than mis-partitioning a single one.
+  // Keyed the same way as the on-chain side: condition + OUTCOME.
   const ourByCond = new Map();
   for (const r of ourRows) {
     const cond = String(r.condition_id || '').toLowerCase();
-    if (!ourByCond.has(cond)) ourByCond.set(cond, { pnl: 0, rows: 0, anyRedeemed: false });
-    const g = ourByCond.get(cond);
+    const k = ockey(cond, r.side);
+    if (!ourByCond.has(k)) ourByCond.set(k, { cond: cond, pnl: 0, rows: 0, anyRedeemed: false });
+    const g = ourByCond.get(k);
     g.pnl += Number(r.realized_pnl) || 0;
     g.rows++;
     if (String(r.close_reason || '').startsWith('redeemed')) g.anyRedeemed = true;
@@ -65027,12 +65597,16 @@ async function _reconcileWallet(userId, address) {
   const fabricated = [];   // SOLD-path conditionId with zero on-chain TRADE presence
   const pnlMismatch = [];  // SOLD-path, fully traded out, sign disagreement vs fills
   let redeemedUnchecked = 0;
-  for (const [cond, g] of ourByCond) {
+  for (const [key, g] of ourByCond) {
+    const cond = g.cond;
     if (g.anyRedeemed) { redeemedUnchecked++; continue; } // out of scope for a TRADE-only check
     // FABRICATION (sold-path): a position we say was SOLD must have TRADE
     // fills. Absence = fabricated — but only assertable with full coverage.
     if (!onchainConds.has(cond)) { if (!capped) fabricated.push({ condition_id: cond, our_pnl: Math.round(g.pnl), rows: g.rows }); continue; }
-    const oc = onchainByCond.get(cond);
+    const oc = onchainByCond.get(key);
+    // No fills for this specific outcome (we hold a row for a side the
+    // wallet never traded) — can't compare; don't invent a verdict.
+    if (!oc) continue;
     // PNL-sign only when the position was genuinely TRADED OUT: shares
     // bought ≈ shares sold (within 10%). If shares remain, the exit was a
     // redemption whose payout isn't in this feed, so fill_net understates
@@ -65044,6 +65618,16 @@ async function _reconcileWallet(userId, address) {
         && Math.abs(g.pnl) > 50 && Math.abs(fillNet) > 50) {
       pnlMismatch.push({ condition_id: cond, our_pnl: Math.round(g.pnl), onchain_fill_net_usdc: Math.round(fillNet), rows: g.rows });
     }
+  }
+
+  // Queue this wallet for priority repair if we caught a real disagreement.
+  // Detection without repair is just a nicer way to be wrong in public.
+  // Already tried and provably unfixable by resync — re-adding it would just
+  // restart a loop that already failed RESYNC_MAX_ATTEMPTS times. It stays
+  // publicly flagged (this function still returns the disagreement), it just
+  // stops consuming repair capacity.
+  if ((pnlMismatch.length || fabricated.length) && !_resyncUnrepairable.has(userId)) {
+    try { if (!_resyncPriority.has(userId)) _resyncPriority.set(userId, 0); } catch {}
   }
 
   const soldChecked = ourByCond.size - redeemedUnchecked;
@@ -65058,6 +65642,7 @@ async function _reconcileWallet(userId, address) {
     address,
     our_durable_conditions: ourByCond.size,
     our_durable_rows: ourRows.length,
+    score_eligible_rows: scoreEligible,
     onchain_trade_events: events.length,
     onchain_conditions: onchainConds.size,
     coverage_capped: capped,
@@ -65205,6 +65790,119 @@ async function _reconcileWalletRedeemed(userId) {
       : (fabricatedResolution.length ? 'FABRICATED_RESOLUTION' : 'INVERTED_GRADE'),
   };
 }
+
+// ── PUBLIC VERIFICATION ──────────────────────────────────────────────────
+// /methodology tells visitors records are "reconciled against on-chain
+// fills". Until now that was only checkable behind an admin secret — the
+// claim was public, the proof was not, which is the same
+// trust-us-we-checked posture the product exists to replace. This endpoint
+// makes the proof public and per-trader: anyone can reconcile any wallet's
+// record against its real on-chain activity and see the result.
+//
+// Reuses the EXACT reconcilers the internal audit uses (_reconcileWallet,
+// _reconcileWalletRedeemed) so the public proof can never drift from what
+// we check ourselves. Read-only. Rate-limited by a short cache because each
+// call fans out to Polymarket + gamma.
+// ⚠️ Path is /api/verify-record/, NOT /api/verify/ — a public
+// /api/verify/:userId already exists (line ~11662, UUID-keyed credential
+// API consumed by third parties). Registering a second /api/verify/:handle
+// silently shadowed nothing and was itself shadowed: Express matches the
+// earlier registration, so this handler never ran and every call returned
+// the incumbent's "User not found". That's the duplicate-route hazard
+// CLAUDE.md names explicitly and the 11th instance of the collision class
+// the scope audit found. Distinct path, both routes intact.
+const _publicVerifyCache = new Map(); // handle -> { data, ts }
+app.get('/api/verify-record/:handle', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    const key = String(req.params.handle || '').toLowerCase();
+    const cached = _publicVerifyCache.get(key);
+    if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
+
+    const user = await _resolveTraderHandle(req.params.handle);
+    if (!user) return res.status(404).json({ error: 'trader not found' });
+
+    const [sold, redeemed] = await Promise.all([
+      _reconcileWallet(user.id, user.polymarket_address).catch(e => ({ error: e.message })),
+      _reconcileWalletRedeemed(user.id).catch(e => ({ error: e.message })),
+    ]);
+
+    // Plain-language verdict a non-technical visitor can act on. "verified"
+    // requires the sold path to reconcile AND no fabricated/inverted grade
+    // on the redeemed path. Anything unprovable is stated as unprovable —
+    // never rounded up to verified.
+    const soldOk     = sold && sold.verdict === 'clean';
+    const soldCapped = sold && sold.verdict === 'UNVERIFIABLE_CAPPED';
+    const redOk      = !redeemed || redeemed.verdict === 'clean' || redeemed.verdict === 'clean_partial' || redeemed.verdict === 'no_redeemed_rows';
+    const redBad     = redeemed && (redeemed.verdict === 'FABRICATED_RESOLUTION' || redeemed.verdict === 'INVERTED_GRADE');
+
+    let status, summary;
+    if (redBad) {
+      status = 'failed';
+      summary = 'This record contains grades we could not confirm against the market\'s actual resolution. It is excluded from ranking until corrected.';
+    } else if (soldOk && redOk) {
+      status = 'verified';
+      summary = 'Every trade in this record matches this wallet\'s real on-chain activity, and every held-to-resolution outcome we could check matched the market\'s actual result.';
+    } else if (soldCapped) {
+      status = 'partial';
+      summary = 'This wallet trades at a volume beyond what we can fully re-check in one pass. The portion we verified reconciles; the remainder is unconfirmed rather than assumed correct.';
+    } else {
+      status = 'partial';
+      summary = 'Part of this record reconciles against on-chain activity; part could not be independently confirmed. We report the gap rather than assume it is fine.';
+    }
+
+    const payload = {
+      handle: user.handle || user.username || null,
+      address: user.polymarket_address || null,
+      status, summary,
+      checked_at: new Date().toISOString(),
+      on_chain: sold && !sold.error ? {
+        trades_in_our_record: sold.our_durable_rows,
+        markets_in_our_record: sold.our_durable_conditions,
+        // Not every verified trade backs the score: ranking additionally
+        // requires a realized return and a positive entry cost. Reported so
+        // "N verified" can never be mistaken for "N trades behind the score".
+        trades_counting_toward_score: sold.score_eligible_rows,
+        on_chain_trade_events_examined: sold.onchain_trade_events,
+        trades_with_no_matching_on_chain_activity: sold.fabricated_count,
+        pnl_direction_disagreements: sold.pnl_sign_mismatch_count,
+        coverage_complete: sold.coverage_capped === false,
+        // Receipts for a non-clean verdict. Saying "partial" without showing
+        // WHICH trades could not be confirmed is the same take-our-word-for-it
+        // posture this endpoint exists to replace — so the specific markets
+        // are listed, with our figure beside the on-chain figure, for anyone
+        // who wants to check the disagreement themselves.
+        unconfirmed_trades: [
+          ...(sold.fabricated || []).map(f => ({
+            reason: 'no matching on-chain activity',
+            condition_id: f.condition_id,
+            our_pnl_usd: f.our_pnl,
+          })),
+          ...(sold.pnl_mismatch || []).map(m => ({
+            reason: 'our profit/loss direction disagrees with on-chain fills',
+            condition_id: m.condition_id,
+            our_pnl_usd: m.our_pnl,
+            onchain_net_usd: m.onchain_fill_net_usdc,
+          })),
+        ].slice(0, 25),
+      } : null,
+      resolutions: redeemed && !redeemed.error ? {
+        held_to_resolution_rows: redeemed.redeemed_rows,
+        outcomes_confirmed: redeemed.verified,
+        outcomes_unconfirmable: redeemed.unverifiable,
+        graded_on_unresolved_markets: redeemed.fabricated_resolution_count,
+        graded_against_actual_outcome: redeemed.inverted_grade_count,
+      } : null,
+      how_to_read: 'Verified means: we re-derived this record from the wallet\'s own on-chain transactions, not from self-reported data. "Unconfirmable" means the source market is no longer publicly retrievable — we count it as unproven, never as a win. trades_counting_toward_score is usually lower than trades_in_our_record: a trade can be confirmed real yet still lack the return data required to rank it. Methodology: /methodology',
+    };
+
+    _publicVerifyCache.set(key, { data: payload, ts: Date.now() });
+    res.json(payload);
+  } catch (e) {
+    console.error('[public-verify]', e.message);
+    res.status(500).json({ error: 'verification unavailable' });
+  }
+});
 
 // GET /api/admin/verify-promoted-redeemed — resolution check on the
 // promoted set's held-to-resolution positions, against live gamma.

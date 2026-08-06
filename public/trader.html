@@ -177,7 +177,7 @@ a:hover { text-decoration: underline; }
 <body>
 
 <div id="nav-root"></div>
-<script src="/nav.js?v=25"></script>
+<script src="/nav.js?v=26"></script>
 
 <div id="root"><div class="loading-state">LOADING TRADER PROFILE…</div></div>
 
@@ -286,7 +286,7 @@ a:hover { text-decoration: underline; }
         + '<div class="strip-sep"></div>'
         + '<div class="strip-stat">'
           + '<div class="strip-val ' + avgClvCls + '">' + esc(avgClvStr) + '</div>'
-          + '<div class="strip-label">AVG CLV · n=' + (clv.sample_size || 0) + '</div>'
+          + '<div class="strip-label">AVG CLV · ' + (clv.sample_size || 0) + ' trades</div>'
         + '</div>'
         + '<div class="strip-sep"></div>'
         + '<div class="strip-stat">'

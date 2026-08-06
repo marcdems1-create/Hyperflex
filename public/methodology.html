@@ -47,11 +47,18 @@
 </head>
 <body>
 <div id="nav-root"></div>
-<script src="/nav.js?v=25"></script>
+<script src="/nav.js?v=26"></script>
 
 <div class="wrap">
   <h1>How the score works</h1>
   <p class="lede">What it measures, how it is verified, and — just as important — what it does not claim.</p>
+
+  <div class="card warn">
+    <div class="card-title">Correction in progress — 5 August 2026</div>
+    <p>We found a defect in how closed trades were recorded. A position only counted as closed if its share balance reached <strong>exactly</strong> zero. Positions that closed but left a rounding remnant — fractions of a single share — had their <strong>entire result discarded</strong>, wins and losses alike. Partially exited positions were dropped the same way.</p>
+    <p>The effect was not marginal. On one ranked trader, 18 markets were affected, including a $290,189 gain and a $225,899 loss that never appeared in their record at all. Most records carrying a score were affected to some degree.</p>
+    <p>Records are being rebuilt from on-chain activity. <strong>Scores and rankings will move, and some traders will move down</strong> — records that omitted losses looked better than reality. We are stating this while it is being fixed rather than after, because a page claiming records are verified should say so when they are incomplete.</p>
+  </div>
 
   <h2>What the score is</h2>
   <p>A trader's score is their <strong>realized return on closed trades</strong>, computed only from markets we can independently verify. Three things shape it:</p>
