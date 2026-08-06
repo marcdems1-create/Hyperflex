@@ -628,7 +628,28 @@ if (!CREATOR_PLATFORM_ENABLED) {
   const creatorSaasOff = (req, res) => {
     return res.status(503).json({ error: 'Creator platform is currently offline.' });
   };
-  app.use('/api/creator', creatorSaasOff);
+  app.use('/api/creator', (req, res, next) => {
+    // Same problem one level down: the page-route fix above (exempting
+    // /creator/login etc.) makes the login/signup/dashboard PAGES load,
+    // but those pages POST/GET to these exact /api/creator/* endpoints to
+    // actually do anything — login and signup submit to /api/creator/login
+    // and /api/creator/signup, Google OAuth completes via
+    // /api/creator/oauth-complete (all confirmed via grep against
+    // creator-login.html/creator-signup.html), and /api/creator/dashboard
+    // is the dashboard's data bootstrap, which has an explicit
+    // "wallet_only" branch (server.js ~6162) returning minimal portfolio-
+    // mode data for users with no creator_settings row at all — i.e. it
+    // was already designed to serve plain trading users, not just
+    // community creators. Without this, the fixed pages load and then
+    // fail on their first real request. Everything else under
+    // /api/creator/* (settings, disputes, seasons, YouTube/Twitch scan,
+    // custom domains, digest, rewards, members, analytics, etc.) is
+    // genuinely community-SaaS-specific and stays off.
+    const path = req.originalUrl.split('?')[0];
+    const exempt = ['/api/creator/login', '/api/creator/signup', '/api/creator/oauth-complete', '/api/creator/dashboard'];
+    if (exempt.includes(path)) return next();
+    return creatorSaasOff(req, res);
+  });
   app.use('/api/creator-wallet', creatorSaasOff);
   app.use('/api/community-leaderboard', creatorSaasOff);
   app.use('/api/community', creatorSaasOff);
