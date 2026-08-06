@@ -49,6 +49,31 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-06 (resolved the `stash@{0}` conflict flagged 2026-08-05c; nav trim + Comment/Follow/Challenge shipped; found + fixed a real Profile-link gap)
+
+**Shipped (with hashes):**
+- `57d52c6` (pushed to `main`, verified via `git log origin/main`) —
+  - `server.js`: new `trader_comments` table (self-migrating at boot, same pattern as every other table) + `GET/POST /api/predictors/:userId/comments`, notifies the target user on a new comment. Follow and Challenge reuse the existing `predictor_follows`/`challenges` endpoints unchanged.
+  - `home-kings.html`: Comment/Follow/Challenge buttons under every trader card (Top Trader hero + World/Politics/Macro/Sports rails) — rebuilt fresh against the **current** redesigned card markup (`cardArticleHtml`/`.trader-card`), not the stale pre-redesign version that was stuck in the stash. New `.trader-card-block` wrapper keeps the buttons as a sibling row outside the card's `<a>` (never nested inside it — nested interactive controls inside an anchor is invalid and double-fires navigation). Shared Comment modal + Challenge modal (same fields as `member.html`'s existing challenge flow). Verified via a temp static file server (not `server.js` — a plain `python3 -m http.server` on a scratch port, per CLAUDE.md rule 7) with injected fake card data: modal open/close, Follow toggle, Challenge YES/NO + stake slider all confirmed working via both real clicks and `.click()` (a couple of ref-based clicks in the Browser pane missed their target at a 500px test viewport — confirmed via direct `.click()` that this was a click-coordinate quirk in the test tool, not a code bug).
+  - `nav.js`: fixed a real gap Marc asked me to confirm — `_goToMyProfile()` (desktop "👤 Profile" link + mobile "More" overlay) and the mobile bottom-nav Profile tab both only checked the full-login keys (`hf_token`/`hf_user_id`/`hf_username`). `/connect` (wallet-only, no signup) caches under a **separate** key namespace (`hf_connect_user_id`/`hf_connect_address`, see `connect.html`) and auto-resumes from it. Net effect pre-fix: a visitor who connects a wallet via `/connect` and then taps "Profile" got bounced to `/creator/login`, not back to their score. Both call sites now fall back to `/connect` when only the connect-cache is present. Also dropped `'My Score'`/`'World Cup'` from desktop `primaryLinks` (redundant now that Profile actually works for a wallet-only visitor) and renamed `'Predictors'`→`'Leaderboard'` everywhere in `nav.js` (desktop nav, ⌘K search index, search pills) — matches the mobile bottom-nav label already in place since `6b41c25`.
+
+**Resolved from 2026-08-05c's queue:**
+- The `CLAUDE.md` doc, `nav.js` primaryLinks trim, `finance.html` migration, and `server.js` resync no-op-skip guard pieces of `stash@{0}` were already independently committed via `403c830` before this session started (verify-if-curious: `git show 403c830 --stat`). Only the `home-kings.html` Comment/Follow/Challenge piece was actually still outstanding, and it's now rebuilt+shipped per above.
+- **`stash@{0}` dropped** (`git stash drop`) — everything in it has either already landed elsewhere or was superseded by the fresh rebuild in `57d52c6`. `stash@{1..3}` (older, pre-dating even the 2026-08-05c session — email-blast deletion, Market Intel restructure, mobile-responsiveness pass) are untouched; still not investigated.
+
+**Active blockers:**
+- (none from this session)
+
+**Queued (priority order):**
+- (none opened this session)
+
+**Open questions / unverified:**
+- `stash@{1..3}` — still unexamined, unclear if still wanted or safe to drop. Someone should look before they rot further.
+
+**Notes for next session:**
+- **Process lesson, same shape as 2026-08-05c's but sharper:** this session pushed straight into building a feature on top of the working tree without checking `git status`/`git log` first. Mid-build, a concurrent session's rebase auto-stashed everything (correctly — no data was lost) with a clear note, but the first `git push` still got rejected non-fast-forward once, and `origin/main` moved again between a `git fetch` and the next `git push` attempt. **Check `git status` and `git fetch origin main --quiet && git log HEAD..origin/main` before starting any multi-file edit in this repo right now** — concurrent-session traffic is heavy enough that "clean at session start" can go stale mid-session.
+- Confirmed pattern for verifying UI changes without violating CLAUDE.md rule 7 (never start/stop `server.js`): `python3 -m http.server <scratch-port> --bind 127.0.0.1` from `public/`, then point the Browser pane at `http://127.0.0.1:<port>/page.html` and inject fake data via `javascript_tool` to exercise render functions that would otherwise need a live API. Works for pure front-end logic/layout checks; anything needing a real DB round-trip still needs a post-deploy check.
+
 ## 2026-08-05c (wallet-position-schema merge confirmed live; mobile nav hamburger shipped; found + parked a stash conflict)
 
 **Shipped (with hashes):**
