@@ -668,12 +668,18 @@
             '<div class="led-head with-live"><span>open positions</span>' +
             '<span class="open-live">' + open.length + ' live</span></div>' + exposure +
             open.map(function(p){
+              // Headline is the % move, not the $ — an open position's dollar
+              // P&L is a function of size, which says nothing about the call
+              // itself; the percentage is the actual read on whether the
+              // trade is working. $ P&L moves to the meta line instead of
+              // disappearing (Marc: "change the $ up or down to percentage
+              // gain or loss on the open trade").
               var pnl = num(p.pnl), pnlPct = num(p.pnl_pct);
-              var cls = pnl == null ? '' : (pnl > 0 ? 'pos' : (pnl < 0 ? 'neg' : ''));
+              var cls = pnlPct == null ? '' : (pnlPct > 0 ? 'pos' : (pnlPct < 0 ? 'neg' : ''));
               var bits = [];
               if (p.cost_basis) bits.push(usd(p.cost_basis) + ' in');
               if (p.current_price != null) bits.push('now ' + price(p.current_price));
-              if (pnlPct != null) bits.push((pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%');
+              if (pnl != null) bits.push(signedUsd(pnl));
               if (p.end_date) {
                 var dt = new Date(p.end_date);
                 if (!isNaN(dt)) bits.push('ends ' + dt.toLocaleDateString('en-US', { month:'short', day:'numeric' }));
@@ -692,7 +698,7 @@
                 '<div class="row-meta">' + bits.join(' · ') + '</div>' +
                 (copyBtn ? '<div style="margin-top:12px">' + copyBtn + '</div>' : '') +
                 '</div>' +
-                '<div class="row-amt ' + cls + '">' + signedUsd(pnl) + '</div>' +
+                '<div class="row-amt ' + cls + '">' + signedPct(pnlPct) + '</div>' +
               '</div>';
             }).join('');
         })
