@@ -1273,6 +1273,7 @@ window.showSkeletons = function(containerId, count, type) {
     '.bn-item.active .bn-label{color:#00e68a;}',
     '.bn-item.active .bn-icon{filter:brightness(1.6);}',
     '.bn-item:active{background:rgba(255,255,255,.06);}',
+    'button.bn-item{background:none;border:none;font:inherit;color:inherit;margin:0;-webkit-appearance:none;}',
     '@media(max-width:768px){',
     '.bottom-nav{display:flex;}',
     '.nav-hamburger{display:none!important;}',
@@ -1293,6 +1294,7 @@ window.showSkeletons = function(containerId, count, type) {
       { label: 'Alpha',     icon: '⚡', href: '/alpha-live' },
       { label: 'Leaderboard', icon: '🏆', href: '/traders' },
       { label: 'Profile',   icon: '👤', href: null }, // resolved at runtime
+      { label: 'More',      icon: '☰',  more: true }, // opens the full nav-mobile-menu overlay
     ];
 
     // Resolve profile link
@@ -1305,6 +1307,12 @@ window.showSkeletons = function(containerId, count, type) {
     nav.id = 'hfx-bottom-nav';
     nav.setAttribute('aria-label', 'Main navigation');
     nav.innerHTML = items.map(function(item) {
+      if (item.more) {
+        return '<button type="button" class="bn-item" id="bnMoreBtn" aria-label="' + item.label + '">'
+          + '<span class="bn-icon">' + item.icon + '</span>'
+          + '<span class="bn-label">' + item.label + '</span>'
+          + '</button>';
+      }
       var isActive = (item.href === '/' ? path === '/' : path.startsWith(item.href));
       return '<a href="' + item.href + '" class="bn-item' + (isActive ? ' active' : '') + '" aria-label="' + item.label + '">'
         + '<span class="bn-icon">' + item.icon + '</span>'
@@ -1316,6 +1324,17 @@ window.showSkeletons = function(containerId, count, type) {
     // Ensure content doesn't hide behind the bar
     if (!document.body.style.paddingBottom) {
       document.body.style.paddingBottom = '72px';
+    }
+
+    // "More" opens the full-link overlay already built for the (mobile-hidden)
+    // hamburger button, rather than duplicating its link list here.
+    var moreBtn = document.getElementById('bnMoreBtn');
+    var overlay = document.getElementById('navMobileMenu');
+    if (moreBtn && overlay) {
+      moreBtn.addEventListener('click', function() {
+        overlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      });
     }
   }
 
