@@ -30875,12 +30875,6 @@ app.get('/group/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public'
 // ephemeral-market trades count too.
 const TRADE_BIO_MIN_N = 5;
 
-function _truncateBioQuestion(q) {
-  q = String(q || '').trim();
-  if (q.length <= 46) return q;
-  return q.slice(0, 45).trim() + '…';
-}
-
 function _fmtBioUsd(n) {
   n = Math.round(Number(n) || 0);
   return '$' + n.toLocaleString('en-US');
@@ -30910,26 +30904,15 @@ async function computeTradeBio(userId) {
     catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
   }
   const topCats = [...catCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(c => c[0]);
-  const catLabel = topCats.length === 2 ? `${topCats[0]} and ${topCats[1]}` : (topCats[0] || null);
+  const catLabel = topCats.length === 2 ? `${topCats[0]} + ${topCats[1]}` : (topCats[0] || null);
 
-  let wins = 0, totalCost = 0, costCount = 0, totalPnl = 0;
-  let maxStakeRow = null, worstLossRow = null;
+  // Win rate / ROI / avg size are computed and rendered elsewhere on the
+  // page (stat quad, meta strip) — this function only needs the worst loss.
+  let worstLossRow = null;
   for (const r of rows) {
     const pnl = r.realized_pnl != null ? Number(r.realized_pnl) : null;
-    const cost = r.entry_cost_usd != null ? Number(r.entry_cost_usd) : null;
-    if (pnl != null) {
-      totalPnl += pnl;
-      if (pnl > 0) wins++;
-      if (pnl < 0 && (worstLossRow == null || pnl < Number(worstLossRow.realized_pnl))) worstLossRow = r;
-    }
-    if (cost != null && cost > 0) {
-      totalCost += cost; costCount++;
-      if (maxStakeRow == null || cost > Number(maxStakeRow.entry_cost_usd)) maxStakeRow = r;
-    }
+    if (pnl != null && pnl < 0 && (worstLossRow == null || pnl < Number(worstLossRow.realized_pnl))) worstLossRow = r;
   }
-  const winRatePct = Math.round((wins / n) * 1000) / 10;
-  const avgStake = costCount ? totalCost / costCount : null;
-  const roiPct = totalCost > 0 ? Math.round((totalPnl / totalCost) * 1000) / 10 : null;
 
   // Current streak, walking back from the most recently resolved trade —
   // stops at the first push (pnl === 0) or null-pnl row.
@@ -30944,41 +30927,25 @@ async function computeTradeBio(userId) {
     else break;
   }
 
-  const parts = [];
-  parts.push(`Resolved ${n} trades over the last ${daySpan} days` + (catLabel ? `, concentrated in ${catLabel} markets.` : '.'));
-
-  if (avgStake != null) {
-    let sizing = `Average position size ${_fmtBioUsd(avgStake)}`;
-    if (maxStakeRow && Number(maxStakeRow.entry_cost_usd) > avgStake * 1.5) {
-      sizing += `, sized up to ${_fmtBioUsd(maxStakeRow.entry_cost_usd)} on ${_truncateBioQuestion(maxStakeRow.market_question)}`;
-    }
-    parts.push(sizing + '.');
-  }
-
-  let record = `${winRatePct}% win rate`;
-  if (roiPct != null) record += `, ${roiPct >= 0 ? '+' : ''}${roiPct}% realized ROI`;
-  parts.push(record + '.');
-
+  // Stat fragments, not sentences (Marc: "just have the stats and less
+  // words no ones going to read that"). Win rate / ROI / avg size are
+  // dropped entirely — they already render as their own tiles in the stat
+  // quad and meta strip just below this line, so restating them in prose
+  // was pure duplication. What's left is the handful of facts that don't
+  // live anywhere else on the page: trade count/span/category, the worst
+  // loss, and an active streak.
+  const bits = [];
+  bits.push(`${n} trades`);
+  bits.push(`${daySpan}d`);
+  if (catLabel) bits.push(catLabel);
   if (worstLossRow) {
-    // Hold time is only asserted when we actually know it. Redeemed-path
-    // rows have opened_at NULL (see backfillRealizedTrades' redeemed INSERT)
-    // — computing a duration off that yields 0 and the copy then claims
-    // "held 0d", which reads as a same-day flip on a position we have no
-    // open timestamp for at all. Omit rather than assert.
-    const heldDays = worstLossRow.opened_at
-      ? Math.max(0, Math.round((new Date(worstLossRow.closed_at) - new Date(worstLossRow.opened_at)) / 86400000))
-      : null;
-    parts.push(
-      `Notable loss: ${_fmtBioUsd(Math.abs(Number(worstLossRow.realized_pnl)))} on ${_truncateBioQuestion(worstLossRow.market_question)}` +
-      (heldDays != null && heldDays > 0 ? `, held ${heldDays}d before resolving against.` : '.')
-    );
+    bits.push(`worst -${_fmtBioUsd(Math.abs(Number(worstLossRow.realized_pnl)))}`);
   }
-
   if (streakLen >= 2) {
-    parts.push(`Currently on a ${streakLen}-trade ${streakSign > 0 ? 'win' : 'losing'} streak.`);
+    bits.push(`${streakLen}-trade ${streakSign > 0 ? 'win' : 'loss'} streak`);
   }
 
-  return parts.join(' ');
+  return bits.join(' · ');
 }
 
 // ── TRADER CARD PAYLOAD ─────────────────────────────────────────────────
