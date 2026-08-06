@@ -537,28 +537,6 @@
     document.body.insertBefore(nav, document.body.firstChild);
   }
 
-  // ── Score-correction notice (added 2026-08-05) ─────────────────────────
-  // Site-wide because every score-bearing surface is affected. A defect in
-  // trade ingestion omitted realized profit and loss from closed positions:
-  // a position that didn't land on exactly zero shares had its entire result
-  // discarded, so records were incomplete and scores will move as they are
-  // rebuilt. Stated plainly rather than fixed quietly — the site's own
-  // methodology page claims records are verified against on-chain fills, and
-  // until the rebuild completes that claim is only partly true.
-  //
-  // ⛔ REMOVE THIS BLOCK once the rebuild is complete and re-verified.
-  // Single flag, single block, no other file touched, so removal is one cut.
-  var HF_SCORE_NOTICE = true;
-  if (HF_SCORE_NOTICE) {
-    var notice = document.createElement('div');
-    notice.setAttribute('role', 'status');
-    notice.style.cssText = 'background:rgba(245,158,11,.08);border-bottom:1px solid rgba(245,158,11,.28);color:#f7c774;font:500 13px/1.5 Inter,-apple-system,sans-serif;padding:9px 18px;text-align:center';
-    notice.innerHTML = 'Scores are being recomputed. A defect found 5 August 2026 left realized profit and loss out of some records; rankings will move as they rebuild. '
-      + '<a href="/methodology" style="color:#f7c774;text-decoration:underline">What changed</a>';
-    if (root) root.appendChild(notice);
-    else document.body.insertBefore(notice, nav.nextSibling);
-  }
-
   // ── Unread messages badge ──
   if (isLoggedIn) {
     (function pollUnread() {
