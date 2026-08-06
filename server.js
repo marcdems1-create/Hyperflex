@@ -12396,9 +12396,6 @@ app.get('/challenge', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 app.get('/notifications', (req, res) => res.sendFile(path.join(__dirname, 'public', 'notifications.html')));
-// GET /dogs — contrarian-signal dog cards (dog-card-v1). See
-// docs/specs/dog-card-v1.md.
-app.get('/dogs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dogs.html')));
 app.get('/sports-predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sports-predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 app.get('/rewards', (req, res) => res.redirect(302, '/'));
@@ -14183,15 +14180,6 @@ app.get('/api/trader-record/:handle', async (req, res) => {
     console.error('[trader-record]', e.message);
     res.status(500).json({ error: e.message });
   }
-});
-
-// Serves the trader profile page for any handle/address/UUID. Static file,
-// client-side fetch to /api/trader-record/:handle does the rest — same
-// pattern as /m/:userId serving member.html. Linked from site nav as of
-// Gate 1 clearing (2026-07-21) — see CLAUDE.md.
-app.get('/trader/:handle', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'trader-profile.html'));
 });
 
 // Trader-first surface at a real, permanently-linked route — launched
@@ -30502,9 +30490,7 @@ app.get('/health', (req, res) => {
 
 // ── Social pages (must be before /:slug catch-all) ──
 app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
-app.get('/portfolio', (req, res) => res.sendFile(path.join(__dirname, 'public', 'portfolio.html')));
 app.get('/daily', (req, res) => res.sendFile(path.join(__dirname, 'public', 'daily.html')));
-app.get('/arena', (req, res) => res.sendFile(path.join(__dirname, 'public', 'arena.html')));
 
 // ── BRAG ENGINE — shareable call/streak/archetype cards ───────────────────
 (function() {
@@ -39042,8 +39028,6 @@ app.get('/api/smart-money-leaderboard', async (req, res) => {
 
 // GET /whales — whale watch page
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
-// GET /market-intel — serves whale watch page (rebranded in nav)
-app.get('/market-intel', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
 
 // GET /compare — SEO comparison page (HYPERFLEX vs competitors)
 app.get('/compare', (req, res) => res.sendFile(path.join(__dirname, 'public', 'compare.html')));
@@ -40745,12 +40729,9 @@ app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 
 // GET /data — premium data dashboard
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
-// /datafeed — buyer-facing marketing page for the paid sentiment API
-app.get('/datafeed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'datafeed.html')));
 app.get('/picks', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks.html')));
 app.get('/picks/new', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-new.html')));
 app.get('/picks/leaderboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'picks-leaderboard.html')));
-app.get('/picks/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pick.html')));
 // /t/:handle is the legacy tipster URL. Collapse to the canonical
 // /@{handle}. Tipsters are just users now (T1 rip) so there's no separate
 // tipster profile — the @username page shows everything including picks.
@@ -48543,12 +48524,6 @@ app.get('/api/referral/stats', requireAdmin, async (req, res) => {
     console.error('[referral/stats]', err.message);
     res.json({ total_referrals: 0, total_fp_awarded: 0, top_referrers: [] });
   }
-});
-
-// GET /ref/:code — referral landing redirect
-app.get('/ref/:code', (req, res) => {
-  const code = (req.params.code || '').toUpperCase();
-  res.redirect(`/creator/signup?ref_code=${encodeURIComponent(code)}`);
 });
 
 // ══════════════════════════════════════════════════════════════════════
