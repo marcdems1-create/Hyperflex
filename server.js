@@ -65149,6 +65149,8 @@ app.get('/api/admin/wallet-position-live-check', requireAdminSecret, async (req,
       dbQuery(`
         SELECT COUNT(*)::int AS total,
                COUNT(DISTINCT user_id)::int AS distinct_wallets,
+               COUNT(*) FILTER (WHERE avg_entry_price IS NOT NULL AND avg_entry_price > 0)::int AS with_avg_entry_price,
+               COUNT(DISTINCT user_id) FILTER (WHERE avg_entry_price IS NOT NULL AND avg_entry_price > 0)::int AS wallets_with_avg_entry_price,
                MAX(updated_at) AS latest_updated_at
         FROM cached_positions
       `).catch(e => ({ error: e.message })),
@@ -65159,7 +65161,7 @@ app.get('/api/admin/wallet-position-live-check', requireAdminSecret, async (req,
       polymarket_trades_open_sample: openSample,
       realized_trades: realizedTrades[0] || realizedTrades,
       cached_positions: cachedPositions[0] || cachedPositions,
-      note: 'polymarket_trades.open_count > 0 means live open positions exist and are actively tracked. realized_trades.closed_at_null should be near-zero if the table is truly resolved-only by construction (every row already represents a closed round-trip) — a large closed_at_null count would mean it also holds open-position rows despite the naming/docs.',
+      note: 'polymarket_trades.open_count > 0 means live open positions exist and are actively tracked. realized_trades.closed_at_null should be near-zero if the table is truly resolved-only by construction (every row already represents a closed round-trip) — a large closed_at_null count would mean it also holds open-position rows despite the naming/docs. cached_positions.with_avg_entry_price / wallets_with_avg_entry_price track rollout of the avg_entry_price backfill (added 2026-08-06) — rows only pick it up as the hourly sync cron re-syncs each wallet, so this climbs toward total/distinct_wallets over ~1hr post-deploy rather than jumping instantly.',
     });
   } catch (e) {
     console.error('[wallet-position-live-check]', e.message);
