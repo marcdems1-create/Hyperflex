@@ -247,6 +247,8 @@
       '.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(10,10,15,0.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);position:sticky;top:0;z-index:100}' +
       '.topbar-logo{font-family:"Inter",-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none}' +
       '.topbar-logo span{background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}' +
+      '.topbar-logo-wrap{display:flex;flex-direction:column;gap:1px}' +
+      '.topbar-tagline{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;color:#8890a3;letter-spacing:0.02em;line-height:1;white-space:nowrap}' +
       '.nav-links{display:flex;align-items:center;gap:6px;margin-left:auto}' +
       '.nav-link{font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .15s;padding:6px 10px;border-radius:8px;white-space:nowrap}' +
       '.nav-link:hover{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
@@ -508,7 +510,7 @@
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
-    '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
+    '<div class="topbar-logo-wrap"><a href="/" class="topbar-logo">HYPER<span>FLEX</span></a><span class="topbar-tagline">powered by Polymarket</span></div>' +
     '<div class="nav-links">' +
       primaryLinks.filter(function(l){ return !l.authOnly || isLoggedIn; }).map(function(l) {
         var isActive = path === l.href;
@@ -623,7 +625,10 @@
     }).join('');
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
-        '<a href="/" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
+        '<div style="display:flex;flex-direction:column;gap:1px">' +
+          '<a href="/" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
+          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;font-weight:500;color:#8890a3;letter-spacing:0.02em;line-height:1;white-space:nowrap">powered by Polymarket</span>' +
+        '</div>' +
         '<button class="nav-mobile-close" id="navMobileClose">' +
           '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
         '</button>' +
