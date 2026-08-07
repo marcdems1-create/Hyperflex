@@ -541,15 +541,30 @@
   .avatar.rank-3{background:linear-gradient(135deg,#d99a5e,#a5652c);border-color:#a5652c;color:#151109;}
 
   .powered-by{
-    font-family:var(--font-mono);
-    font-size:0.64rem;
-    letter-spacing:0.06em;
-    text-transform:uppercase;
-    color:var(--ink-faint);
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    padding:6px 13px 6px 11px;
+    border:1px solid var(--border);
+    border-radius:100px;
+    background:var(--surface);
+    font-family:var(--font-sans);
+    font-size:0.78rem;
+    font-weight:600;
+    letter-spacing:-0.005em;
+    text-transform:none;
+    color:var(--ink-muted);
     text-decoration:none;
     white-space:nowrap;
+    transition:border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
   }
-  .powered-by:hover{color:var(--ink-muted);}
+  .powered-by:hover{color:var(--ink);border-color:var(--ink-faint);background:var(--surface-2);}
+  .powered-by-dot{
+    width:7px;height:7px;border-radius:50%;
+    background:#4d9fff;
+    box-shadow:0 0 0 3px rgba(77,159,255,0.16);
+    flex:0 0 auto;
+  }
 
   /* Category rail headers — icon + a real heading instead of the small
      mono eyebrow label, so World/Politics/Macro/Sports read as section
@@ -673,8 +688,7 @@
 <div class="app-shell">
 
   <div class="topbar">
-    <a class="powered-by" href="https://polymarket.com" target="_blank" rel="noopener">Powered by Polymarket</a>
-    <div class="live-pill"><span class="live-dot"></span>LIVE</div>
+    <a class="powered-by" href="https://polymarket.com" target="_blank" rel="noopener"><span class="powered-by-dot"></span>Powered by Polymarket</a>
   </div>
 
   <header class="hero">
