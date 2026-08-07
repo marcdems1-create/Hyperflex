@@ -375,7 +375,7 @@ a:hover { text-decoration: underline; }
   <div class="head">
     <div>
       <div class="head-eyebrow">⚔ HYPERFLEX · Challenges</div>
-      <h1>Who's staking against you</h1>
+      <h1>Who's betting against you</h1>
     </div>
   </div>
 
@@ -576,6 +576,22 @@ function renderCard(c) {
       if (Number(c.stake_flex) > 0) {
         bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;color:var(--gold);letter-spacing:0.06em">Stake: ' + c.stake_flex + ' FLEX</span>');
       }
+      // Smart money — durable-verified top traders (not the old
+      // capital-deployed whale set) positioned on this same market,
+      // read relative to which side is actually yours. Skipped once
+      // resolved: the win/loss line below is the signal that matters then.
+      if (!c.winner_id && c.smart_money && c.challenger_side) {
+        var meSideSm   = iAmChallenged ? c.challenged_side : c.challenger_side;
+        var withMe     = meSideSm === 'YES' ? c.smart_money.yes : c.smart_money.no;
+        var againstMe  = meSideSm === 'YES' ? c.smart_money.no  : c.smart_money.yes;
+        if (withMe.length || againstMe.length) {
+          bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;letter-spacing:0.06em">Smart money: ' +
+            (withMe.length ? '<b style="color:#00e68a">' + withMe.length + ' with you</b>' : '') +
+            (withMe.length && againstMe.length ? ' · ' : '') +
+            (againstMe.length ? '<b style="color:#ff4d6a">' + againstMe.length + ' against</b>' : '') +
+            '</span>');
+        }
+      }
       if (c.winner_id) {
         var iWon = (iAmChallenged && c.winner_id === c.challenged_id) || (iAmChallenger && c.winner_id === c.challenger_id);
         bits.push('<span style="font-family:var(--mono,monospace);font-size:10px;font-weight:800;letter-spacing:0.06em;color:' + (iWon ? '#00e68a' : '#ff4d6a') + '">' + (iWon ? '✓ YOU WON' : '✗ YOU LOST') + '</span>');
@@ -621,17 +637,46 @@ function _matchupCard(c) {
   var b = c.challenged || {};
   var aSide = (c.challenger_side || '').toUpperCase();
   var bSide = (c.challenged_side || '').toUpperCase();
-  var aSideHtml = aSide ? '<span class="matchup-side ' + (aSide === 'YES' ? 'yes' : 'no') + '">' + esc(aSide) + '</span>' : '';
-  var bSideHtml = bSide ? '<span class="matchup-side ' + (bSide === 'YES' ? 'yes' : 'no') + '">' + esc(bSide) + '</span>' : '';
-  var aLink = a.id ? '<a href="/m/' + encodeURIComponent(a.id) + '">' + esc(a.name || 'Trader') + '</a>' : esc(a.name || 'Trader');
-  var bLink = b.id ? '<a href="/m/' + encodeURIComponent(b.id) + '">' + esc(b.name || 'Trader') + '</a>' : esc(b.name || 'Trader');
+  var status = (c.status || 'pending').toLowerCase();
+  var resolved = status === 'resolved' && c.winner_id;
+  var aWon = resolved && c.winner_id === a.id;
+  var bWon = resolved && c.winner_id === b.id;
+  // Winner gets a checkmark, loser stays fully visible at reduced weight —
+  // same layout dignity for both sides, per the platform's stance that a
+  // loss is recorded, not hidden. Functional glyph only (✓), no emoji.
+  var aSideHtml = aSide ? '<span class="matchup-side ' + (aSide === 'YES' ? 'yes' : 'no') + (resolved && !aWon ? '" style="opacity:.55' : '') + '">' + esc(aSide) + '</span>' : '';
+  var bSideHtml = bSide ? '<span class="matchup-side ' + (bSide === 'YES' ? 'yes' : 'no') + (resolved && !bWon ? '" style="opacity:.55' : '') + '">' + esc(bSide) + '</span>' : '';
+  var aLink = a.id ? '<a href="/m/' + encodeURIComponent(a.id) + '"' + (resolved && !aWon ? ' style="opacity:.55"' : '') + '>' + (aWon ? '✓ ' : '') + esc(a.name || 'Trader') + '</a>' : esc(a.name || 'Trader');
+  var bLink = b.id ? '<a href="/m/' + encodeURIComponent(b.id) + '"' + (resolved && !bWon ? ' style="opacity:.55"' : '') + '>' + (bWon ? '✓ ' : '') + esc(b.name || 'Trader') + '</a>' : esc(b.name || 'Trader');
   var marketLine = c.market_title
     ? (c.market_slug
         ? '<a href="/market/' + encodeURIComponent(c.market_slug) + '">' + esc(c.market_title) + '</a>'
         : esc(c.market_title))
     : '';
   var stakeLine = Number(c.stake_flex) > 0 ? '<span class="matchup-stake">' + c.stake_flex + ' FLEX</span>' : '';
-  var status = (c.status || 'pending').toLowerCase();
+  // Smart money — durable-verified top traders (n>=10 durable trades, not
+  // the old capital-deployed whale set) holding a position on this same
+  // market. Only shown while the outcome is still open; once resolved the
+  // matchup's own outcome line is the more relevant signal.
+  var sm = c.smart_money || { yes: [], no: [] };
+  var smLine = (!resolved && (sm.yes.length || sm.no.length))
+    ? '<div class="matchup-meta" style="margin-top:6px"><span style="color:var(--text-faint)">Smart money:</span> ' +
+      (sm.yes.length ? '<span style="color:#00e68a">' + sm.yes.length + ' YES</span>' : '') +
+      (sm.yes.length && sm.no.length ? ' <span style="color:var(--text-faint)">·</span> ' : '') +
+      (sm.no.length ? '<span style="color:#ff4d6a">' + sm.no.length + ' NO</span>' : '') +
+      '</div>'
+    : '';
+  // Resolved outcome — this is the actual payoff moment for a public
+  // "live" ticker; without it a resolved matchup reads identically to a
+  // pending one, just with a different-colored chip.
+  var statusLine;
+  if (resolved) {
+    var winnerName = (c.winner_id === a.id ? a.name : b.name) || 'Trader';
+    var payout = c.stake_paid_out && Number(c.stake_flex) > 0 ? (Number(c.stake_flex) * 2) + ' FLEX' : null;
+    statusLine = '<span class="matchup-status resolved">' + esc(winnerName) + ' won' + (c.resolution_outcome ? ' · resolved ' + esc(c.resolution_outcome) : '') + (payout ? ' · ' + payout : '') + '</span>';
+  } else {
+    statusLine = '<span class="matchup-status ' + esc(status) + '">' + esc(status) + '</span>';
+  }
   return '<div class="matchup ' + esc(status) + '">' +
     '<div class="matchup-row">' +
       '<span class="matchup-name">' + aLink + '</span>' +
@@ -641,11 +686,12 @@ function _matchupCard(c) {
       '<span class="matchup-name" style="text-align:right;margin-left:auto">' + bLink + '</span>' +
     '</div>' +
     '<div class="matchup-meta">' +
-      '<span class="matchup-status ' + esc(status) + '">' + esc(status) + '</span>' +
+      statusLine +
       (marketLine ? '<span>· ' + marketLine + '</span>' : '') +
-      (stakeLine ? '<span>· ' + stakeLine + '</span>' : '') +
+      (!resolved && stakeLine ? '<span>· ' + stakeLine + '</span>' : '') +
       '<span style="color:var(--text-faint);margin-left:auto">' + esc(timeAgo(c.created_at)) + '</span>' +
     '</div>' +
+    smLine +
   '</div>';
 }
 

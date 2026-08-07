@@ -765,22 +765,74 @@ function openChallenge() {
   document.body.style.overflow = 'hidden';
   m.onclick = e => { if (e.target === m) closeChallenge(); };
   setTimeout(() => { const t = document.getElementById('challengeThesis'); if (t) t.focus(); }, 50);
+  loadChallengeMarkets();
+}
+// Populates "Which call" from the target's own graded trades — a stake has
+// to resolve against something specific (see server.js's market-binding
+// guard on POST /api/challenges), and "counter one of their takes" should
+// mean a real take, not any market on Polymarket. Reuses the same endpoint
+// the record tab's loadAnalytics already hits, keyed by userId directly
+// (not handle) since this page is the handle-less-wallet fallback.
+async function loadChallengeMarkets() {
+  const sel = document.getElementById('challengeMarket');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading their recent calls…</option>';
+  sel.disabled = true;
+  const targetId = window._profileUserId || userId;
+  if (!targetId) { sel.innerHTML = '<option value="">General challenge (no stake)</option>'; sel.disabled = false; return; }
+  try {
+    const res = await fetch(`${API}/api/predictors/${encodeURIComponent(targetId)}/resolved-trades?limit=25&durable_only=1`);
+    const data = res.ok ? await res.json() : { trades: [] };
+    const trades = (data.trades || []).filter(t => t.question);
+    let html = '<option value="">General challenge (no stake)</option>';
+    if (!trades.length) html = '<option value="">General challenge (no stake) — no durable calls to stake on yet</option>';
+    for (const t of trades) {
+      const resultLabel = t.result === 'win' ? 'WIN' : t.result === 'loss' ? 'LOSS' : 'PUSH';
+      const roi = t.realized_roi_pct != null ? (t.realized_roi_pct > 0 ? '+' : '') + t.realized_roi_pct.toFixed(1) + '%' : '';
+      const label = `${t.question} — ${t.side || '?'}, ${resultLabel}${roi ? ' (' + roi + ')' : ''}`;
+      html += `<option value="${label.replace(/"/g, '&quot;')}" data-question="${(t.question || '').replace(/"/g, '&quot;')}">${label.length > 90 ? label.slice(0, 87) + '…' : label}</option>`;
+    }
+    sel.innerHTML = html;
+  } catch (e) {
+    sel.innerHTML = '<option value="">General challenge (no stake)</option>';
+    console.warn('[challenge] loadChallengeMarkets failed:', e.message);
+  }
+  sel.disabled = false;
+  onChallengeMarketChange();
+}
+// Gates the stake slider on a real call being picked — an unresolvable
+// stake (no bound market) is rejected server-side anyway, so disable it
+// client-side rather than let the user fill in a stake that will bounce.
+function onChallengeMarketChange() {
+  const sel = document.getElementById('challengeMarket');
+  const stake = document.getElementById('challengeStake');
+  const note = document.getElementById('challengeStakeNote');
+  const hasMarket = sel && sel.value;
+  if (stake) {
+    stake.disabled = !hasMarket;
+    if (!hasMarket) { stake.value = '0'; const lbl = document.getElementById('challengeStakeLabel'); if (lbl) lbl.textContent = '0'; }
+  }
+  if (note) note.textContent = hasMarket
+    ? 'Debited on send, refunded if declined. Accepting matches the stake — winner takes both.'
+    : 'Pick a specific call above to stake. Debited on send, refunded if declined. Accepting matches the stake — winner takes both.';
 }
 function closeChallenge() {
   const m = document.getElementById('challengeModal');
   if (!m) return;
   m.style.display = 'none';
   document.body.style.overflow = '';
-  // Reset picker state so leftover side / stake don't leak into the
-  // next challenge the user opens.
+  // Reset picker state so leftover side / market / stake don't leak into
+  // the next challenge the user opens.
   _challengeSide = null;
   const yes = document.getElementById('challengeSideYes');
   const no  = document.getElementById('challengeSideNo');
   if (yes) { yes.style.background = 'rgba(0,230,138,0.08)'; yes.style.borderColor = 'rgba(0,230,138,0.28)'; }
   if (no)  { no.style.background  = 'rgba(255,77,106,0.08)'; no.style.borderColor  = 'rgba(255,77,106,0.28)'; }
+  const market = document.getElementById('challengeMarket');
+  if (market) market.value = '';
   const stake = document.getElementById('challengeStake');
   const stakeLbl = document.getElementById('challengeStakeLabel');
-  if (stake) stake.value = '0';
+  if (stake) { stake.value = '0'; stake.disabled = true; }
   if (stakeLbl) stakeLbl.textContent = '0';
 }
 var _challengeSide = null;
@@ -798,8 +850,12 @@ async function submitChallenge() {
   const input = document.getElementById('challengeThesis');
   const thesis = (input?.value || '').trim();
   if (!thesis) { input?.focus(); return; }
-  if (!_challengeSide) { alert('Pick YES or NO — the side you\'re staking.'); return; }
+  if (!_challengeSide) { alert('Pick Agree or Disagree — the side you\'re staking.'); return; }
   const stake = parseInt(document.getElementById('challengeStake')?.value || '0', 10) || 0;
+  const marketSel = document.getElementById('challengeMarket');
+  const marketOpt = marketSel && marketSel.selectedIndex >= 0 ? marketSel.options[marketSel.selectedIndex] : null;
+  const marketTitle = marketOpt ? (marketOpt.dataset.question || null) : null;
+  if (stake > 0 && !marketTitle) { alert('Pick a specific call to stake on, or set stake to 0.'); return; }
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
   if (!token) {
     alert('Sign in to challenge predictors.');
@@ -821,6 +877,7 @@ async function submitChallenge() {
         thesis,
         challenger_side: _challengeSide,
         stake_flex: stake,
+        market_title: marketTitle,
       }),
     });
     if (res.status === 401 || res.status === 403) {
@@ -1521,28 +1578,44 @@ async function load() {
           <div style="font-size:13px;color:var(--text-soft);line-height:1.55;margin-bottom:16px">Publicly counter one of their takes. Your challenge gets posted to the feed, and the winner is whoever the market resolves for.</div>
           <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;resize:none;outline:none;min-height:90px;margin-bottom:14px;transition:border-color .15s" onfocus="this.style.borderColor='rgba(255,77,106,0.4)'" onblur="this.style.borderColor='var(--border)'"></textarea>
 
+          <!-- Which call — a stake needs a specific market to resolve
+               against (server rejects a staked challenge with none, see
+               POST /api/challenges). Sourced from the target's own graded
+               trades so "counter one of their takes" means what it says —
+               you're contesting a call they actually made, not a random
+               market. Options carry the question text as their value:
+               that's what the resolution hook title-matches on. Picking
+               "General challenge" (no market) is always allowed but caps
+               stake at 0. -->
+          <div style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Which call</div>
+          <select id="challengeMarket" onchange="onChallengeMarketChange()"
+                  style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;margin-bottom:14px">
+            <option value="">Loading their recent calls…</option>
+          </select>
+
           <!-- Your side — the position you're staking. Challenged user
                gets the opposite side by definition. Resolution of the
                market against this picks the winner. -->
           <div style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Your side</div>
           <div style="display:flex;gap:8px;margin-bottom:14px">
             <button type="button" id="challengeSideYes" onclick="setChallengeSide('YES')"
-                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(0,230,138,0.28);background:rgba(0,230,138,0.08);color:#00e68a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">YES</button>
+                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(0,230,138,0.28);background:rgba(0,230,138,0.08);color:#00e68a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">AGREE</button>
             <button type="button" id="challengeSideNo" onclick="setChallengeSide('NO')"
-                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(255,77,106,0.28);background:rgba(255,77,106,0.08);color:#ff4d6a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">NO</button>
+                    style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(255,77,106,0.28);background:rgba(255,77,106,0.08);color:#ff4d6a;font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:0.08em;cursor:pointer">DISAGREE</button>
           </div>
 
-          <!-- FLEX stake — skin in the game. Winner gains, loser loses.
-               Capped at 100 so no single challenge dominates a trader's
-               FLEX score. Optional (stake = 0 = no score movement). -->
+          <!-- FLEX stake — real (2026-08-06), moves flex_wallet_balance.
+               Disabled until a specific call is picked above: an
+               unresolvable stake has no payout path, see server.js's
+               market-binding guard on POST /api/challenges. -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <div style="font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase">FLEX stake (optional)</div>
             <div style="font-family:var(--mono);font-size:11px;color:var(--text)"><span id="challengeStakeLabel">0</span> FLEX</div>
           </div>
-          <input type="range" id="challengeStake" min="0" max="100" value="0" step="5"
+          <input type="range" id="challengeStake" min="0" max="100" value="0" step="5" disabled
                  oninput="document.getElementById('challengeStakeLabel').textContent=this.value"
                  style="width:100%;margin-bottom:4px;accent-color:#c9920d">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-bottom:16px">Winner gains, loser loses. Auto-settled when the market resolves.</div>
+          <div id="challengeStakeNote" style="font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-bottom:16px">Pick a specific call above to stake. Debited on send, refunded if declined. Accepting matches the stake — winner takes both.</div>
 
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button onclick="closeChallenge()" class="btn btn-ghost">Cancel</button>

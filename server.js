@@ -14414,6 +14414,61 @@ async function _flexWalletDebitForBacking(address, amountCentpoints, refId) {
   }
 }
 
+// ── CHALLENGE STAKES — real wallet-backed wagers on the Follow/Challenge
+// card action (2026-08-06). Same race-safe conditional-UPDATE pattern as
+// _flexWalletDebitForBacking above, reused for two distinct debits on the
+// same challenges row: the challenger's stake (escrowed on send, refunded
+// on decline/expiry) and the challenged user's matching stake (debited on
+// accept). Kept as one parameterized function rather than two copies since
+// both are "debit X centpoints from an address, tag the ledger row with a
+// reason and the challenge id" — the only thing that varies is the reason.
+// Payout (_flexWalletAdjust, already generic) credits the winner 2x stake
+// once the underlying market resolves. See CLAUDE.md "FLEX Score rule" —
+// this never touches flex_score_90d; it only moves flex_wallet_balance,
+// the play-money wallet built for exactly this kind of stake.
+async function _flexWalletDebitForChallenge(address, amountCentpoints, reason, refId) {
+  const addr = String(address || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) throw new Error('invalid_address');
+  if (!Number.isFinite(amountCentpoints) || amountCentpoints <= 0) throw new Error('invalid_amount');
+  if (!pool) throw new Error('no_pool');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const upd = await client.query(
+      `UPDATE flex_wallet_balance SET balance_centpoints = balance_centpoints - $2, updated_at = NOW()
+       WHERE address = $1 AND balance_centpoints >= $2
+       RETURNING balance_centpoints`,
+      [addr, amountCentpoints]
+    );
+    if (upd.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'insufficient_balance' };
+    }
+    await client.query(
+      `INSERT INTO flex_wallet_ledger (address, delta_centpoints, reason, ref_id) VALUES ($1, $2, $3, $4)`,
+      [addr, -amountCentpoints, reason, refId]
+    );
+    await client.query('COMMIT');
+    return { ok: true, balance_centpoints: upd.rows[0].balance_centpoints };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Looks up the flex-wallet address for a `users.id` — challenges are keyed
+// by user id (JWT auth), but the wallet ledger is keyed by address, so every
+// stake operation needs this bridge. Returns null (not an address) if the
+// user has no wallet on file — callers must treat that as "can't stake."
+async function _challengeUserAddress(userId) {
+  const rows = await dbQuery('SELECT polymarket_address FROM users WHERE id = $1 LIMIT 1', [userId]).catch(() => []);
+  const addr = rows[0] && rows[0].polymarket_address;
+  return addr ? String(addr).toLowerCase() : null;
+}
+
 // Stake Flex Points on a predictor. Tops up the existing active backing for
 // this (backer, predictor) pair if one exists (ON CONFLICT on the partial
 // unique index), rather than creating a second row to reconcile later.
@@ -15801,6 +15856,53 @@ app.post('/api/challenges', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'challenger_side must be YES or NO' });
   }
   if (!pool) return res.status(503).json({ error: 'Database not configured' });
+
+  // Stake is real now (2026-08-06): escrowed out of the challenger's
+  // flex_wallet_balance before the challenge row is created, so a declined
+  // or never-answered challenge has something concrete to refund. 1 "Flex"
+  // slider unit = 100 centpoints, same unit flex_wallet_balance already
+  // uses (see FLEX_WALLET_SIGNUP_GRANT_CENTPOINTS = 100000 for 1,000 FP).
+  // A staked challenge that isn't bound to a real market can never resolve
+  // (the settlement hook only fires per-market and matches on
+  // slug/id/condition_id/title) — its escrow would sit locked forever. This
+  // is a server-side floor, not just a UI nicety: it's what closes the exact
+  // hole member.html's generic (person-only, no market) Challenge modal hit
+  // on 2026-08-06, and it applies to every current and future caller of
+  // this endpoint, not just the one that got caught.
+  if (stakeFlex > 0 && !market_id && !market_title && !market_slug && !condition_id) {
+    return res.status(400).json({ error: 'A challenge with a stake needs a specific market attached. Pick one of their calls, or set stake to 0.' });
+  }
+  // Durable markets only — same reasoning as the leaderboard's own
+  // market_durability gate (see CLAUDE.md Gate 1): ephemeral markets age
+  // out of gamma retention before they can ever be independently verified,
+  // which is exactly the property that made the whale-selection axis
+  // ungradeable. A wager inherits that problem for free if left unguarded.
+  // This also re-validates market_title against the challenged user's own
+  // real trade history — nothing upstream of this point actually confirmed
+  // the string the client sent corresponds to a real, real market.
+  if (stakeFlex > 0) {
+    const marketCheck = await dbQuery(
+      `SELECT market_durability FROM realized_trades
+       WHERE user_id = $1::uuid AND LOWER(market_question) = LOWER($2)
+       LIMIT 1`,
+      [challenged_id, market_title || '']
+    ).catch(() => []);
+    if (!marketCheck.length) {
+      return res.status(400).json({ error: 'Could not verify that call on their record. Pick one of their listed calls, or set stake to 0.' });
+    }
+    if (marketCheck[0].market_durability !== 'durable') {
+      return res.status(400).json({ error: 'Stakes are only allowed on durable markets (weeks-to-months horizon) — that call was on an ephemeral market.' });
+    }
+  }
+  let challengerAddress = null;
+  if (stakeFlex > 0) {
+    challengerAddress = await _challengeUserAddress(req.user.id);
+    if (!challengerAddress) {
+      return res.status(400).json({ error: 'Connect a wallet to stake FLEX on a challenge. Set stake to 0 to send a free challenge instead.' });
+    }
+  }
+  const stakeCentpoints = stakeFlex * 100;
+
   try {
     const rows = await dbQuery(
       `INSERT INTO challenges (
@@ -15816,6 +15918,23 @@ app.post('/api/challenges', requireAuth, async (req, res) => {
       ]
     );
     const challenge = rows[0];
+
+    if (stakeFlex > 0) {
+      let debit;
+      try {
+        debit = await _flexWalletDebitForChallenge(challengerAddress, stakeCentpoints, 'challenge_stake_escrow', challenge.id);
+      } catch (e) {
+        await dbQuery('DELETE FROM challenges WHERE id = $1', [challenge.id]).catch(() => {});
+        console.error('[challenges POST] escrow error:', e.message);
+        return res.status(500).json({ error: 'Could not place stake. Try again.' });
+      }
+      if (!debit.ok) {
+        await dbQuery('DELETE FROM challenges WHERE id = $1', [challenge.id]).catch(() => {});
+        return res.status(400).json({ error: 'Insufficient FLEX balance to stake ' + stakeFlex + '.', balance_fp: null });
+      }
+      await dbQuery(`UPDATE challenges SET stake_status = 'escrowed' WHERE id = $1`, [challenge.id]).catch(() => {});
+    }
+
     // Resolve challenger display name for the notification copy
     let challengerName = 'Someone';
     try {
@@ -15826,11 +15945,11 @@ app.post('/api/challenges', requireAuth, async (req, res) => {
       challenged_id,
       'challenge_received',
       challengerName + ' challenged you',
-      (thesis.length > 120 ? thesis.slice(0, 120) + '…' : thesis),
+      (thesis.length > 120 ? thesis.slice(0, 120) + '…' : thesis) + (stakeFlex > 0 ? ` (${stakeFlex} FLEX staked)` : ''),
       null, null,
       { refType: 'challenge', refId: challenge.id }
     );
-    res.json({ challenge: { id: challenge.id, status: 'pending', created_at: challenge.created_at } });
+    res.json({ challenge: { id: challenge.id, status: 'pending', created_at: challenge.created_at, stake_status: stakeFlex > 0 ? 'escrowed' : 'none' } });
   } catch (err) {
     console.error('[challenges POST]', err);
     res.status(500).json({ error: err.message });
@@ -15851,10 +15970,48 @@ app.post('/api/challenges/:id/respond', requireAuth, async (req, res) => {
     if (c.challenged_id !== req.user.id) return res.status(403).json({ error: 'Only the challenged user can respond' });
     if (c.status !== 'pending') return res.status(400).json({ error: 'Challenge already ' + c.status });
 
+    const stakeFlex = Number(c.stake_flex) || 0;
+    const stakeCentpoints = stakeFlex * 100;
+    let newStakeStatus = c.stake_status;
+
+    if (action === 'decline') {
+      // Refund the challenger's escrow — nothing was ever at risk for the
+      // challenged side on a decline.
+      if (stakeFlex > 0 && c.stake_status === 'escrowed') {
+        const challengerAddress = await _challengeUserAddress(c.challenger_id);
+        if (challengerAddress) {
+          await _flexWalletAdjust(challengerAddress, stakeCentpoints, 'challenge_stake_refund', id).catch(e => {
+            console.error('[challenges respond] refund failed for', id, ':', e.message);
+          });
+          newStakeStatus = 'refunded';
+        }
+      }
+    } else {
+      // Accept: the challenged user must match the challenger's stake before
+      // the challenge goes live — both sides carry equal risk, winner takes
+      // both. If they can't cover it, the accept is rejected outright rather
+      // than silently downgrading to a free challenge (that would change the
+      // terms the challenger agreed to without their consent).
+      if (stakeFlex > 0) {
+        const challengedAddress = await _challengeUserAddress(req.user.id);
+        if (!challengedAddress) {
+          return res.status(400).json({ error: 'Connect a wallet to match this challenge\'s ' + stakeFlex + ' FLEX stake.' });
+        }
+        const debit = await _flexWalletDebitForChallenge(challengedAddress, stakeCentpoints, 'challenge_stake_match', id).catch(e => {
+          console.error('[challenges respond] match-debit error:', e.message);
+          return { ok: false, error: e.message };
+        });
+        if (!debit.ok) {
+          return res.status(400).json({ error: 'Insufficient FLEX balance to match this challenge\'s ' + stakeFlex + ' FLEX stake. Decline instead, or top up.' });
+        }
+        newStakeStatus = 'matched';
+      }
+    }
+
     const newStatus = action === 'accept' ? 'accepted' : 'declined';
     await dbQuery(
-      'UPDATE challenges SET status = $1, responded_at = NOW() WHERE id = $2',
-      [newStatus, id]
+      'UPDATE challenges SET status = $1, responded_at = NOW(), stake_status = $2 WHERE id = $3',
+      [newStatus, newStakeStatus, id]
     );
 
     // Notify the original challenger of the response.
@@ -15909,12 +16066,71 @@ app.get('/api/challenges', requireAuth, async (req, res) => {
       ORDER BY c.created_at DESC
       LIMIT $${params.length}
     `, params);
+
+    const smartMoney = await _smartMoneyForMarkets(rows.map(r => r.market_title));
+    for (const r of rows) {
+      const sm = r.market_title ? smartMoney.get(r.market_title.toLowerCase()) : null;
+      r.smart_money = sm ? { yes: sm.yes, no: sm.no } : { yes: [], no: [] };
+    }
+
     res.json({ count: rows.length, challenges: rows });
   } catch (err) {
     console.error('[challenges list]', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// "Smart money" — do any durable-verified top traders (the same qualifying
+// cohort _computeRoiLeaderboard scores, n>=10 durable trades, NOT the old
+// capital-deployed whale set — see CLAUDE.md Gate 1 on why that axis was
+// wrong) hold a position on either side of a challenge's market? Checks
+// live positions first (cached_positions, hourly-synced), falls back to
+// their most recent closed trade on that exact market if they've already
+// exited. Batched across every distinct market_title in one query — this
+// backs both the personal challenge list and the public live ticker, each
+// of which renders several challenges per request, so N separate lookups
+// would be wasteful. Returns Map<lowercased market_title, {yes:[names], no:[names]}>.
+async function _smartMoneyForMarkets(marketTitles) {
+  const titles = [...new Set((marketTitles || []).filter(Boolean).map(t => String(t).toLowerCase()))];
+  if (!titles.length || !pool) return new Map();
+  const rows = await dbQuery(`
+    WITH qualifying AS (
+      SELECT user_id::text AS user_id FROM realized_trades
+      WHERE market_durability = 'durable' AND realized_roi IS NOT NULL
+        AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0 AND closed_at IS NOT NULL
+      GROUP BY user_id HAVING COUNT(*) >= 10
+    ),
+    live AS (
+      SELECT cp.user_id::text AS user_id, LOWER(cp.market_title) AS market_key, UPPER(cp.side) AS side, 1 AS pri
+      FROM cached_positions cp
+      WHERE cp.platform = 'polymarket' AND LOWER(cp.market_title) = ANY($1)
+        AND cp.user_id::text IN (SELECT user_id FROM qualifying)
+    ),
+    closed AS (
+      SELECT rt.user_id::text AS user_id, LOWER(rt.market_question) AS market_key, UPPER(rt.side) AS side, 2 AS pri
+      FROM realized_trades rt
+      WHERE LOWER(rt.market_question) = ANY($1)
+        AND rt.user_id::text IN (SELECT user_id FROM qualifying)
+    ),
+    combined AS (SELECT * FROM live UNION ALL SELECT * FROM closed),
+    ranked AS (
+      SELECT DISTINCT ON (user_id, market_key) user_id, market_key, side
+      FROM combined ORDER BY user_id, market_key, pri ASC
+    )
+    SELECT r.market_key, r.side, u.display_name, u.username
+    FROM ranked r LEFT JOIN users u ON u.id = r.user_id
+  `, [titles]).catch(e => { console.warn('[smart-money] query error:', e.message); return []; });
+
+  const byMarket = new Map();
+  for (const row of rows) {
+    if (!byMarket.has(row.market_key)) byMarket.set(row.market_key, { yes: [], no: [] });
+    const bucket = byMarket.get(row.market_key);
+    const name = row.display_name || (row.username ? '@' + row.username : 'Trader');
+    if (row.side === 'YES') bucket.yes.push(name);
+    else if (row.side === 'NO') bucket.no.push(name);
+  }
+  return byMarket;
+}
 
 // GET /api/challenges/public — anonymous-friendly summary used by the
 // signed-out /challenges page so visitors see real supply (live matchups +
@@ -15942,13 +16158,14 @@ app.get('/api/challenges/public', async (req, res) => {
       dbQuery(`
         SELECT c.id, c.status, c.created_at, c.market_title, c.market_slug, c.condition_id,
                c.challenger_side, c.challenged_side, c.stake_flex,
+               c.winner_id, c.resolution_outcome, c.stake_status,
                cu.id AS challenger_id, cu.display_name AS challenger_name, cu.username AS challenger_handle,
                du.id AS challenged_id, du.display_name AS challenged_name, du.username AS challenged_handle
         FROM challenges c
         LEFT JOIN users cu ON cu.id = c.challenger_id
         LEFT JOIN users du ON du.id = c.challenged_id
         WHERE c.status IN ('accepted','resolved','pending')
-        ORDER BY c.created_at DESC
+        ORDER BY COALESCE(c.resolved_at, c.responded_at, c.created_at) DESC
         LIMIT 8
       `),
       dbQuery(`
@@ -15982,9 +16199,18 @@ app.get('/api/challenges/public', async (req, res) => {
       challenger_side:   r.challenger_side,
       challenged_side:   r.challenged_side,
       stake_flex:        r.stake_flex,
+      winner_id:         r.winner_id || null,
+      resolution_outcome: r.resolution_outcome || null,
+      stake_paid_out:    r.stake_status === 'settled',
       challenger:        { id: r.challenger_id, name: r.challenger_name, handle: r.challenger_handle },
       challenged:        { id: r.challenged_id, name: r.challenged_name, handle: r.challenged_handle },
     }));
+
+    const smartMoney = await _smartMoneyForMarkets(live.map(l => l.market_title));
+    for (const l of live) {
+      const sm = l.market_title ? smartMoney.get(l.market_title.toLowerCase()) : null;
+      l.smart_money = sm ? { yes: sm.yes, no: sm.no } : { yes: [], no: [] };
+    }
 
     const top_challengers = (topRows || []).map(r => {
       const wins = Number(r.wins) || 0;
@@ -16037,6 +16263,44 @@ app.get('/api/challenges/:id', requireAuth, async (req, res) => {
 // matches in registration order; the original placement was eaten by /:id's
 // requireAuth and silent 401'd visitors, leaving the /challenges public
 // page stuck on skeletons forever).
+
+// Expires challenges the challenged user never responded to. Without this,
+// a challenger's escrowed stake (see POST /api/challenges above) would sit
+// locked forever on an ignored challenge — there's no other event that ever
+// closes out a 'pending' row. Registered hourly in the CRONS section; also
+// exported so it can be hit manually if a backlog needs draining.
+const CHALLENGE_EXPIRY_DAYS = 7;
+async function expireStaleChallenges() {
+  if (!pool) return { expired: 0 };
+  const stale = await dbQuery(
+    `SELECT id, challenger_id, stake_flex, stake_status FROM challenges
+     WHERE status = 'pending' AND created_at < NOW() - INTERVAL '${CHALLENGE_EXPIRY_DAYS} days'`
+  ).catch(() => []);
+  let expired = 0;
+  for (const c of stale) {
+    await dbQuery(`UPDATE challenges SET status = 'expired' WHERE id = $1`, [c.id]).catch(() => {});
+    const stakeFlex = Number(c.stake_flex) || 0;
+    if (stakeFlex > 0 && c.stake_status === 'escrowed') {
+      const challengerAddress = await _challengeUserAddress(c.challenger_id);
+      if (challengerAddress) {
+        await _flexWalletAdjust(challengerAddress, stakeFlex * 100, 'challenge_stake_refund', c.id).catch(e => {
+          console.error('[challenges] expiry refund failed for', c.id, ':', e.message);
+        });
+        await dbQuery(`UPDATE challenges SET stake_status = 'refunded' WHERE id = $1`, [c.id]).catch(() => {});
+      }
+    }
+    await pushNotification(
+      c.challenger_id,
+      'challenge_expired',
+      'Challenge expired, unanswered',
+      stakeFlex > 0 ? `No response after ${CHALLENGE_EXPIRY_DAYS} days. ${stakeFlex} FLEX refunded.` : `No response after ${CHALLENGE_EXPIRY_DAYS} days.`,
+      null, null, { refType: 'challenge', refId: c.id }
+    ).catch(() => {});
+    expired++;
+  }
+  if (expired) console.log(`[challenges] expired ${expired} stale pending challenge(s)`);
+  return { expired };
+}
 
 // POST /api/admin/seed-challenges — seed N fake challenges using real users
 // (whales preferred) and real Polymarket markets from _screenerCache.
@@ -17277,12 +17541,19 @@ app.get('/api/predictors/:userId/resolved-trades', async (req, res) => {
     if (!pool) return res.json({ trades: [], total: 0, open_count: 0 });
     const limit  = Math.min(200, parseInt(req.query.limit, 10) || 50);
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    // durable_only=1: used by the Challenge market picker (member.html) —
+    // stakes are only ever allowed on durable markets (see the guard on
+    // POST /api/challenges below), so there's no point offering an
+    // ephemeral trade as a stakeable option in the first place. Default
+    // stays unfiltered — the record tab wants full history.
+    const durableOnly = req.query.durable_only === '1';
 
     const rows = await dbQuery(`
       SELECT market_question, side, entry_price, exit_price, entry_cost_usd,
-             realized_pnl, realized_roi, closed_at, close_reason
+             realized_pnl, realized_roi, closed_at, close_reason, market_durability
       FROM realized_trades
       WHERE user_id = $1::uuid
+      ${durableOnly ? `AND market_durability = 'durable'` : ''}
       ORDER BY closed_at DESC NULLS LAST
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]).catch(e => {
@@ -17311,6 +17582,7 @@ app.get('/api/predictors/:userId/resolved-trades', async (req, res) => {
       result: r.realized_pnl != null ? (Number(r.realized_pnl) > 0 ? 'win' : (Number(r.realized_pnl) < 0 ? 'loss' : 'push')) : null,
       closed_at: r.closed_at,
       close_reason: r.close_reason,
+      durable: r.market_durability === 'durable',
     }));
 
     res.json({
@@ -28507,131 +28779,29 @@ app.post('/api/admin/resolution-alert/send', requireAdminSecret, (req, res) => {
   sendResolutionAlertEmails().then(() => res.json({ ok: true })).catch(e => res.status(500).json({ error: e.message }));
 });
 
-// ── HEAD-TO-HEAD CHALLENGE SYSTEM ────────────────────────────────────────────
-// GET  /api/challenges                  — list challenges for current user
-// POST /api/challenges                  — create a challenge (challenger → target)
-// POST /api/challenges/:id/accept       — target accepts
-// POST /api/challenges/:id/decline      — target declines
-// Challenges are stored in `take_challenges` table (created by migration below if not exists)
-
-async function ensureChallengeTbl() {
-  if (!pool) return;
-  await dbQuery(`
-    CREATE TABLE IF NOT EXISTS take_challenges (
-      id          SERIAL PRIMARY KEY,
-      slug        TEXT NOT NULL,
-      question    TEXT,
-      condition_id TEXT,
-      challenger_id INT NOT NULL,
-      target_id     INT,
-      target_handle TEXT,
-      challenger_side TEXT NOT NULL,
-      target_side     TEXT,
-      status      TEXT NOT NULL DEFAULT 'pending',
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      resolved_at TIMESTAMPTZ,
-      winner_id   INT
-    )
-  `).catch(() => {});
-}
-ensureChallengeTbl();
-
-app.get('/api/challenges', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
-  const rows = await dbQuery(`
-    SELECT c.*,
-      u1.display_name AS challenger_name, u1.avatar_url AS challenger_avatar,
-      u2.display_name AS target_name,     u2.avatar_url AS target_avatar
-    FROM take_challenges c
-    LEFT JOIN users u1 ON u1.id = c.challenger_id
-    LEFT JOIN users u2 ON u2.id = c.target_id
-    WHERE c.challenger_id = $1 OR c.target_id = $1
-    ORDER BY c.created_at DESC LIMIT 50
-  `, [uid]).catch(() => []);
-  res.json(rows || []);
-});
-
-app.get('/api/challenges/pending-count', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
-  const rows = await dbQuery(
-    `SELECT COUNT(*)::int AS n FROM take_challenges WHERE target_id=$1 AND status='pending'`, [uid]
-  ).catch(() => [{ n: 0 }]);
-  res.json({ count: (rows && rows[0] ? rows[0].n : 0) });
-});
-
-app.post('/api/challenges', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
-  const { slug, question, condition_id, challenger_side, target_handle } = req.body || {};
-  if (!slug || !challenger_side) return res.status(400).json({ error: 'slug + challenger_side required' });
-
-  // Resolve target by handle if provided
-  let target_id = null;
-  if (target_handle) {
-    const tr = await dbQuery(
-      `SELECT id FROM users WHERE LOWER(handle)=LOWER($1) OR LOWER(display_name)=LOWER($1) LIMIT 1`,
-      [target_handle]
-    ).catch(() => []);
-    if (tr && tr[0]) target_id = tr[0].id;
-  }
-
-  const rows = await dbQuery(`
-    INSERT INTO take_challenges (slug, question, condition_id, challenger_id, target_id, target_handle, challenger_side, status)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
-    RETURNING id
-  `, [slug, question || '', condition_id || '', uid, target_id, target_handle || null, challenger_side.toUpperCase()]).catch(() => []);
-
-  if (!rows || !rows[0]) return res.status(500).json({ error: 'insert failed' });
-
-  // Notify target if found
-  if (target_id) {
-    const challenger = await dbQuery(`SELECT display_name FROM users WHERE id=$1`, [uid]).catch(() => []);
-    const cname = (challenger && challenger[0]) ? (challenger[0].display_name || 'Someone') : 'Someone';
-    await dbQuery(`
-      INSERT INTO notifications (user_id, type, title, body, url, created_at)
-      VALUES ($1,'challenge',$2,$3,$4,NOW())
-    `, [target_id, 'New challenge',
-        `${cname} challenged you: ${(question||slug).slice(0,80)}`,
-        `/feed?challenge=${rows[0].id}`]).catch(() => {});
-  }
-
-  res.json({ id: rows[0].id, ok: true });
-});
-
-app.post('/api/challenges/:id/accept', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
-  const { id } = req.params;
-  const { target_side } = req.body || {};
-  if (!target_side) return res.status(400).json({ error: 'target_side required' });
-
-  const rows = await dbQuery(
-    `UPDATE take_challenges SET status='active', target_id=COALESCE(target_id,$1), target_side=$2 WHERE id=$3 AND (target_id=$1 OR target_id IS NULL) RETURNING *`,
-    [uid, target_side.toUpperCase(), id]
-  ).catch(() => []);
-  if (!rows || !rows[0]) return res.status(404).json({ error: 'challenge not found or not yours' });
-
-  // Notify challenger
-  const ch = rows[0];
-  const accepter = await dbQuery(`SELECT display_name FROM users WHERE id=$1`, [uid]).catch(() => []);
-  const aname = (accepter && accepter[0]) ? (accepter[0].display_name || 'Someone') : 'Someone';
-  await dbQuery(`
-    INSERT INTO notifications (user_id, type, title, body, url, created_at)
-    VALUES ($1,'challenge_accepted',$2,$3,$4,NOW())
-  `, [ch.challenger_id, 'Challenge accepted',
-      `${aname} accepted your challenge — ${(ch.question||ch.slug).slice(0,70)}`,
-      `/feed?challenge=${id}`]).catch(() => {});
-
-  res.json({ ok: true });
-});
-
-app.post('/api/challenges/:id/decline', requireAuth, async (req, res) => {
-  const uid = req.session.userId;
-  const { id } = req.params;
-  await dbQuery(
-    `UPDATE take_challenges SET status='declined' WHERE id=$1 AND (target_id=$1 OR target_id IS NULL)`,
-    [id]
-  ).catch(() => {});
-  res.json({ ok: true });
-});
+// ── HEAD-TO-HEAD CHALLENGE SYSTEM (removed 2026-08-06) ──────────────────────
+// This entire block — GET/POST /api/challenges, POST /api/challenges/:id/
+// accept, POST /api/challenges/:id/decline, ensureChallengeTbl(), and the
+// take_challenges table — was fully dead. Audited before deletion:
+//   - GET/POST /api/challenges here were registered AFTER the real handlers
+//     (line ~15843 POST, ~16042 GET, both on the `challenges` table with
+//     real FLEX-wallet escrow) — Express uses first-registered-wins, so
+//     these never executed for a single real request.
+//   - /accept, /decline, and /pending-count were unique paths (not
+//     shadowed) but had zero callers anywhere in server.js or public/*.html
+//     — every live Challenge UI (challenges.html, creator-dashboard.html,
+//     home-kings.html, member.html) posts to /api/challenges/:id/respond
+//     instead.
+//   - All five routes read `req.session.userId`, but no express-session
+//     middleware is registered anywhere in this app (req.session is always
+//     undefined) — so even a stray caller would have hit a TypeError, not a
+//     working response.
+//   - `take_challenges` had zero other references in the codebase (7 total
+//     hits, all inside this block) and zero frontend code read its
+//     distinctive fields (target_name/target_avatar/target_side/etc).
+// Net effect of removal: none. Nothing was reading this table or hitting
+// these routes. Table itself was left in place (orphaned, harmless) rather
+// than dropped, since deleting data is a separate, more deliberate call.
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── POLYMARKET INFLUENCER FEED ────────────────────────────────────────────────
@@ -33901,16 +34071,27 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
          WHERE id = $3`,
         [uo, winnerId, c.id]
       ).catch(() => {});
-      // FLEX stake transfer (if staked): credit winner, debit loser.
-      // Cheap score bump — real user-visible flex_score_90d is recomputed
-      // off the broader score formula, but stake_flex gives an immediate
-      // skin-in-the-game signal on the challenge itself.
+      // FLEX Score (flex_score_90d) is a derived rating off graded trades
+      // only — see CLAUDE.md "FLEX Score rule" — a social-challenge outcome
+      // must never move it directly. (Removed 2026-08-06: this block used to
+      // nudge flex_score_90d up/down by the stake amount, which let two
+      // users inflate/deflate a supposedly verified score via a coin-flip
+      // side bet.) The real stake — flex_wallet_balance, play money — pays
+      // out here instead: winner takes both sides' matched stake.
       const stake = Number(c.stake_flex) || 0;
-      if (stake > 0) {
-        try {
-          await dbQuery('UPDATE users SET flex_score_90d = LEAST(100, COALESCE(flex_score_90d,0) + $1) WHERE id = $2', [stake, winnerId]).catch(() => {});
-          await dbQuery('UPDATE users SET flex_score_90d = GREATEST(0, COALESCE(flex_score_90d,0) - $1) WHERE id = $2', [stake, loserId]).catch(() => {});
-        } catch (e) {}
+      let stakeNote = '';
+      if (stake > 0 && c.stake_status === 'matched') {
+        const winnerAddress = await _challengeUserAddress(winnerId);
+        if (winnerAddress) {
+          const payout = stake * 2 * 100; // both sides' matched stake, in centpoints
+          await _flexWalletAdjust(winnerAddress, payout, 'challenge_stake_payout', c.id).catch(e => {
+            console.error('[challenges] payout failed for', c.id, ':', e.message);
+          });
+          await dbQuery(`UPDATE challenges SET stake_status = 'settled' WHERE id = $1`, [c.id]).catch(() => {});
+          stakeNote = ` ${stake * 2} FLEX.`;
+        } else {
+          console.warn('[challenges] resolve: winner', winnerId, 'has no wallet address, stake not paid out for challenge', c.id);
+        }
       }
       // Notify both parties.
       const qShort = (marketQuestion || c.market_title || '').substring(0, 60);
@@ -33918,14 +34099,14 @@ async function scoreTakesForMarket(marketQuestion, outcome, marketSlug) {
         winnerId,
         'challenge_won',
         '⚔ You won a challenge',
-        `Market resolved ${uo}. ${stake > 0 ? '+' + stake + ' FLEX. ' : ''}"${qShort}"`,
+        `Market resolved ${uo}.${stakeNote} "${qShort}"`,
         null, null, { refType: 'challenge', refId: c.id }
       );
       await pushNotification(
         loserId,
         'challenge_lost',
         'Challenge resolved against you',
-        `Market resolved ${uo}. ${stake > 0 ? '−' + stake + ' FLEX. ' : ''}"${qShort}"`,
+        `Market resolved ${uo}.${stake > 0 ? ' −' + stake + ' FLEX.' : ''} "${qShort}"`,
         null, null, { refType: 'challenge', refId: c.id }
       );
     }
@@ -61659,6 +61840,13 @@ if (pool) {
         ADD COLUMN IF NOT EXISTS challenged_side TEXT,
         ADD COLUMN IF NOT EXISTS condition_id    TEXT,
         ADD COLUMN IF NOT EXISTS market_slug     TEXT`).catch(() => {});
+      // stake_status tracks the real flex_wallet_balance escrow lifecycle for
+      // stake_flex (2026-08-06): 'none' (0-stake challenge) | 'escrowed'
+      // (challenger debited, awaiting response) | 'refunded' (declined or
+      // expired) | 'matched' (challenged user debited on accept, both sides
+      // at risk) | 'settled' (resolved, winner paid out).
+      await dbQuery(`ALTER TABLE challenges
+        ADD COLUMN IF NOT EXISTS stake_status TEXT NOT NULL DEFAULT 'none'`).catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenged ON challenges(challenged_id, status, created_at DESC)').catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_challenger ON challenges(challenger_id, status, created_at DESC)').catch(() => {});
       await dbQuery('CREATE INDEX IF NOT EXISTS idx_challenges_condition ON challenges(condition_id) WHERE condition_id IS NOT NULL').catch(() => {});
@@ -68080,6 +68268,7 @@ app.post('/api/admin/intelligence/recompute', requireAdminSecret, async (req, re
 setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
 setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
 setInterval(safeCron('updatePlatformMetrics', updatePlatformMetrics), 60 * 60 * 1000);
+setInterval(safeCron('expireStaleChallenges', expireStaleChallenges), 60 * 60 * 1000);
 
 // MP-2d mention-sync. Rule pass every 15 min (cheap; reuses word-markets
 // discovery cache). LLM pass every hour, capped at LLM_MAX_PER_RUN

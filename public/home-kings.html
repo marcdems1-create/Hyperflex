@@ -778,14 +778,15 @@
     <div class="hfx-modal-sub">Publicly counter one of their calls. Posted to their notifications — the market resolution decides it, not a vote.</div>
     <textarea id="challengeThesis" maxlength="280" placeholder="Your counter-thesis — what do you think actually happens?"></textarea>
     <div class="hfx-side-row">
-      <button type="button" id="challengeSideYes">YES</button>
-      <button type="button" id="challengeSideNo">NO</button>
+      <button type="button" id="challengeSideYes">AGREE</button>
+      <button type="button" id="challengeSideNo">DISAGREE</button>
     </div>
     <div class="hfx-stake-row">
       <span>Stake</span>
       <input type="range" id="challengeStake" min="0" max="100" step="5" value="0">
       <span><span id="challengeStakeLabel">0</span> Flex</span>
     </div>
+    <div class="hfx-modal-sub" id="challengeStakeNote" style="margin-bottom:14px;">Debited from your FLEX wallet on send, refunded if declined. Accepting matches the stake. Winner takes both.</div>
     <button type="button" class="hfx-modal-submit" id="challengeSubmitBtn">Send challenge</button>
   </div>
 </div>
@@ -991,7 +992,7 @@ function cardArticleHtml(card, isHero, rank){
     + '<span><span class="dot-sep">&middot;</span>' + esc(card.n) + ' resolved<span class="dot-sep">&middot;</span>' + esc(relFromDays(ev ? ev.days_ago : null) || '—') + '</span></div>';
 
   html += '</a>';
-  html += cardActionsHtml(card.user_id, handle);
+  html += cardActionsHtml(card.user_id, handle, ev ? ev.question : null);
   html += '</div>';
   return html;
 }
@@ -1067,9 +1068,9 @@ document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if
    Markup lives outside the card's own <a> (see .trader-card-block above)
    so these controls are never nested inside an anchor. Clicks are
    delegated off document since cards re-render on every poll cycle. ── */
-function cardActionsHtml(uid, handle){
+function cardActionsHtml(uid, handle, marketTitle){
   if (!uid) return '';
-  return '<div class="card-actions" data-uid="' + esc(uid) + '" data-handle="' + esc(handle || 'this trader') + '">'
+  return '<div class="card-actions" data-uid="' + esc(uid) + '" data-handle="' + esc(handle || 'this trader') + '" data-market-title="' + esc(marketTitle || '') + '">'
     + '<button type="button" class="hfx-act-follow">Follow</button>'
     + '<button type="button" class="hfx-act-challenge">Challenge</button>'
     + '</div>';
@@ -1141,13 +1142,14 @@ async function hfxFollow(uid, btn){
 }
 
 // ── Challenge — same fields/endpoint as member.html's challenge flow ──
-var _challengeTargetUid = null, _challengeSide = null;
-function hfxOpenChallenge(uid, handle){
-  _challengeTargetUid = uid; _challengeSide = null;
+var _challengeTargetUid = null, _challengeSide = null, _challengeMarketTitle = null;
+function hfxOpenChallenge(uid, handle, marketTitle){
+  _challengeTargetUid = uid; _challengeSide = null; _challengeMarketTitle = marketTitle || null;
   document.getElementById('challengeTargetHandle').textContent = handle;
   document.getElementById('challengeThesis').value = '';
   document.getElementById('challengeStake').value = 0;
   document.getElementById('challengeStakeLabel').textContent = '0';
+  document.getElementById('challengeStakeNote').style.display = 'none';
   document.getElementById('challengeSideYes').classList.remove('active-yes');
   document.getElementById('challengeSideNo').classList.remove('active-no');
   document.getElementById('challengeModal').classList.add('open');
@@ -1165,13 +1167,14 @@ document.getElementById('challengeSideNo').addEventListener('click', function(){
 });
 document.getElementById('challengeStake').addEventListener('input', function(){
   document.getElementById('challengeStakeLabel').textContent = this.value;
+  document.getElementById('challengeStakeNote').style.display = (parseInt(this.value, 10) > 0) ? '' : 'none';
 });
 document.getElementById('challengeCloseBtn').addEventListener('click', hfxCloseChallenge);
 document.getElementById('challengeModal').addEventListener('click', function(e){ if (e.target.id === 'challengeModal') hfxCloseChallenge(); });
 document.getElementById('challengeSubmitBtn').addEventListener('click', async function(){
   var thesis = (document.getElementById('challengeThesis').value || '').trim();
   if (!thesis) { document.getElementById('challengeThesis').focus(); return; }
-  if (!_challengeSide) { alert('Pick YES or NO — the side you\'re staking.'); return; }
+  if (!_challengeSide) { alert('Pick Agree or Disagree — the side you\'re staking.'); return; }
   if (!_challengeTargetUid) return;
   var stake = parseInt(document.getElementById('challengeStake').value || '0', 10) || 0;
   var handle = document.getElementById('challengeTargetHandle').textContent;
@@ -1187,7 +1190,7 @@ document.getElementById('challengeSubmitBtn').addEventListener('click', async fu
   fetch('/api/challenges', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ challenged_id: _challengeTargetUid, thesis: thesis, challenger_side: _challengeSide, stake_flex: stake })
+    body: JSON.stringify({ challenged_id: _challengeTargetUid, thesis: thesis, challenger_side: _challengeSide, stake_flex: stake, market_title: _challengeMarketTitle })
   }).then(function(r){
     if (r.status === 401 || r.status === 403) { hfxAuthExpired(); throw new Error('auth'); }
     if (!r.ok) { return r.json().catch(function(){ return {}; }).then(function(e){ throw new Error(e.error || 'http ' + r.status); }); }
@@ -1208,7 +1211,7 @@ document.addEventListener('click', function(e){
   e.preventDefault(); e.stopPropagation();
   var uid = row.getAttribute('data-uid'), handle = row.getAttribute('data-handle');
   if (e.target.classList.contains('hfx-act-follow')) hfxFollow(uid, e.target);
-  else if (e.target.classList.contains('hfx-act-challenge')) hfxOpenChallenge(uid, handle);
+  else if (e.target.classList.contains('hfx-act-challenge')) hfxOpenChallenge(uid, handle, row.getAttribute('data-market-title'));
 });
 </script>
 </body>
