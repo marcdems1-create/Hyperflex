@@ -734,10 +734,31 @@
     var saved = localStorage.getItem(STORAGE_KEY);
     if (saved) setConnected(saved);
 
-    // Hide wallet button if no ethereum provider
+    // A regular mobile browser tab never gets window.ethereum injected —
+    // only MetaMask's OWN in-app browser does. Previously this hid the
+    // wallet button entirely on mobile, which meant a mobile user who
+    // already has the MetaMask app had no visible way to connect from the
+    // nav at all. Now it deep-links into the app instead (same fix as
+    // wallet.js's HFXWallet.deepLinkToMetaMask — inlined here since nav.js
+    // loads on every page and shouldn't take on wallet.js's ethers
+    // dependency for two small functions). Desktop with no extension still
+    // hides the button — there's nothing a click can do there.
+    var _isMobileNav = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    function _deepLinkToMetaMaskNav() {
+      location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
+    }
     if (!window.ethereum) {
-      if (walletBtn) walletBtn.style.display = 'none';
-      if (mobileWalletLink) mobileWalletLink.style.display = 'none';
+      if (_isMobileNav) {
+        if (walletBtn) walletBtn.addEventListener('click', function() {
+          if (!localStorage.getItem(STORAGE_KEY)) _deepLinkToMetaMaskNav();
+        });
+        if (mobileWalletLink) mobileWalletLink.addEventListener('click', function(e) {
+          if (!localStorage.getItem(STORAGE_KEY)) { e.preventDefault(); _deepLinkToMetaMaskNav(); }
+        });
+      } else {
+        if (walletBtn) walletBtn.style.display = 'none';
+        if (mobileWalletLink) mobileWalletLink.style.display = 'none';
+      }
       return;
     }
 

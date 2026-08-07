@@ -405,6 +405,14 @@ function saveConnectCache(userId, address, hasSigner){
     localStorage.setItem(CONNECT_CACHE_ADDR, address);
     localStorage.setItem(CONNECT_CACHE_SIGNER, hasSigner ? '1' : '0');
     localStorage.setItem(CONNECT_CACHE_TS, String(Date.now()));
+    // nav.js (loaded on every other page) keeps its own independent
+    // "connected wallet" key and only checks it against a live MetaMask
+    // eth_accounts call as a fallback — cross-writing here means the nav
+    // pill reflects a connection made on THIS page immediately, on the
+    // very next page load, instead of only after its own separate silent
+    // check happens to run. Real wallet connections only (hasSigner), not
+    // pasted-address previews.
+    if (hasSigner) localStorage.setItem('hfx_wallet_address', address);
   } catch (e) {}
 }
 function readConnectCache(){
