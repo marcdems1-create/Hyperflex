@@ -1101,6 +1101,39 @@ function hfxAuthExpired(){
   localStorage.removeItem('hf_token'); localStorage.removeItem('hf_member_token');
   alert('Session expired. Sign in again.');
 }
+// Comment/Follow/Challenge need a real account (requireAuth on the
+// server), not just a /connect wallet-preview session — so an
+// unauthenticated click here has to actually open the wallet and sign,
+// not just say "sign in" with nothing to click. Same eth_requestAccounts
+// -> personal_sign -> POST /auth/wallet sequence creator-login.html's
+// wallet button already uses; reused rather than reinvented so both
+// surfaces mint the same kind of session.
+async function hfxConnectWallet(){
+  if (!window.ethereum) {
+    alert('No wallet extension detected in this browser. Install MetaMask or another browser wallet to sign in.');
+    return null;
+  }
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    var address = accounts && accounts[0];
+    if (!address) return null;
+    var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
+    var signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+    var res = await fetch('/auth/wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: address, message: message, signature: signature })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Wallet sign-in failed');
+    localStorage.setItem('hf_token', data.token);
+    if (data.user && data.user.id) localStorage.setItem('hf_user_id', data.user.id);
+    return data.token;
+  } catch (e) {
+    if (e && e.message !== 'User rejected the request.') alert(e.message || 'Wallet sign-in failed. Try again.');
+    return null;
+  }
+}
 function fmtRelTime(iso){
   var d = new Date(iso), s = Math.max(0, (Date.now() - d.getTime()) / 1000);
   if (s < 60) return 'just now';
@@ -1110,9 +1143,14 @@ function fmtRelTime(iso){
 }
 
 // ── Follow ──
-function hfxFollow(uid, btn){
+async function hfxFollow(uid, btn){
   var token = hfxToken();
-  if (!token) { alert('Sign in to follow predictors.'); return; }
+  if (!token) {
+    btn.disabled = true;
+    token = await hfxConnectWallet();
+    btn.disabled = false;
+    if (!token) return;
+  }
   btn.disabled = true;
   fetch('/api/predictors/' + encodeURIComponent(uid) + '/follow', {
     method: 'POST', headers: { Authorization: 'Bearer ' + token }
@@ -1150,14 +1188,19 @@ function hfxOpenComments(uid, handle){
     .catch(function(){ document.getElementById('commentList').innerHTML = '<div class="hfx-comment-empty">Could not load comments.</div>'; });
 }
 function hfxCloseComments(){ document.getElementById('commentModal').classList.remove('open'); _commentTargetUid = null; }
-function hfxSubmitComment(){
-  var token = hfxToken();
-  if (!token) { alert('Sign in to comment.'); return; }
+async function hfxSubmitComment(){
   var input = document.getElementById('commentInput');
   var content = (input.value || '').trim();
   if (!content) { input.focus(); return; }
   if (!_commentTargetUid) return;
   var btn = document.getElementById('commentSubmitBtn');
+  var token = hfxToken();
+  if (!token) {
+    btn.disabled = true;
+    token = await hfxConnectWallet();
+    btn.disabled = false;
+    if (!token) return;
+  }
   btn.disabled = true;
   fetch('/api/predictors/' + encodeURIComponent(_commentTargetUid) + '/comments', {
     method: 'POST',
@@ -1206,9 +1249,7 @@ document.getElementById('challengeStake').addEventListener('input', function(){
 });
 document.getElementById('challengeCloseBtn').addEventListener('click', hfxCloseChallenge);
 document.getElementById('challengeModal').addEventListener('click', function(e){ if (e.target.id === 'challengeModal') hfxCloseChallenge(); });
-document.getElementById('challengeSubmitBtn').addEventListener('click', function(){
-  var token = hfxToken();
-  if (!token) { alert('Sign in to challenge predictors.'); return; }
+document.getElementById('challengeSubmitBtn').addEventListener('click', async function(){
   var thesis = (document.getElementById('challengeThesis').value || '').trim();
   if (!thesis) { document.getElementById('challengeThesis').focus(); return; }
   if (!_challengeSide) { alert('Pick YES or NO — the side you\'re staking.'); return; }
@@ -1216,6 +1257,13 @@ document.getElementById('challengeSubmitBtn').addEventListener('click', function
   var stake = parseInt(document.getElementById('challengeStake').value || '0', 10) || 0;
   var handle = document.getElementById('challengeTargetHandle').textContent;
   var btn = document.getElementById('challengeSubmitBtn');
+  var token = hfxToken();
+  if (!token) {
+    btn.disabled = true;
+    token = await hfxConnectWallet();
+    btn.disabled = false;
+    if (!token) return;
+  }
   btn.disabled = true;
   fetch('/api/challenges', {
     method: 'POST',
