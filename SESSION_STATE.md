@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-06d (home-kings.html: dropped the duplicate score display, replaced Copy with a live-priced Trade button — shipped, verified on origin/main; rebased cleanly onto a concurrent session's nav.js wallet fixes)
+
+**Shipped (`d7428e5`, pushed, verified `git log origin/main --oneline -1`):**
+- Score was rendered twice per card — once in the gauge ring, once as a big `score-num-big` + `/100` next to it. Removed the duplicate; the gauge number is now the single source of truth. First pass also tried filling the freed space with Buy/Sell buttons — Marc called that too confusing, so per his correction the space is intentionally left blank for now rather than forced.
+- Replaced the Copy button (`c739277`'s subscribe-via-copy-bot) with a direct **Trade** button, per Marc's explicit ask. Reasoning for the swap: Copy was a passive "notify me later" action; Trade is an immediate, priced CTA — "Trade · 62¢" — linking straight to `/market/:slug` for the trader's current largest OPEN Polymarket position. Deliberately NOT the resolved trade shown in the card's own evidence receipt (already has a WIN/LOSS badge, can't be traded). Fetched async per card off the existing public `/api/polymarket/positions/:address` endpoint (same source `profile-trader.html`'s "Copy this" open-positions flow already uses), so it never blocks card paint. No open position → the slot removes itself, not a dead/disabled button. `hfxCopyTrader`/`hfx-act-copy` fully deleted, not deprecated-in-place, since Trade replaces it outright.
+- Verified with a mocked `/api/polymarket/positions/:address` response at both 700px and 375px: button renders `Trade · 62¢` with the correct `/market/:slug?from=trader&side=...` href; an empty-positions response correctly removes the slot.
+
+**⚠️ Second live concurrent-session collision this same file, this same day — caught via the exact `git fetch` habit the last entry called out.** Before committing, `git fetch origin main` showed local was 2 commits behind: `5686992`/`b5ec7fd`, another Claude session's mobile MetaMask deep-link + cross-write connect-state fix. Confirmed no file overlap (`nav.js`, `wallet.js`, `connect.html`, `market.html`, `creator-dashboard.html` — never `home-kings.html`) before rebasing; `git rebase origin/main` applied clean, zero conflicts. Re-grepped for the Challenge-stakes escrow/durable-guard code from the OTHER concurrent collision earlier today (`7c0363b`, Marc's own push) to confirm the rebase hadn't silently dropped anything — intact. **Pattern holding up: check `git fetch` + `git log HEAD..origin/main` before every commit in this repo, not just at session start — concurrent traffic on `home-kings.html` specifically has been constant today.**
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+- (none opened this entry)
+
+**Open questions / unverified:**
+- Trade button's `$25` default size and `from=trader`/`copy_user_id` query params were carried over from `profile-trader.html`'s existing `copyHref()` convention on the assumption `market.html`'s `applyAlphaPrefill` hook treats them the same way regardless of entry surface — not independently re-verified against `market.html` itself this session.
+- All verification this session used a scratch `python3 -m http.server` + mocked `fetch`/`window.ethereum` (per CLAUDE.md rule 7, never start `server.js`) — nothing here has been checked against real Polymarket position data or a real wallet extension.
+
+**Notes for next session:**
+- `loadTradeSlots(root)` (home-kings.html) is the reusable per-card-async-slot pattern now — mirrors `profile-trader.html`'s `loadOpenPositions`, but keyed off `.hfx-act-trade[data-address]` placeholders rather than a single page-level slot. Reuse this pattern rather than re-inventing it if another surface needs the same "fetch live position, render or remove" behavior.
+
 ## 2026-08-06c (home-kings.html: real wallet sign-in for Comment/Follow/Challenge, Comment removed, Follow -> real Copy subscribe — shipped, verified on origin/main; caught a live concurrent-session collision mid-session)
 
 **Shipped (all pushed, each verified via `git log origin/main --oneline -1` before moving on):**
