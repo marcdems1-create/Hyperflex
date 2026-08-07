@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-06b (home-kings.html desktop layout + trader-card polish — shipped, verified on origin/main)
+
+**Shipped (`c58a765`, pushed, verified `git log origin/main --oneline -1` matches):**
+- Desktop (≥1024px) layout fix: `.app-shell` was hard-capped at `--col:480px` with no wider breakpoint, so desktop rendered as a narrow centered mobile column in a huge black field, and category rail cards (`flex:0 0 84%`) were cut off. Now: `.app-shell` widens to 1100px on desktop; topbar/hero/Top-Trader/footer stay centered at 680px; `.rail .trader-card-block` gets a fixed 300px flex-basis so 3-4 cards sit side by side, still horizontally scrollable. Mobile (`--col:480px` path) untouched — verified unchanged at 375px.
+- `cardArticleHtml(card, isHero, rank)` now takes a rank param; avatar shows leaderboard position (`#1`/`#2`/`#3` in gold/silver/bronze gradient tiers, `#4+` neutral) instead of the handle's first letter. Both call sites (hero=1, rail=index+1) updated. Sized up 26px→36px (46px on hero) after first pass was reported too small to read.
+- World/Politics/Macro/Sports rail headers: added a per-category monoline SVG icon (globe/blue, landmark/purple, bar-chart/amber, trophy/green) and bumped `.cat-title` to 1.5rem/800-weight sans — was a 0.72rem faint mono label, easy to miss scrolling past.
+- Added "Powered by Polymarket" credit to the in-page topbar next to the LIVE pill (linked out, `target="_blank"`) — didn't exist anywhere in the codebase before, confirmed via repo-wide grep.
+- Recent-resolution receipt on every trader card now shows `evidence.roi_pct` (server already computes this at `server.js:13325`) instead of `fmtUsdSigned(evidence.pnl_usd)` — a dollar P&L isn't comparable across traders with different position sizes, ROI% is. Removed the now-unused `fmtUsdSigned` helper.
+- All verified visually pre-push via a scratch `python3 -m http.server` on `public/` + injected mock card data in the Browser pane (never started `server.js`, per CLAUDE.md rule 7) — both desktop (1440px) and mobile (375px), rank-tier colors confirmed via `getComputedStyle`, not just eyeballed.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+- (none opened this entry)
+
+**Open questions / unverified:**
+- Everything above was checked against injected mock data on a static file server, never against live `/api/kings` / `/api/category-leaderboard` responses — those endpoints need `pool`/DB access this sandbox doesn't have. Worth a real post-deploy look at hyperflex.network to confirm the rank/category-icon/ROI-receipt changes render correctly against actual leaderboard data, not just the mock shape used here.
+
+**Notes for next session:**
+- Before this session's pushes, checked `git status` + `git fetch origin main && git log HEAD..origin/main` each time per the 2026-08-06 entry's process lesson — clean both times, push landed as a plain fast-forward with nothing interleaved.
+
 ## 2026-08-06 (resolved the `stash@{0}` conflict flagged 2026-08-05c; nav trim + Comment/Follow/Challenge shipped; found + fixed a real Profile-link gap)
 
 **Shipped (with hashes):**
