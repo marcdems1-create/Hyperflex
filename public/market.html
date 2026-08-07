@@ -4820,6 +4820,7 @@ async function enableTrading() {
   if (_enableRunning) { console.log('[setup] enableTrading already running — skipping'); return false; }
   _enableRunning = true;
   if (!window.ethereum) {
+    if (HFXWallet.isMobileDevice()) { HFXWallet.deepLinkToMetaMask(); _enableRunning = false; return false; }
     showTradeStatus('Install MetaMask to trade', 'error');
     _enableRunning = false;
     return false;
@@ -5292,6 +5293,7 @@ async function runFullSetup() {
   if (cta) { cta.disabled = true; cta.textContent = 'Setting up...'; }
 
   if (!window.ethereum) {
+    if (HFXWallet.isMobileDevice()) { HFXWallet.deepLinkToMetaMask(); if (cta) { cta.disabled = false; updateCtaButton(); } _setupRunning = false; return false; }
     showTradeStatus('Install MetaMask to trade', 'error');
     if (cta) { cta.disabled = false; updateCtaButton(); }
     _setupRunning = false;

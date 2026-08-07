@@ -17775,6 +17775,7 @@ function renderPolymarketConnectState() {
 async function connectMetaMask() {
   const btn = document.getElementById('metamaskBtn');
   if (!window.ethereum) {
+    if (HFXWallet.isMobileDevice()) { HFXWallet.deepLinkToMetaMask(); return; }
     showToast('No wallet detected. Install MetaMask or use the paste address option below.', 'error');
     return;
   }
@@ -21237,6 +21238,7 @@ function updateWalletUI() {
 
 async function connectBrowserWallet() {
   if (typeof window.ethereum === 'undefined') {
+    if (HFXWallet.isMobileDevice()) { HFXWallet.deepLinkToMetaMask(); return; }
     showToast('Install MetaMask or Coinbase Wallet to trade', 'error');
     return;
   }

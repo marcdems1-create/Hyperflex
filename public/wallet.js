@@ -230,6 +230,28 @@
   }
   global.addEventListener('focus', _maybeSyncOnFocus);
 
+  // A regular mobile browser tab (Safari/Chrome on iOS/Android) never gets
+  // window.ethereum injected — only MetaMask's OWN in-app browser does that.
+  // Without this distinction, a mobile user who already has the MetaMask app
+  // hits the same "install MetaMask" dead end as someone with no wallet at
+  // all. Pure detection, no ethers/provider dependency — safe to call before
+  // any wallet state exists.
+  function isMobileDevice() {
+    return typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
+  // MetaMask's documented Universal Link (docs.metamask.io/wallet/how-to/use-deep-links).
+  // Opens the MetaMask app and loads this exact page inside ITS in-app
+  // browser, where window.ethereum IS injected — same pattern most web3
+  // sites use for mobile connect instead of blocking on "install MetaMask"
+  // when the app is already on the phone. If MetaMask isn't installed, the
+  // link falls through to the app store per MetaMask's own handling — we
+  // don't need a separate not-installed branch.
+  function deepLinkToMetaMask() {
+    var dest = global.location.host + global.location.pathname + global.location.search;
+    global.location.href = 'https://metamask.app.link/dapp/' + dest;
+  }
+
   global.HFXWallet = {
     getSigner: getSigner,
     getSignerFresh: getSignerFresh,
@@ -240,5 +262,7 @@
     syncCurrentAccount: syncCurrentAccount,
     onWalletSwitched: onWalletSwitched,
     offWalletSwitched: offWalletSwitched,
+    isMobileDevice: isMobileDevice,
+    deepLinkToMetaMask: deepLinkToMetaMask,
   };
 })(window);

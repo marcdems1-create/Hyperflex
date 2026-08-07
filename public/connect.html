@@ -435,8 +435,21 @@ function showErr(msg){
   e.style.display = 'block';
 }
 
+// A regular mobile browser tab never gets window.ethereum injected — only
+// MetaMask's OWN in-app browser does. Without this, a mobile user who
+// already has the app hits the same dead end as someone with no wallet at
+// all. Deep link opens the app and reloads this exact page inside its
+// in-app browser, where window.ethereum IS injected — matches the pattern
+// most web3 sites use (docs.metamask.io/wallet/how-to/use-deep-links).
+function _isMobileDevice(){ return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent); }
+function _deepLinkToMetaMask(){ location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search; }
+
 async function connectWallet(){
-  if (!window.ethereum) { showErr('No wallet extension detected in this browser. Paste an address below to preview instead.'); return; }
+  if (!window.ethereum) {
+    if (_isMobileDevice()) { _deepLinkToMetaMask(); return; }
+    showErr('No wallet extension detected in this browser. Paste an address below to preview instead.');
+    return;
+  }
   try {
     var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     if (accounts && accounts[0]) { _hasSigner = true; handleAddress(accounts[0]); }
