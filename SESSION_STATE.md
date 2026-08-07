@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-06c (home-kings.html: real wallet sign-in for Comment/Follow/Challenge, Comment removed, Follow -> real Copy subscribe — shipped, verified on origin/main; caught a live concurrent-session collision mid-session)
+
+**Shipped (all pushed, each verified via `git log origin/main --oneline -1` before moving on):**
+- `2dcd4c9` — Comment/Follow/Challenge were gated by `requireAuth` (real JWT) but an unauthenticated click just did `alert('Sign in...')` with nothing to click — a dead end. Added `hfxConnectWallet()` (eth_requestAccounts -> personal_sign -> POST /auth/wallet, same sequence `creator-login.html`'s wallet button already uses) and wired all three actions to open it first when there's no token, then proceed automatically. Verified with a mocked `window.ethereum` + `fetch`: full call chain confirmed, plus the no-extension fallback gives one clear message instead of a dead end.
+- `d9658a6` — Removed Comment entirely (button, modal, JS, CSS) per Marc's call: it never surfaced anywhere beyond its own modal (no count, no feed, no notification loop) and was diluting Challenge, the actual stakes/confrontation mechanic. `server.js`'s `/api/predictors/:userId/comments` routes are now unused by any page — left untouched, flagged as a separate lower-risk cleanup if wanted.
+- `c739277` — Follow relabeled to "Copy" **and rewired**, not just relabeled: "Copy" already has an established meaning in this app (`copy-trading.html`'s `saveCopy()` -> `POST /api/copy-bot/subscribe`), so a cosmetic-only text swap would have shipped a button that says Copy but performs a social follow — decided that was a real honesty gap in a product whose whole moat is not shipping mismatched claims, not just data ones. Now calls the real endpoint: `whale_address` (`card.polymarket_address`), `whale_name`, `notify_only: true`, `allocation_per_trade: 100` — same payload shape `copy-trading.html` sends. Every card here is already sourced from the durable-verified leaderboard, so Gate 4's "copy only renders on a verified wallet" holds by construction, no extra check needed. Not a toggle (server-side upsert) — button goes to "Copying" and stays disabled; unsubscribing still lives on `/copy-trading`. Falls back to Challenge-only if a card has no wallet address.
+
+**⚠️ Live concurrent-session collision, caught cleanly — worth repeating the pattern:** mid-session, `git fetch origin main` came back showing local `HEAD` had already auto-advanced to `7c0363b` ("Make Challenge stakes real: FLEX-wallet escrow, durable-market guard, smart-money signal") — a real commit **Marc pushed directly**, on the exact same file (`home-kings.html`) I was about to edit, landed on this same local checkout between my prior push and this one. Noticed it because `cardActionsHtml`'s signature had a `marketTitle` param I didn't remember writing — re-read the file fresh off disk instead of trusting memory of my own last edit, confirmed via `git log -p -S` whose commit introduced it, then built the Copy change on top of the *current* file rather than a stale mental model. No collision, nothing clobbered. **Lesson: in this repo, "I just edited this file" is not the same as "I know its current content" — another session (including Marc himself, not just other Claudes) can land commits on the same local checkout between your own pushes. Re-`git fetch`+read before every edit, not just before every push, stays cheap insurance.**
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+- (none opened this entry)
+
+**Open questions / unverified:**
+- All three fixes verified against mocked `window.ethereum`/`fetch` on a scratch static server (no real MetaMask available in this sandbox, no network path to hyperflex.network). Real end-to-end (actual wallet extension, actual `/api/copy-bot/subscribe` DB write, actual Challenge stake flow interaction) still unverified against production — worth a live click-through post-deploy.
+- `server.js`'s now-orphaned `/api/predictors/:userId/comments` routes (GET+POST) — not removed, not urgent, but should get cleaned up in a dedicated pass rather than left indefinitely.
+
+**Notes for next session:**
+- If Comment ever needs to come back, it can't be a bare relabel either — same lesson as Copy: check whether the label already means something specific elsewhere in the app before reusing it.
+
 ## 2026-08-06b (home-kings.html desktop layout + trader-card polish — shipped, verified on origin/main)
 
 **Shipped (`c58a765`, pushed, verified `git log origin/main --oneline -1` matches):**
