@@ -992,7 +992,7 @@ function cardArticleHtml(card, isHero, rank){
     + '<span><span class="dot-sep">&middot;</span>' + esc(card.n) + ' resolved<span class="dot-sep">&middot;</span>' + esc(relFromDays(ev ? ev.days_ago : null) || '—') + '</span></div>';
 
   html += '</a>';
-  html += cardActionsHtml(card.user_id, handle, ev ? ev.question : null);
+  html += cardActionsHtml(card.user_id, handle, ev ? ev.question : null, card.polymarket_address);
   html += '</div>';
   return html;
 }
@@ -1064,14 +1064,22 @@ document.getElementById('pasteBtn').addEventListener('click', function(){
 });
 document.getElementById('pasteAddr').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('pasteBtn').click(); });
 
-/* ── Follow / Challenge — the action row under every card.
+/* ── Copy / Challenge — the action row under every card.
    Markup lives outside the card's own <a> (see .trader-card-block above)
    so these controls are never nested inside an anchor. Clicks are
-   delegated off document since cards re-render on every poll cycle. ── */
-function cardActionsHtml(uid, handle, marketTitle){
+   delegated off document since cards re-render on every poll cycle.
+   "Copy" subscribes via the existing copy-bot system (POST
+   /api/copy-bot/subscribe — same endpoint and vocabulary copy-trading.html
+   already uses), not the old social predictor_follows table: every card on
+   this page is already sourced from the durable-verified leaderboard, so
+   the Gate 4 "copy only renders on a verified wallet" condition is met by
+   construction. Always subscribes notify-only — no auto-execute toggle
+   here, matches "copy trading simply sends the signal." ── */
+function cardActionsHtml(uid, handle, marketTitle, address){
   if (!uid) return '';
-  return '<div class="card-actions" data-uid="' + esc(uid) + '" data-handle="' + esc(handle || 'this trader') + '" data-market-title="' + esc(marketTitle || '') + '">'
-    + '<button type="button" class="hfx-act-follow">Follow</button>'
+  var copyBtn = address ? '<button type="button" class="hfx-act-copy">Copy</button>' : '';
+  return '<div class="card-actions" data-uid="' + esc(uid) + '" data-handle="' + esc(handle || 'this trader') + '" data-market-title="' + esc(marketTitle || '') + '" data-address="' + esc(address || '') + '">'
+    + copyBtn
     + '<button type="button" class="hfx-act-challenge">Challenge</button>'
     + '</div>';
 }
@@ -1083,7 +1091,7 @@ function hfxAuthExpired(){
   localStorage.removeItem('hf_token'); localStorage.removeItem('hf_member_token');
   alert('Session expired. Sign in again.');
 }
-// Follow/Challenge need a real account (requireAuth on the
+// Copy/Challenge need a real account (requireAuth on the
 // server), not just a /connect wallet-preview session — so an
 // unauthenticated click here has to actually open the wallet and sign,
 // not just say "sign in" with nothing to click. Same eth_requestAccounts
@@ -1117,8 +1125,11 @@ async function hfxConnectWallet(){
   }
 }
 
-// ── Follow ──
-async function hfxFollow(uid, btn){
+// ── Copy — POST /api/copy-bot/subscribe, not a toggle (upsert on the
+// server), so once it succeeds the button stays "Copying" rather than
+// re-enabling to flip back off. Managing/stopping an active copy lives on
+// /copy-trading, same as it does today for whales subscribed from there. ──
+async function hfxCopyTrader(uid, address, handle, btn){
   var token = hfxToken();
   if (!token) {
     btn.disabled = true;
@@ -1127,18 +1138,20 @@ async function hfxFollow(uid, btn){
     if (!token) return;
   }
   btn.disabled = true;
-  fetch('/api/predictors/' + encodeURIComponent(uid) + '/follow', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + token }
+  fetch('/api/copy-bot/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ whale_address: address, whale_name: handle, allocation_per_trade: 100, notify_only: true })
   }).then(function(r){
     if (r.status === 401 || r.status === 403) { hfxAuthExpired(); throw new Error('auth'); }
-    if (!r.ok) throw new Error('http ' + r.status);
+    if (!r.ok) { return r.json().catch(function(){ return {}; }).then(function(e){ throw new Error(e.error || 'http ' + r.status); }); }
     return r.json();
-  }).then(function(d){
-    btn.textContent = d.following ? 'Following' : 'Follow';
-    btn.classList.toggle('is-active', !!d.following);
+  }).then(function(){
+    btn.textContent = 'Copying';
+    btn.classList.add('is-active');
   }).catch(function(e){
-    if (e.message !== 'auth') alert('Follow failed. Try again.');
-  }).finally(function(){ btn.disabled = false; });
+    if (e.message !== 'auth') { alert(e.message || 'Copy failed. Try again.'); btn.disabled = false; }
+  });
 }
 
 // ── Challenge — same fields/endpoint as member.html's challenge flow ──
@@ -1210,7 +1223,7 @@ document.addEventListener('click', function(e){
   if (!row || !e.target.closest('button')) return;
   e.preventDefault(); e.stopPropagation();
   var uid = row.getAttribute('data-uid'), handle = row.getAttribute('data-handle');
-  if (e.target.classList.contains('hfx-act-follow')) hfxFollow(uid, e.target);
+  if (e.target.classList.contains('hfx-act-copy')) hfxCopyTrader(uid, row.getAttribute('data-address'), handle, e.target);
   else if (e.target.classList.contains('hfx-act-challenge')) hfxOpenChallenge(uid, handle, row.getAttribute('data-market-title'));
 });
 </script>
