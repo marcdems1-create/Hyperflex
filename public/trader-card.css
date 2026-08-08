@@ -24,14 +24,11 @@
 }
 .tcard:hover { border-color: #33333f; transform: translateY(-2px); }
 
-/* ── identity row ── */
+/* ── identity row — no avatar-initials circle (Marc, on the same pattern
+   elsewhere: "the score should be a number... put the score there and make
+   it pop"). The card's Flex Score hero (below) already carries that job;
+   the handle is the sole identity element here. ── */
 .tcard-identity { display: flex; align-items: center; gap: 10px; }
-.tcard-avatar {
-  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; font-weight: 800;
-  color: #0e0e15;
-}
 .tcard-handle { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 15px; color: rgba(240,240,245,.7); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tcard-rank {
   margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
@@ -132,14 +129,12 @@
 
 /* ── variants ── */
 .tcard-hero { width: 100%; max-width: 480px; padding: 26px; gap: 18px; }
-.tcard-hero .tcard-avatar { width: 48px; height: 48px; font-size: 16px; }
 .tcard-hero .tcard-verdict { font-size: 26px; }
 
 .tcard-feed { flex-shrink: 0; width: 300px; }
 
 .tcard-compact { flex-shrink: 0; width: 220px; padding: 14px; gap: 10px; }
 .tcard-compact .tcard-evidence, .tcard-compact .tcard-scope { display: none; }
-.tcard-compact .tcard-avatar { width: 28px; height: 28px; font-size: 11px; }
 /* Compact stays the tightest density by design ("minimum viable: identity +
    score + n") — dial the shared base sizes back down so a 220px card doesn't
    overflow now that .tcard-score/.tcard-handle were bumped for hero/feed. */

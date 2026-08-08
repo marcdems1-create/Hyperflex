@@ -12,23 +12,6 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function initials(card) {
-    var src = card.display_name || card.username || card.polymarket_address || '?';
-    var parts = String(src).replace(/^0x/, '').trim().split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return String(src).slice(0, 2).toUpperCase();
-  }
-
-  // Deterministic hash → hue, so the same wallet always gets the same avatar
-  // color across renders without storing anything.
-  function avatarColor(card) {
-    var src = String(card.user_id || card.polymarket_address || card.display_name || 'x');
-    var hash = 0;
-    for (var i = 0; i < src.length; i++) hash = (hash * 31 + src.charCodeAt(i)) >>> 0;
-    var hue = hash % 360;
-    return 'hsl(' + hue + ', 62%, 62%)';
-  }
-
   function handle(card) {
     if (card.username) return '@' + card.username;
     if (card.display_name) return card.display_name;
@@ -100,7 +83,6 @@
     var html = '<a class="' + cls + '" href="' + profileHref + '" data-user-id="' + esc(card.user_id) + '">';
 
     html += '<div class="tcard-identity">'
-      + '<div class="tcard-avatar" style="background:' + avatarColor(card) + '">' + esc(initials(card)) + '</div>'
       + '<div class="tcard-handle">' + esc(handle(card)) + '</div>'
       + (card.whale_rank ? '<div class="tcard-rank">#' + esc(card.whale_rank) + '</div>' : '')
       + '</div>';
