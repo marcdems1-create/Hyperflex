@@ -49,6 +49,54 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-08b (profile-trader.html mobile-fix task turned out to already be shipped — corrected a false "never touched" premise before acting on it)
+
+**Shipped:** nothing — no code change was needed, see below.
+
+**What happened:** Received a task (relayed through Marc from another session) to fix `profile-trader.html`'s mobile layout and delete the "scores are being recomputed" banner, on the stated premise that `git log --oneline --all -- profile-trader.html` "returns nothing" and the file had "never been committed to in this repo's history." **That premise was false.** The same command returns dozens of commits. More importantly, the exact fix requested had already landed — `9f0476f` ("Land the trader-profile mobile fix that never merged; delete the recomputing banner", 2026-08-06 01:05), which pulled a correct-but-orphaned mobile-first rewrite off a stranded branch (`788e5b1`) into `main`, and deleted the recomputing banner from `nav.js`'s site-wide injection. `9f0476f` was already an ancestor of `HEAD` — already merged, already deployed — hours before the task was written.
+
+**Verified independently rather than trust either claim (the task's or the old commit message's):** loaded `/@TB14` (a real trader, confirmed via `/api/user/profile/TB14`) on live production at both 375px and 414px. `document.documentElement.scrollWidth === window.innerWidth` at both sizes (no horizontal overflow), FLEX score/header/CLV-and-ROI cards/cumulative-ROI chart/open-positions cards all render inside the viewport, and `document.body.innerText` contains no "recomput" substring at either width. Screenshots taken at both sizes.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+- (none opened this entry — nothing to queue, task was already done)
+
+**Open questions / unverified:**
+- (none)
+
+**Notes for next session:**
+- **A task description's "confirmed" facts are not automatically true, even when phrased as investigation results and even when relayed by Marc in good faith** — re-run the actual commands (`git log --all -- <file>`, check `git merge-base --is-ancestor`) before trusting a premise like "this file has no history" or "no prior fix to build on," especially in a repo with this much concurrent-session traffic. The session that drafted this task was almost certainly working from a state that predated `9f0476f`.
+- If picking up profile-trader.html work going forward: it already has a real mobile-first design (as of `9f0476f`) and the recomputing banner is gone site-wide (deleted from `nav.js`, not hidden). Don't re-diagnose either as broken without checking current `main` first.
+
+## 2026-08-08 (Trader/wallet data inventory for mobile profile redesign — research only, no code changed)
+
+**Shipped:** nothing code-side — this was a research/reporting session ahead of a `profile-trader.html` redesign Marc is handing to product-side Claude. Full inventory saved to `docs/specs/trader-wallet-data-inventory-2026-08-08.md` (not yet committed — sitting as an untracked file, Marc's call whether to commit).
+
+**What's in the doc:** every `users`/wallet-linked DB column (reconstructed from `server.js` DDL + migration files — **no live `DATABASE_URL` was available in this environment**, so nothing here is live-verified against `information_schema.columns`), what each of the 6 scoring engines (`lib/clv-engine.js` etc.) actually outputs per-wallet, the real response shape of every wallet-level API endpoint (read off the actual `res.json()` literals, not inferred), and a field-by-field fetched-vs-rendered diff of `profile-trader.html`.
+
+**Key findings worth surfacing even outside the full doc:**
+- `computeTraderCard()` — the function backing the live `/@handle` profile — does **not** read `users.flex_score`/`flex_score_90d`/`flex_score_alltime` at all. It recomputes everything fresh from `realized_trades` per request. Those three columns are a separate leaderboard subsystem; don't assume they're the score source when redesigning.
+- **`profile-trader.html` fetches `durable_scope_label` and never renders it** — this directly violates CLAUDE.md's own rule that every score-bearing surface must carry `scope_label` next to score+n. The hero FLEX number currently ships with zero scope context. Flagging as the single highest-priority gap for the redesign to close.
+- Also fetched-but-dropped: a full 25-take feed, the entire verify-record audit trail (`unconfirmed_trades[]` etc — the page only links out to raw JSON instead of surfacing any of it), and the positions endpoint's pre-aggregated `totals{}` (page hand-rolls its own instead, producing two never-reconciled win/loss counts).
+- Available from other endpoints but never fetched by this page: specialty/category breakdown, similar-traders comparison, a 9-bucket calibration chart + 30-day PnL timeline, and Hyperliquid cross-venue positions (`/api/trader/:address/profile` — this is live read-only data already flowing despite Gate 2; that gate blocks a second *grading* engine, not this display).
+- `cached_positions` and `sports_flex_scores` both have unresolved schema drift — 2-3 conflicting `CREATE TABLE IF NOT EXISTS` definitions across `server.js` boot code and separate migration files. Don't design UI copy around specific column names from either until live-verified.
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+1. Product-side Claude redesigns `profile-trader.html` mobile using the inventory doc — Marc is driving this handoff himself.
+2. Whoever picks this up next should get a real `DATABASE_URL` (Railway dashboard → Postgres → Connect tab) and run `scripts/schema-diff.js` to resolve the `cached_positions`/`sports_flex_scores` drift flagged in the doc before building anything that touches those two tables.
+
+**Open questions / unverified:**
+- Whether `users.username` vs `users.handle` are both live-populated and diverging, or whether one is vestigial — flagged in the doc, not resolved (needs a live query).
+- Whether `polymarket_trades.clv_cents`/`clv_computed_at` migration actually ran in prod — the ingestion code itself defensively handles "column doesn't exist," suggesting even the codebase isn't sure.
+
+**Notes for next session:**
+- The inventory doc lists **three separate endpoints that each independently compute a wallet's card/score** (`/api/user/profile/:handle`, `/api/trader-cards`/`/api/kings`, `/api/trader-record/:handle`). `_buildTraderProfile()` (backing `/api/trader-record/:handle`) is the superset — full trade history, specialty breakdown, provisional scoring for sub-10-trade wallets. A redesign converging the profile page on that one endpoint instead of its current 3-request pattern would close most of the rendering gaps in one move.
+
 ## 2026-08-06d (home-kings.html: dropped the duplicate score display, replaced Copy with a live-priced Trade button — shipped, verified on origin/main; rebased cleanly onto a concurrent session's nav.js wallet fixes)
 
 **Shipped (`d7428e5`, pushed, verified `git log origin/main --oneline -1`):**
