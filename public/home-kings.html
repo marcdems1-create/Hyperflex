@@ -1132,6 +1132,13 @@ function hfxAuthExpired(){
 // surfaces mint the same kind of session.
 async function hfxConnectWallet(){
   if (!window.ethereum) {
+    // A regular mobile browser tab never gets window.ethereum injected —
+    // only MetaMask's OWN in-app browser does. Deep link opens the app and
+    // reloads this exact page inside it, where window.ethereum IS injected.
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
+      return null;
+    }
     alert('No wallet extension detected in this browser. Install MetaMask or another browser wallet to sign in.');
     return null;
   }

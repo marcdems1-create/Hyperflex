@@ -2518,6 +2518,7 @@ async function fetchPolBalance(address) {
 // Open the deposit modal — shows both balances, amount input, action button
 async function openDepositModal() {
   if (!window.ethereum) {
+    if (HFXWallet.isMobileDevice()) { HFXWallet.deepLinkToMetaMask(); return; }
     alert('MetaMask required. Install or connect a wallet first.');
     return;
   }

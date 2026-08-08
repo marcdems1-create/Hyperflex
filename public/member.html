@@ -2474,7 +2474,17 @@ async function loadSocialPredictions(profileUserId) {
 async function startWalletVerify() {
   const btn = document.getElementById('verifyWalletBtn');
   if (!btn) return;
-  if (!window.ethereum) { alert('MetaMask or a Web3 wallet is required'); return; }
+  if (!window.ethereum) {
+    // A regular mobile browser tab never gets window.ethereum injected —
+    // only MetaMask's OWN in-app browser does. Deep link opens the app and
+    // reloads this exact page inside it, where window.ethereum IS injected.
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
+      return;
+    }
+    alert('MetaMask or a Web3 wallet is required');
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = 'Connecting...';
