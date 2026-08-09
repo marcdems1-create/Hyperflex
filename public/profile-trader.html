@@ -41,7 +41,11 @@
     .score-row{display:flex;flex-direction:column;gap:2px}
     .score{font-family:var(--sans);font-size:clamp(56px,20vw,120px);font-weight:900;color:var(--gold);line-height:.95;letter-spacing:-0.03em}
     .score.mute{color:var(--dim)}
-    .score-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700}
+    .score-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700;display:inline-flex;align-items:center;gap:6px}
+    .score-info-btn{width:14px;height:14px;border-radius:50%;flex-shrink:0;padding:0;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:700;line-height:1;letter-spacing:0;text-transform:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:var(--dim);cursor:pointer}
+    .score-info-btn:hover{background:rgba(255,255,255,.12)}
+    .score-info{font-family:var(--sans);font-size:12.5px;line-height:1.55;color:var(--dim);max-width:52ch;margin-top:6px}
+    .score-info[hidden]{display:none}
 
     /* Verification badge */
     .verify{display:flex;align-items:flex-start;gap:12px;margin-top:18px;padding:14px 16px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.02)}
@@ -402,6 +406,15 @@
         '</div>';
     }
 
+    // Toggles the inline Flex Score explainer. `btn` is the "?"; the
+    // explainer div is score-row's next sibling.
+    function toggleScoreInfo(btn){
+      var row = btn.closest('.score-row');
+      var info = row && row.nextElementSibling;
+      if (!info || !info.classList.contains('score-info')) return;
+      info.hidden = !info.hidden;
+    }
+
     function render(d){
       d = d || {};
       var c = d.card || null;
@@ -434,8 +447,12 @@
         '<div class="hero">' +
           '<div class="score-row">' +
             '<span class="score' + (flexNum==='—'?' mute':'') + '">' + flexNum + '</span>' +
-            '<span class="score-lbl">flex score</span>' +
-          '</div>' + verifySlot + bio +
+            '<span class="score-lbl">flex score' +
+              '<button type="button" class="score-info-btn" aria-label="What is Flex Score?" onclick="toggleScoreInfo(this)">?</button>' +
+            '</span>' +
+          '</div>' +
+          '<div class="score-info" hidden>A 0&ndash;100 rating built from five weighted parts: accuracy (35), calibration (25), P&amp;L quality (20), consistency (10), breadth (10). Recomputed as trades resolve &mdash; bad calls lower it, good calls raise it, inactivity decays it.</div>' +
+          verifySlot + bio +
         '</div>';
 
       // ── stat quad
