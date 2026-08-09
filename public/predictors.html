@@ -560,16 +560,26 @@ function renderCards() {
       var cs3 = flexVal != null ? flexVal : '—';
       var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
       var settledN = r.predictions_resolved || r.flex_settled_events || '?';
-      // HFX composite: calibration 40% + win rate 20% + consistency proxy 20% + flex tier 20%
-      var hfxCal = r.calibration_score != null ? Number(r.calibration_score) : (flexVal != null ? flexVal * 0.7 : 0);
-      var hfxWin = wrPct != null ? wrPct : 0;
-      var hfxConsistency = Math.min(100, (Number(r.predictions_resolved || r.flex_settled_events || 0) / 50) * 100);
-      var tierMap = { 'FLEXIN': 100, 'WHALE': 90, 'SHARK': 80, 'SHARP': 70, 'PROFITABLE': 60, 'TRADER': 50, 'BUILDING': 30 };
-      var hfxTierScore = r.flex_tier && tierMap[r.flex_tier] ? tierMap[r.flex_tier] : (flexVal != null ? Math.min(100, flexVal) : 0);
-      var hfxComposite = Math.round(hfxCal * 0.4 + hfxWin * 0.2 + hfxConsistency * 0.2 + hfxTierScore * 0.2);
-      var hfxStr = (r.calibration_score != null || flexVal != null) ? hfxComposite : '—';
-      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">FLEX Score — composite of accuracy, ROI, volume, and recency. 100 = top of leaderboard.<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
-      if (hfxStr !== '—') metricHtml += '<div style="font-family:var(--mono);font-size:10px;color:#4d9fff;margin-top:2px;"><span style="opacity:.6">HFX</span> ' + hfxStr + '</div>';
+      // Real formula per lib/flex-score.js: accuracy 35 + calibration 25 +
+      // P&L quality 20 + consistency 10 + breadth 10. Tooltip previously
+      // claimed "accuracy, ROI, volume, and recency" — none of "volume" or
+      // "recency" are actual components; fixed to match reality.
+      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">Flex Score — accuracy (35) + calibration (25) + P&amp;L quality (20) + consistency (10) + breadth (10).<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
+      // A second "HFX" number used to render here — a client-side blend
+      // invented on this page only (calibration + win rate + a trade-count
+      // proxy mislabeled "consistency" + a tier lookup that never actually
+      // matched real tier strings, due to a case mismatch, so it silently
+      // fell back to flexVal capped at 100). It had nothing to do with the
+      // real, server-computed HFX Score (GET /api/member/:userId/hfx-score,
+      // server.js computeHfxComposite: calibration + win rate + take streak
+      // + Challenge win rate) that member.html shows under the identical
+      // label — two different numbers, same name, depending which page you
+      // were on. Removed rather than fixed: a real per-row version needs a
+      // batched server endpoint (the real formula needs a takes-streak and
+      // a challenges-resolved query per user, not columns already sitting
+      // in this leaderboard payload), which is a separate build, not a
+      // copy fix. Showing nothing here is strictly better than showing a
+      // wrong number under a real metric's name.
       var parts = [];
       if (wrPct != null) parts.push(wrPct + '% win rate');
       var n = r.predictions_resolved || r.flex_settled_events;
@@ -840,9 +850,16 @@ function showStickyBar() {
       if (entry) {
         var pnl = entry.whale_pnl || 0;
         var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+        // Prefer the real flex_score (same field the leaderboard rows below
+        // already prefer, see renderRow ~line 559) over calibration_score,
+        // which is just ONE of the five components that make up flex_score,
+        // rescaled to look like a standalone 0-100 number. Showing it here
+        // labeled "FLEX SCORE" was a real bug — a trader with weak overall
+        // score but strong calibration would see an inflated number.
+        var stickyScore = entry.flex_score != null ? entry.flex_score : entry.calibration_score;
         document.getElementById('barContent').innerHTML =
           '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Your record</span>' +
-          (entry.calibration_score != null ? '<span class="bar-stat">FLEX SCORE <strong>' + entry.calibration_score + '/100</strong></span>' : '') +
+          (stickyScore != null ? '<span class="bar-stat">FLEX SCORE <strong>' + stickyScore + '/100</strong></span>' : '') +
           (pnl !== 0 ? '<span class="bar-stat" style="color:' + pnlColor + ';font-weight:700">' + formatPnl(pnl) + '</span>' : '');
         bar.querySelector('.bar-link').href = '/m/' + (userId || '');
         bar.querySelector('.bar-link').textContent = 'View profile →';
