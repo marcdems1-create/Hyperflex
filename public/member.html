@@ -83,7 +83,9 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .tier-badge.tier-trader::before,.tier-badge.tier-building::before{content:"○";color:var(--muted)}
 /* FLEX score block */
 .flex-score{text-align:right;padding-left:28px;border-left:1px solid var(--line-strong);align-self:stretch;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1;min-width:200px}
-.flex-label{font-family:var(--mono);font-size:11px;letter-spacing:0.3em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.flex-label{font-family:var(--mono);font-size:11px;letter-spacing:0.3em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;width:100%}
+.flex-info-btn{width:14px;height:14px;border-radius:50%;flex-shrink:0;padding:0;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:700;line-height:1;letter-spacing:0;text-transform:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:var(--muted);cursor:pointer}
+.flex-info-btn:hover{background:rgba(255,255,255,.12);color:var(--ink-2)}
 .flex-num{font-family:var(--display);font-size:96px;line-height:0.85;background:linear-gradient(180deg,#FFFFFF 0%,#FFD96B 60%,#FFB800 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 24px rgba(255,184,0,0.25));letter-spacing:-0.01em}
 .flex-num.mute{background:linear-gradient(180deg,#9590B0,#6E6790);-webkit-background-clip:text;background-clip:text;color:transparent;filter:none}
 .flex-num .denom{font-size:32px;color:var(--muted);background:none;-webkit-text-fill-color:var(--muted);filter:none;margin-left:4px}
@@ -307,9 +309,6 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .sfs-edu-foot{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.04em}
 
 .sfs-ctas{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px}
-.cal-score-wrap { position: relative; display: inline-block; cursor: help; }
-.cal-tooltip { display: none; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #1a1a22; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; padding: 10px 14px; font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.7); width: 240px; white-space: normal; z-index: 100; line-height: 1.6; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; }
-.cal-score-wrap:hover .cal-tooltip { display: block; }
 </style>
 <script src="/utils.js"></script>
 </head>
@@ -491,7 +490,7 @@ function renderFlexScoreCard() {
   const buildingNote = !qualifies ? `
     <div class="flex-building-note">
       <strong>Building</strong>
-      Score unlocks at 25 settled events — ${Math.max(0, 25 - settled)} to go. Sample size below that makes the number a lie.
+      Score unlocks at 5 settled events — ${Math.max(0, 5 - settled)} to go. Sample size below that makes the number a lie.
     </div>` : '';
 
   const host = document.createElement('div');
@@ -908,15 +907,22 @@ async function submitChallenge() {
 
 function showFlexScoreInfo() {
   _showInfoModal('Flex Score', `
-    <p style="margin:0 0 10px">A single 0–100 number measuring how sharp a trader is.</p>
-    <p style="margin:0 0 10px">It's calculated from <strong style="color:var(--gold)">Brier scores</strong> on every resolved take — how close the entry price was to the real outcome, weighted by how confident the call was.</p>
-    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
-      70+ → 🎯 Oracle tier<br>
-      60+ → 🎯 Sharp<br>
-      50+ → 📊 Solid<br>
-      &lt;50 → 🎲 Speculator
+    <p style="margin:0 0 10px">A 0&ndash;100 rating built from five weighted parts:</p>
+    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:0 0 10px;font-family:var(--mono);font-size:11px;color:var(--text-soft);line-height:1.9">
+      Accuracy &mdash; 35<br>
+      Calibration &mdash; 25<br>
+      P&amp;L quality &mdash; 20<br>
+      Consistency &mdash; 10<br>
+      Breadth &mdash; 10
     </div>
-    <p style="margin:0;color:var(--muted);font-size:12px">Needs at least 3 resolved takes to lock in.</p>
+    <p style="margin:0 0 10px">Recomputed as trades resolve. Bad calls lower it, good calls raise it, inactivity decays it.</p>
+    <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:10px 12px;margin:0 0 10px;font-family:var(--mono);font-size:11px;color:var(--text-soft)">
+      80+ &rarr; Oracle<br>
+      65+ &rarr; Sharp<br>
+      50+ &rarr; Solid<br>
+      &lt;50 &rarr; Speculator
+    </div>
+    <p style="margin:0;color:var(--muted);font-size:12px">Shows from the first resolved trade; needs 5 to clear the low-sample flag.</p>
   `);
 }
 
@@ -1232,8 +1238,8 @@ async function load() {
         </div>
 
         <div class="flex-score">
-          <div class="flex-label">Flex Score</div>
-          <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}"><span class="cal-score-wrap">${flexScoreFmt}<span class="denom">/100</span><span class="cal-tooltip">Brier-based accuracy score. 100 = perfect forecaster.<br>Global average: 52. Above 70 = genuinely sharp.<br>Based on ${stats.settled_predictions || 0} resolved predictions.</span></span></div>
+          <div class="flex-label">Flex Score<button type="button" class="flex-info-btn" aria-label="What is Flex Score?" onclick="showFlexScoreInfo()">?</button></div>
+          <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
           <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? ((stats.settled_predictions || 0) + ' settled · ' + Math.max(0, 25 - (stats.settled_predictions || 0)) + ' to score') : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
           <!-- Whale Score badge — capital-flow heuristic. Decision #1
                Option C: distinct from Flex Score, conditionally rendered.
