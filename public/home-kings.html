@@ -369,7 +369,23 @@
     font-size:0.66rem;
     letter-spacing:0.14em;
     color:var(--ink-faint);
+    display:flex;align-items:center;gap:5px;
   }
+  /* "?" explainer — inline toggle below score-block, not a floating
+     tooltip (cards sit in scroll-snap rails; a positioned popover clips). */
+  .score-info-btn{
+    width:14px;height:14px;border-radius:50%;flex-shrink:0;padding:0;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:9px;font-weight:700;line-height:1;
+    background:var(--surface-2,rgba(240,240,245,.08));border:1px solid var(--border);color:var(--ink-faint);
+    cursor:pointer;text-transform:none;letter-spacing:0;
+  }
+  .score-info-btn:hover{color:var(--ink-muted);}
+  .score-info{
+    font-family:var(--font-sans);font-size:11.5px;line-height:1.5;
+    color:var(--ink-muted);margin-top:-8px;margin-bottom:14px;
+  }
+  .score-info[hidden]{display:none;}
 
   .spark-canvas{display:block;margin-left:auto;height:34px;width:100px;flex:0 0 auto;}
 
@@ -996,9 +1012,12 @@ function cardArticleHtml(card, isHero, rank){
       + '<circle class="gauge-ring" data-score="' + (known ? card.flex_score : 0) + '" cx="42" cy="42" r="36"></circle>'
       + '</svg><div class="gauge-center' + (known ? '' : ' is-mute') + '">' + esc(scoreDisplay) + '</div></div>'
     + '<div class="score-meta">'
-      + '<div class="score-label">FLEX SCORE</div>'
+      + '<div class="score-label">FLEX SCORE'
+        + '<button type="button" class="score-info-btn" aria-label="What is Flex Score?" onclick="event.preventDefault();event.stopPropagation();hfxToggleScoreInfo(this);">?</button>'
+      + '</div>'
     + '</div>'
-  + '</div>';
+  + '</div>'
+  + '<div class="score-info" hidden>A 0&ndash;100 rating built from five weighted parts: accuracy (35), calibration (25), P&amp;L quality (20), consistency (10), breadth (10). Recomputed as trades resolve &mdash; bad calls lower it, good calls raise it, inactivity decays it.</div>';
 
   html += '<div class="stat-row">'
     + '<div class="stat"><span class="stat-val">' + esc(fmtPlainPct(card.win_rate_pct)) + '</span><span class="stat-key">WIN RATE</span></div>'
@@ -1162,6 +1181,15 @@ async function hfxConnectWallet(){
     if (e && e.message !== 'User rejected the request.') alert(e.message || 'Wallet sign-in failed. Try again.');
     return null;
   }
+}
+
+// Toggles the inline Flex Score explainer below score-block. `btn` is the
+// "?" button; the explainer div is the next sibling of score-block itself.
+function hfxToggleScoreInfo(btn){
+  var block = btn.closest('.score-block');
+  var info = block && block.nextElementSibling;
+  if (!info || !info.classList.contains('score-info')) return;
+  info.hidden = !info.hidden;
 }
 
 // ── Challenge — same fields/endpoint as member.html's challenge flow ──

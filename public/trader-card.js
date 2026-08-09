@@ -90,10 +90,17 @@
     // Hero number = Flex Score (composite, sample-adjusted 0-100 rating —
     // lib/flex-score.js), not raw ROI. '—' when this wallet's nightly
     // recompute hasn't produced one yet; never fabricate a number.
+    // "?" opens an inline explainer (toggleFlexInfo below) rather than a
+    // floating tooltip — this component renders inside horizontally
+    // scrolling rails on some hosts, and a positioned popover would clip.
+    // stopPropagation/preventDefault since the whole card is an <a>.
     html += '<div class="tcard-flexhero' + (flexKnown ? '' : ' is-mute') + '">'
       + '<span class="tcard-flexscore">' + esc(flexDisplay) + '</span>'
-      + '<span class="tcard-flexlabel">Flex Score</span>'
-      + '</div>';
+      + '<span class="tcard-flexlabel">Flex Score'
+        + '<button type="button" class="tcard-flexinfo-btn" aria-label="What is Flex Score?" onclick="event.preventDefault();event.stopPropagation();HFXTraderCard.toggleFlexInfo(this);">?</button>'
+      + '</span>'
+      + '</div>'
+      + '<div class="tcard-flexinfo" hidden>A 0–100 rating built from five weighted parts: accuracy (35), calibration (25), P&amp;L quality (20), consistency (10), breadth (10). Recomputed as trades resolve — bad calls lower it, good calls raise it, inactivity decays it.</div>';
 
     html += '<div class="tcard-verdict">' + esc(card.verdict) + '</div>';
 
@@ -135,5 +142,15 @@
     return html;
   }
 
-  window.HFXTraderCard = { render: render, sparkline: sparkline, esc: esc };
+  // Toggles the inline explainer below the Flex Score hero. `btn` is the
+  // "?" button itself; the explainer div is its next sibling up the tree
+  // (button -> tcard-flexlabel -> tcard-flexhero -> next sibling).
+  function toggleFlexInfo(btn) {
+    var hero = btn.closest('.tcard-flexhero');
+    var info = hero && hero.nextElementSibling;
+    if (!info || !info.classList.contains('tcard-flexinfo')) return;
+    info.hidden = !info.hidden;
+  }
+
+  window.HFXTraderCard = { render: render, sparkline: sparkline, esc: esc, toggleFlexInfo: toggleFlexInfo };
 })();
