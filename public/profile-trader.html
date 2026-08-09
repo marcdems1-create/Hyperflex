@@ -407,13 +407,15 @@
     }
 
     // Toggles the inline Flex Score explainer. `btn` is the "?"; the
-    // explainer div is score-row's next sibling.
-    function toggleScoreInfo(btn){
+    // explainer div is score-row's next sibling. Exposed on window like
+    // shareTraderCard/__hfChartTap above — this whole script is one IIFE,
+    // so the inline onclick="" attribute can't see a plain function decl.
+    window.toggleScoreInfo = function(btn){
       var row = btn.closest('.score-row');
       var info = row && row.nextElementSibling;
       if (!info || !info.classList.contains('score-info')) return;
       info.hidden = !info.hidden;
-    }
+    };
 
     function render(d){
       d = d || {};
