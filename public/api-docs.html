@@ -242,6 +242,7 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
       <div class="code-label">Example Response</div>
       <div class="code-content"><span class="hl-bracket">{</span>
   <span class="hl-key">"markets"</span>: <span class="hl-bracket">[{</span>
+    <span class="hl-key">"market_id"</span>: <span class="hl-str">"0xabc123..."</span>,
     <span class="hl-key">"question"</span>: <span class="hl-str">"Will Bitcoin exceed $100,000 in 2026?"</span>,
     <span class="hl-key">"slug"</span>: <span class="hl-str">"will-bitcoin-exceed-100k"</span>,
     <span class="hl-key">"volume"</span>: <span class="hl-num">248500</span>,
@@ -251,6 +252,29 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
     <span class="hl-key">"depth_total"</span>: <span class="hl-num">18400</span>
   <span class="hl-bracket">}]</span>,
   <span class="hl-key">"count"</span>: <span class="hl-num">37</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/v1/liquidity/{market_id}/history?hours=24</span>
+    </div>
+    <div class="endpoint-desc">
+      Depth trend over time for one market — not just a live snapshot. Snapshots are recorded at ~5 minute resolution whenever the market has computable depth. Use the <code style="font-family:var(--mono);color:var(--gold)">market_id</code> from <code style="font-family:var(--mono);color:var(--gold)">/api/v1/liquidity</code> or <code style="font-family:var(--mono);color:var(--gold)">/api/v1/edge-scores</code>. <code style="font-family:var(--mono);color:var(--gold)">hours</code> controls lookback (default 24, max 720 / 30 days — that's also the retention window).
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"market_id"</span>: <span class="hl-str">"0xabc123..."</span>,
+  <span class="hl-key">"slug"</span>: <span class="hl-str">"fed-rate-cut-march"</span>,
+  <span class="hl-key">"question"</span>: <span class="hl-str">"Will the Fed cut rates in March?"</span>,
+  <span class="hl-key">"snapshots"</span>: <span class="hl-bracket">[</span>
+    <span class="hl-bracket">{</span> <span class="hl-key">"depth_ratio"</span>: <span class="hl-num">2.4</span>, <span class="hl-key">"depth_side"</span>: <span class="hl-str">"bid"</span>, <span class="hl-key">"depth_total"</span>: <span class="hl-num">18400</span>, <span class="hl-key">"yes_price"</span>: <span class="hl-num">0.68</span>, <span class="hl-key">"snapshot_at"</span>: <span class="hl-str">"2026-08-09T12:45:00.000Z"</span> <span class="hl-bracket">}</span>,
+    <span class="hl-bracket">{</span> <span class="hl-key">"depth_ratio"</span>: <span class="hl-num">0.6</span>, <span class="hl-key">"depth_side"</span>: <span class="hl-str">"ask"</span>, <span class="hl-key">"depth_total"</span>: <span class="hl-num">7100</span>,  <span class="hl-key">"yes_price"</span>: <span class="hl-num">0.52</span>, <span class="hl-key">"snapshot_at"</span>: <span class="hl-str">"2026-08-09T13:25:00.000Z"</span> <span class="hl-bracket">}</span>
+  <span class="hl-bracket">]</span>,
+  <span class="hl-key">"count"</span>: <span class="hl-num">6</span>
 <span class="hl-bracket">}</span></div>
     </div>
   </div>
