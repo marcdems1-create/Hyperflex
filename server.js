@@ -938,7 +938,12 @@ dataEngine.init({ pool, fetch: _nodeFetch, supabase: null });
 
 // Mount /api/v1/ routes
 require('./lib/data-api-routes')(app, dataEngine, {
-  getWhaleCache: () => _whaleWatchCache
+  getWhaleCache: () => _whaleWatchCache,
+  // buildAlphaList/dbQuery are declared later in this file as hoisted function
+  // declarations, so referencing them here (before their textual definition)
+  // is safe — they're only actually invoked later, at request time.
+  getAlphaList: (opts) => buildAlphaList(opts),
+  dbQuery: (text, params) => dbQuery(text, params)
 });
 
 // ── ANOMALY ENGINE (Phase 2) — Statistical anomaly detection ─────────────

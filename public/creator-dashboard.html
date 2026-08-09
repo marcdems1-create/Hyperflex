@@ -23039,6 +23039,11 @@ async function confirmTrade() {
             heldSharesWalk
           );
 
+          // Volume-weighted average across every level this order actually
+          // consumes — distinct from fillPrice (the worst single level touched,
+          // used for the FOK limit). Purely informational, computed from the
+          // same walk with no extra fetch.
+          let avgFillPrice = null, impactShares = 0, impactUsd = 0;
           if (clobSide === 'BUY') {
             // Walk asks cheapest→most-expensive (equivalent to SDK calculateBuyMarketPrice
             // which iterates backwards over descending-sorted asks). Accumulate USD spent
@@ -23048,8 +23053,15 @@ async function confirmTrade() {
             console.log('[qt-trade] Book walk BUY: need $' + amount + ', asks:', asks.length);
             for (const lvl of asks) {
               const lp = parseFloat(lvl.price), ls = parseFloat(lvl.size);
-              spent += lp * ls;
-              if (spent >= amount) { fillPrice = lp; break; }
+              const costAtLevel = lp * ls;
+              if (spent + costAtLevel >= amount) {
+                fillPrice = lp;
+                const remainingUsd = amount - spent;
+                impactUsd += remainingUsd; impactShares += remainingUsd / lp;
+                break;
+              }
+              spent += costAtLevel;
+              impactUsd += costAtLevel; impactShares += ls;
             }
           } else {
             // Walk bids best→worst (equivalent to SDK calculateSellMarketPrice iterating
@@ -23061,10 +23073,16 @@ async function confirmTrade() {
               bids.length > 0 ? '| best bid: ' + bids[0].price + ' × ' + bids[0].size : '| NO BIDS');
             for (const lvl of bids) {
               const bp = parseFloat(lvl.price), bs = parseFloat(lvl.size);
-              if (sharesLeft <= bs) { fillPrice = bp; break; }
+              if (sharesLeft <= bs) {
+                fillPrice = bp;
+                impactUsd += sharesLeft * bp; impactShares += sharesLeft;
+                break;
+              }
               sharesLeft -= bs;
+              impactUsd += bs * bp; impactShares += bs;
             }
           }
+          if (impactShares > 0) avgFillPrice = impactUsd / impactShares;
 
           if (fillPrice == null) {
             const totalBidSize = (bookData.bids || []).reduce((s, l) => s + parseFloat(l.size), 0);
@@ -23082,6 +23100,19 @@ async function confirmTrade() {
             return;
           }
 
+          // Surface expected impact before signing — best price is top-of-book,
+          // avgFillPrice is volume-weighted across levels this order actually
+          // consumes. Purely informational: does not change fillPrice/limit calc.
+          const bookLevels = clobSide === 'BUY' ? (bookData.asks || []) : (bookData.bids || []);
+          const sortedLevels = bookLevels.slice().sort((a, b) => clobSide === 'BUY' ? parseFloat(a.price) - parseFloat(b.price) : parseFloat(b.price) - parseFloat(a.price));
+          const bestPrice = sortedLevels.length > 0 ? parseFloat(sortedLevels[0].price) : fillPrice;
+          if (avgFillPrice != null && bestPrice > 0) {
+            const slippagePct = (clobSide === 'BUY' ? (avgFillPrice - bestPrice) : (bestPrice - avgFillPrice)) / bestPrice * 100;
+            console.log('[qt-trade] Impact: avg fill ~' + (avgFillPrice * 100).toFixed(1) + '¢ vs best ' + (bestPrice * 100).toFixed(1) + '¢ (' + (slippagePct >= 0 ? '+' : '') + slippagePct.toFixed(2) + '% impact)');
+            if (slippagePct > 0.05) {
+              showToast('Est. avg fill ' + (avgFillPrice * 100).toFixed(1) + '¢ (' + slippagePct.toFixed(1) + '% impact vs ' + (bestPrice * 100).toFixed(1) + '¢ best)', 'info', 4000);
+            }
+          }
           // Add slippage buffer: for SELL go 1 tick lower, for BUY go 1 tick higher
           // This protects against the book shifting between our read and submit
           let bumped;

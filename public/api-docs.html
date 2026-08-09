@@ -230,6 +230,90 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
     </div>
   </div>
 
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/v1/liquidity?min_depth=5000&amp;limit=50</span>
+    </div>
+    <div class="endpoint-desc">
+      Live CLOB orderbook depth per market — bid/ask size within 5&cent; of top-of-book, computed for markets above the $100k/24h volume floor. <code style="font-family:var(--mono);color:var(--gold)">depth_ratio</code> is bid size / ask size; <code style="font-family:var(--mono);color:var(--gold)">depth_side</code> is which side is heavier. Filter by <code style="font-family:var(--mono);color:var(--gold)">min_depth</code> (total size), <code style="font-family:var(--mono);color:var(--gold)">limit</code> (max 200).
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"markets"</span>: <span class="hl-bracket">[{</span>
+    <span class="hl-key">"question"</span>: <span class="hl-str">"Will Bitcoin exceed $100,000 in 2026?"</span>,
+    <span class="hl-key">"slug"</span>: <span class="hl-str">"will-bitcoin-exceed-100k"</span>,
+    <span class="hl-key">"volume"</span>: <span class="hl-num">248500</span>,
+    <span class="hl-key">"yes_price"</span>: <span class="hl-num">0.65</span>,
+    <span class="hl-key">"depth_ratio"</span>: <span class="hl-num">2.4</span>,
+    <span class="hl-key">"depth_side"</span>: <span class="hl-str">"bid"</span>,
+    <span class="hl-key">"depth_total"</span>: <span class="hl-num">18400</span>
+  <span class="hl-bracket">}]</span>,
+  <span class="hl-key">"count"</span>: <span class="hl-num">37</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/v1/edge-scores?min_score=60&amp;limit=20</span>
+    </div>
+    <div class="endpoint-desc">
+      Our proprietary 8-signal Edge Score per market (whale positioning, volume, orderbook depth, capital, momentum, decay, divergence, expiry) with the full component breakdown. Filter by <code style="font-family:var(--mono);color:var(--gold)">min_score</code>, <code style="font-family:var(--mono);color:var(--gold)">limit</code> (max 100).
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"markets"</span>: <span class="hl-bracket">[{</span>
+    <span class="hl-key">"question"</span>: <span class="hl-str">"Will the Fed cut rates in March?"</span>,
+    <span class="hl-key">"slug"</span>: <span class="hl-str">"fed-rate-cut-march"</span>,
+    <span class="hl-key">"edge_score"</span>: <span class="hl-num">78</span>,
+    <span class="hl-key">"edge_components"</span>: <span class="hl-bracket">{</span> <span class="hl-key">"whale"</span>: <span class="hl-num">28</span>, <span class="hl-key">"volume"</span>: <span class="hl-num">22</span>, <span class="hl-key">"depth"</span>: <span class="hl-num">14</span><span class="hl-bracket">, ...}</span>,
+    <span class="hl-key">"whale_count"</span>: <span class="hl-num">6</span>,
+    <span class="hl-key">"total_whale_capital"</span>: <span class="hl-num">412000</span>,
+    <span class="hl-key">"model_probability"</span>: <span class="hl-num">0.681</span>
+  <span class="hl-bracket">}]</span>,
+  <span class="hl-key">"count"</span>: <span class="hl-num">20</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/v1/smart-money/flow</span>
+    </div>
+    <div class="endpoint-desc">
+      Aggregate whale positioning: capital-weighted sentiment, top movers by capital deployed, and a conviction heatmap of markets by whale capital concentration.
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/v1/smart-money/consensus?hours=4&amp;limit=30</span>
+    </div>
+    <div class="endpoint-desc">
+      Active whale consensus signals — markets where 3+ tracked whales independently hold the same side with $5k+ each. Filter by <code style="font-family:var(--mono);color:var(--gold)">hours</code> lookback (default 4, max 72), <code style="font-family:var(--mono);color:var(--gold)">limit</code> (max 100).
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"signals"</span>: <span class="hl-bracket">[{</span>
+    <span class="hl-key">"market"</span>: <span class="hl-str">"Will Bitcoin exceed $100,000 in 2026?"</span>,
+    <span class="hl-key">"side"</span>: <span class="hl-str">"Yes"</span>,
+    <span class="hl-key">"whale_count"</span>: <span class="hl-num">4</span>,
+    <span class="hl-key">"total_capital"</span>: <span class="hl-num">186000</span>,
+    <span class="hl-key">"avg_price"</span>: <span class="hl-num">0.64</span>,
+    <span class="hl-key">"first_seen_at"</span>: <span class="hl-str">"2026-08-08T09:12:00.000Z"</span>
+  <span class="hl-bracket">}]</span>,
+  <span class="hl-key">"count"</span>: <span class="hl-num">5</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
   <div style="border-top:1px solid var(--border);margin:36px 0;padding-top:24px">
     <div style="font-family:var(--display);font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px">Legacy Endpoints</div>
     <p style="font-size:13px;color:var(--dim)">The endpoints below predate the v1 API and remain available. We recommend migrating to /api/v1/ for normalized cross-platform data.</p>

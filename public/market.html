@@ -5982,6 +5982,12 @@ async function executeTrade() {
             levels = (bookData.bids || []).slice().sort(function(a, b) { return parseFloat(b.price) - parseFloat(a.price); });
           }
           var fillPrice = null;
+          // Volume-weighted average across every level actually consumed —
+          // distinct from fillPrice (the worst single level touched, used for
+          // the FOK limit). avgFillPrice is what the user should expect to pay
+          // on average; fillPrice is the safety ceiling. Both are computed from
+          // the same walk, no extra fetch.
+          var avgFillPrice = null, impactShares = 0, impactUsd = 0;
           if (clobSide === 'BUY') {
             // Walk asks: spend `amount` USDC, find worst price touched
             var spent = 0;
@@ -5989,8 +5995,14 @@ async function executeTrade() {
               var lvlPrice = parseFloat(levels[li].price);
               var lvlSize = parseFloat(levels[li].size);
               var costAtLevel = lvlPrice * lvlSize;
-              if (spent + costAtLevel >= amount) { fillPrice = lvlPrice; break; }
+              if (spent + costAtLevel >= amount) {
+                fillPrice = lvlPrice;
+                var remainingUsd = amount - spent;
+                impactUsd += remainingUsd; impactShares += remainingUsd / lvlPrice;
+                break;
+              }
               spent += costAtLevel;
+              impactUsd += costAtLevel; impactShares += lvlSize;
             }
           } else {
             // Walk bids: sell `shares`, find worst price touched
@@ -5998,15 +6010,30 @@ async function executeTrade() {
             for (var lj = 0; lj < levels.length; lj++) {
               var bidPrice = parseFloat(levels[lj].price);
               var bidSize = parseFloat(levels[lj].size);
-              if (sharesRemaining <= bidSize) { fillPrice = bidPrice; break; }
+              if (sharesRemaining <= bidSize) {
+                fillPrice = bidPrice;
+                impactUsd += sharesRemaining * bidPrice; impactShares += sharesRemaining;
+                break;
+              }
               sharesRemaining -= bidSize;
+              impactUsd += bidSize * bidPrice; impactShares += bidSize;
             }
           }
+          if (impactShares > 0) avgFillPrice = impactUsd / impactShares;
           if (fillPrice == null) {
             var totalDepth = levels.reduce(function(s, l) { return s + parseFloat(l.size); }, 0);
             showTradeStatus('Not enough ' + (clobSide === 'SELL' ? 'bid' : 'ask') + ' liquidity (Number(available: ' + (Number(totalDepth)).toFixed(1) + ') — try a smaller amount or use a Limit order', 'error');
             cta.disabled = false; updateCtaButton();
             return;
+          }
+          // Surface expected impact before signing — best price is top-of-book,
+          // avgFillPrice is volume-weighted across levels this order actually
+          // consumes. Purely informational: does not change fillPrice/limit calc.
+          var bestPrice = levels.length > 0 ? parseFloat(levels[0].price) : fillPrice;
+          if (avgFillPrice != null && bestPrice > 0) {
+            var slippagePct = (clobSide === 'BUY' ? (avgFillPrice - bestPrice) : (bestPrice - avgFillPrice)) / bestPrice * 100;
+            console.log('[trade] Impact: avg fill ~' + (avgFillPrice * 100).toFixed(1) + '¢ vs best ' + (bestPrice * 100).toFixed(1) + '¢ (' + (slippagePct >= 0 ? '+' : '') + slippagePct.toFixed(2) + '% impact)');
+            showTradeStatus('Est. avg fill ' + (avgFillPrice * 100).toFixed(1) + '¢' + (slippagePct > 0.05 ? ' (' + slippagePct.toFixed(1) + '% impact vs ' + (bestPrice * 100).toFixed(1) + '¢ best)' : ''), 'info');
           }
           // Direction-aware rounding + 1 tick slippage buffer:
           // SELL: round DOWN then subtract 1 tick (accept worse fills)
