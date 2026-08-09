@@ -5962,6 +5962,9 @@ async function executeTrade() {
     // SDK's getOrderRawAmounts() — exact replica for LIMIT orders.
     // Market (FOK) orders have different CLOB constraints — see the isMarketOrder branch.
     var isMarketOrder = document.getElementById('tradeOrderType').value === 'market';
+    // Set by the book walk below if the limit price gets capped instead of
+    // walked deep enough to guarantee a full fill — see MAX_MARKET_IMPACT_PCT.
+    var expectPartialFill = false;
 
     // For MARKET orders: walk the live orderbook to find the actual fill price.
     // The user-entered limit (or "Mkt" preset) is just current mid — it doesn't
@@ -6034,6 +6037,25 @@ async function executeTrade() {
             var slippagePct = (clobSide === 'BUY' ? (avgFillPrice - bestPrice) : (bestPrice - avgFillPrice)) / bestPrice * 100;
             console.log('[trade] Impact: avg fill ~' + (avgFillPrice * 100).toFixed(1) + '¢ vs best ' + (bestPrice * 100).toFixed(1) + '¢ (' + (slippagePct >= 0 ? '+' : '') + slippagePct.toFixed(2) + '% impact)');
             showTradeStatus('Est. avg fill ' + (avgFillPrice * 100).toFixed(1) + '¢' + (slippagePct > 0.05 ? ' (' + slippagePct.toFixed(1) + '% impact vs ' + (bestPrice * 100).toFixed(1) + '¢ best)' : ''), 'info');
+          }
+          // Don't walk arbitrarily deep to force a full fill at a bad price.
+          // Cap the limit at MAX_MARKET_IMPACT_PCT beyond best price — this is
+          // a FAK order (rule 13), so capping just means "fill what's
+          // available within an acceptable price, cancel the rest" instead of
+          // "guarantee 100% fill no matter how bad the price gets." A capped
+          // fill is handled as a partial fill after the response comes back
+          // (see the success branch) — the user sees exactly what filled and
+          // can top up the remainder in one more tap, never silently overpay.
+          // Small/typical orders are unaffected — they already fill within a
+          // level or two, well under this cap.
+          var MAX_MARKET_IMPACT_PCT = 3;
+          if (bestPrice > 0) {
+            var capPrice = clobSide === 'BUY' ? bestPrice * (1 + MAX_MARKET_IMPACT_PCT / 100) : bestPrice * (1 - MAX_MARKET_IMPACT_PCT / 100);
+            if ((clobSide === 'BUY' && fillPrice > capPrice) || (clobSide === 'SELL' && fillPrice < capPrice)) {
+              console.log('[trade] Impact cap: walked fill ' + (fillPrice * 100).toFixed(1) + '¢ exceeds ' + MAX_MARKET_IMPACT_PCT + '% cap — capping limit to ' + (capPrice * 100).toFixed(1) + '¢, order may partially fill');
+              fillPrice = capPrice;
+              expectPartialFill = true;
+            }
           }
           // Direction-aware rounding + 1 tick slippage buffer:
           // SELL: round DOWN then subtract 1 tick (accept worse fills)
@@ -6618,11 +6640,55 @@ async function executeTrade() {
       return;
     }
 
-    // Step 5: SUCCESS — confetti + confirmation + position
+    // Step 5: SUCCESS — but for market orders, verify against the ACTUAL
+    // fill amounts in the response rather than assuming the requested size
+    // filled. A FAK order can legitimately partially fill (see the impact
+    // cap above, and the book can shift between our read and submit even
+    // without it). data.takingAmount/makingAmount are atomic (6-decimal) —
+    // same scale as rawTakerAmt/rawMakerAmt before parseUnits, so dividing
+    // by 1e6 is directly comparable. Skip entirely for status:'delayed'
+    // (order accepted but not yet matched — amounts are empty; treating
+    // that as "0% filled, resubmit" would risk double-filling once it
+    // actually matches later. Separate known open issue — not papered over
+    // here, see CLAUDE.md V2 first-trade notes).
+    var requestedAmount = amount;
+    var filledFraction = 1;
+    if (isMarketOrder && data && data.status !== 'delayed' && data.takingAmount != null && data.makingAmount != null && rawTakerAmt > 0) {
+      var actualTakerRaw = Number(data.takingAmount) / 1e6;
+      var actualMakerRaw = Number(data.makingAmount) / 1e6;
+      var frac = actualTakerRaw / rawTakerAmt;
+      if (isFinite(frac) && frac > 0) {
+        filledFraction = Math.min(1, frac);
+        if (clobSide === 'BUY') { amount = actualMakerRaw; shares = actualTakerRaw; }
+        else { shares = actualMakerRaw; amount = actualTakerRaw; }
+      }
+    }
+
     fireConfetti();
     var payout = (Number(shares)).toFixed(2);
-    showTradeStatus('\u2705 Order placed! ' + sideLabel + ' ' + (Number(shares)).toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
-    console.log('[trade] Order success:', data);
+    if (filledFraction < 0.98) {
+      // Partial fill — show exactly what happened and pre-fill the SAME
+      // still-open form with the remainder so finishing the order is one
+      // more click, not a fresh trade from scratch. Not clicking again
+      // (editing the field, or just navigating away) is the "keep the
+      // partial fill as final" path — nothing here forces a follow-up.
+      var remainingUsd = Math.max(0, requestedAmount * (1 - filledFraction));
+      var avgFillCents = shares > 0 ? (amount / shares) * 100 : price;
+      showTradeStatus(
+        'Partially filled: ' + (filledFraction * 100).toFixed(0) + '% @ avg ' + avgFillCents.toFixed(1) + '\u00a2 — $' +
+        remainingUsd.toFixed(2) + ' unfilled. Amount below is set to the remainder — click ' + sideLabel +
+        ' again to continue, or edit it to trade a different size.',
+        'info'
+      );
+      var amtInputEl = document.getElementById('tradeAmount');
+      if (amtInputEl && remainingUsd >= 1) {
+        amtInputEl.value = remainingUsd.toFixed(2);
+        if (typeof _onAmountInput === 'function') _onAmountInput();
+      }
+    } else {
+      showTradeStatus('\u2705 Order placed! ' + sideLabel + ' ' + (Number(shares)).toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
+    }
+    console.log('[trade] Order success:', data, filledFraction < 1 ? '(partial: ' + (filledFraction * 100).toFixed(1) + '%)' : '');
 
     // Phase 2: ping the live bet feed. Fire-and-forget \u2014 never block the
     // trade response on this. Catches all errors so a feed outage doesn't
