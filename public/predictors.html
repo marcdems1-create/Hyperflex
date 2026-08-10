@@ -565,21 +565,15 @@ function renderCards() {
       // claimed "accuracy, ROI, volume, and recency" — none of "volume" or
       // "recency" are actual components; fixed to match reality.
       metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">Flex Score — accuracy (35) + calibration (25) + P&amp;L quality (20) + consistency (10) + breadth (10).<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
-      // A second "HFX" number used to render here — a client-side blend
-      // invented on this page only (calibration + win rate + a trade-count
-      // proxy mislabeled "consistency" + a tier lookup that never actually
-      // matched real tier strings, due to a case mismatch, so it silently
-      // fell back to flexVal capped at 100). It had nothing to do with the
-      // real, server-computed HFX Score (GET /api/member/:userId/hfx-score,
-      // server.js computeHfxComposite: calibration + win rate + take streak
-      // + Challenge win rate) that member.html shows under the identical
-      // label — two different numbers, same name, depending which page you
-      // were on. Removed rather than fixed: a real per-row version needs a
-      // batched server endpoint (the real formula needs a takes-streak and
-      // a challenges-resolved query per user, not columns already sitting
-      // in this leaderboard payload), which is a separate build, not a
-      // copy fix. Showing nothing here is strictly better than showing a
-      // wrong number under a real metric's name.
+      // Real HFX Score, batched via loadHfxScores()/_hfxByUser — same
+      // formula and endpoint member.html reads, no second implementation.
+      // Populated a beat after the initial render (see loadHfxScores), so
+      // this is often empty on the very first paint and fills in shortly
+      // after — that's expected, not a bug.
+      var hfxEntry = _hfxByUser[r.user_id];
+      if (hfxEntry && hfxEntry.composite != null) {
+        metricHtml += '<div style="font-family:var(--mono);font-size:10px;color:#4d9fff;margin-top:2px;" title="HFX Score — calibration (40%) + correct picks (20%) + take streak (20%) + Challenge win rate (20%)"><span style="opacity:.6">HFX</span> ' + hfxEntry.composite + '</div>';
+      }
       var parts = [];
       if (wrPct != null) parts.push(wrPct + '% win rate');
       var n = r.predictions_resolved || r.flex_settled_events;
@@ -676,9 +670,33 @@ async function loadAll() {
     loadMyScore();
     showStickyBar();
     loadRisingStars();
+    loadHfxScores();
   } catch (e) {
     document.getElementById('lbCards').innerHTML = '<div class="state-msg">Could not load. Retry shortly.</div>';
   }
+}
+
+// Real, server-computed HFX Score for the FLEX SCORE tab's secondary line
+// — same formula and endpoint member.html reads (GET .../hfx-score),
+// batched here instead of one request per row. Fire-and-forget: the
+// leaderboard renders immediately off _rawFlex, this fills in the HFX line
+// a beat later rather than delaying the whole page for a secondary stat.
+var _hfxByUser = {};
+function loadHfxScores() {
+  var ids = _rawFlex.map(function(r){ return r.user_id; }).filter(Boolean);
+  if (!ids.length) return;
+  fetch('/api/predictors/hfx-score-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_ids: ids }),
+  })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d || !d.scores) return;
+      _hfxByUser = d.scores;
+      if (currentTab === 'sharpest') renderCards();
+    })
+    .catch(function(){});
 }
 
 async function loadTopCall() {

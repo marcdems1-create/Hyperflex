@@ -50766,50 +50766,91 @@ app.get('/api/portfolio', requireCreator, async (req, res) => {
 });
 
 // ── HFX COMPOSITE SCORE — calibration 40% + correct picks 20% + streak 20% + challenge 20% ──
-async function computeHfxComposite(userId) {
-  try {
-    if (!pool) return null;
-    // Calibration
-    const userRows = await dbQuery(
-      'SELECT flex_c_calibration, prediction_win_rate, predictions_resolved FROM users WHERE id = $1',
-      [userId]
-    ).catch(() => []);
-    const u = userRows[0];
-    if (!u) return null;
+// Batched first, single-user is a thin wrapper around it — deliberately, so
+// there is only ever ONE implementation of this formula. predictors.html
+// used to carry its own inline client-side approximation of "HFX" (wrong
+// components, one of them silently dead code) that drifted from this real
+// formula under the identical label — see the 2026-08-09 fix that removed
+// it. Never add a second implementation; always route through this.
+async function computeHfxCompositeBatch(userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (!ids.length || !pool) return new Map();
+
+  const [userRows, streakRows, challengeRows] = await Promise.all([
+    dbQuery(
+      `SELECT id, flex_c_calibration, prediction_win_rate, predictions_resolved
+       FROM users WHERE id = ANY($1)`,
+      [ids]
+    ).catch(() => []),
+    // Last 20 takes per user (most-recent-first) in one query via a
+    // per-user row number, instead of one query per user.
+    dbQuery(
+      `SELECT user_id, is_correct FROM (
+         SELECT user_id, is_correct,
+                ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+         FROM takes
+         WHERE user_id = ANY($1) AND is_correct IS NOT NULL
+       ) t WHERE rn <= 20 ORDER BY user_id, rn`,
+      [ids]
+    ).catch(() => []),
+    // Unpivots each resolved challenge into one row per participant (a
+    // challenge between two users in the same batch correctly contributes
+    // to both) so wins/total can be grouped by user_id in one pass.
+    dbQuery(
+      `WITH participants AS (
+         SELECT challenger_id AS user_id, (winner_id = challenger_id) AS won
+         FROM challenges WHERE status = 'resolved' AND challenger_id = ANY($1)
+         UNION ALL
+         SELECT challenged_id AS user_id, (winner_id = challenged_id) AS won
+         FROM challenges WHERE status = 'resolved' AND challenged_id = ANY($1)
+       )
+       SELECT user_id, COUNT(*) FILTER (WHERE won) AS wins, COUNT(*) AS total
+       FROM participants GROUP BY user_id`,
+      [ids]
+    ).catch(() => []),
+  ]);
+
+  // Streak: leading run of is_correct=true per user. streakRows is ordered
+  // user_id, rn ASC (most-recent take first within each user), so this
+  // mirrors the single-user loop's "count until the first false, then
+  // stop" exactly — just walking one combined, pre-sorted result set.
+  const streakByUser = new Map();
+  for (const row of streakRows) {
+    const prev = streakByUser.get(row.user_id);
+    if (prev && prev.broken) continue;
+    const cur = prev || { count: 0, broken: false };
+    if (row.is_correct) cur.count++;
+    else cur.broken = true;
+    streakByUser.set(row.user_id, cur);
+  }
+
+  const challengeByUser = new Map();
+  for (const row of challengeRows) {
+    challengeByUser.set(row.user_id, { wins: Number(row.wins) || 0, total: Number(row.total) || 0 });
+  }
+
+  const result = new Map();
+  for (const u of userRows) {
     const calRaw = u.flex_c_calibration != null ? Number(u.flex_c_calibration) : null;
     const calScore = calRaw != null ? Math.min(100, (calRaw / 25) * 100) : 0;
     const winRate = u.prediction_win_rate != null ? Number(u.prediction_win_rate) * 100 : 0;
-    // Streak — count recent consecutive correct takes/predictions
-    let streak = 0;
-    try {
-      const streakRows = await dbQuery(
-        `SELECT is_correct FROM takes WHERE user_id = $1 AND is_correct IS NOT NULL ORDER BY created_at DESC LIMIT 20`,
-        [userId]
-      );
-      for (const r of streakRows) {
-        if (r.is_correct) streak++;
-        else break;
-      }
-    } catch (_) {}
+    const streak = (streakByUser.get(u.id) || { count: 0 }).count;
     const streakScore = Math.min(100, streak * 10); // 10 correct in a row = 100
-    // Challenge performance
-    let challengeScore = 0;
-    try {
-      const chalRows = await dbQuery(
-        `SELECT COUNT(*) FILTER (WHERE winner_id = $1) AS wins, COUNT(*) AS total
-         FROM challenges WHERE status = 'resolved' AND (challenger_id = $1 OR challenged_id = $1)`,
-        [userId]
-      );
-      const ch = chalRows[0];
-      if (ch && Number(ch.total) >= 1) {
-        challengeScore = Math.round((Number(ch.wins) / Number(ch.total)) * 100);
-      }
-    } catch (_) {}
+    const ch = challengeByUser.get(u.id);
+    const challengeScore = (ch && ch.total >= 1) ? Math.round((ch.wins / ch.total) * 100) : 0;
     const composite = Math.round(calScore * 0.4 + winRate * 0.2 + streakScore * 0.2 + challengeScore * 0.2);
-    return { composite, components: { calibration: Math.round(calScore), correct_picks: Math.round(winRate), streak: streakScore, challenge: challengeScore }, predictions: Number(u.predictions_resolved) || 0 };
-  } catch (_) {
-    return null;
+    result.set(u.id, {
+      composite,
+      components: { calibration: Math.round(calScore), correct_picks: Math.round(winRate), streak: streakScore, challenge: challengeScore },
+      predictions: Number(u.predictions_resolved) || 0,
+    });
   }
+  return result;
+}
+
+async function computeHfxComposite(userId) {
+  const map = await computeHfxCompositeBatch([userId]);
+  return map.get(userId) || null;
 }
 
 app.get('/api/member/:userId/hfx-score', async (req, res) => {
@@ -50818,6 +50859,25 @@ app.get('/api/member/:userId/hfx-score', async (req, res) => {
     if (!result) return res.status(404).json({ error: 'Not enough data' });
     res.json(result);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/predictors/hfx-score-batch — body: { user_ids: [...] }. Backs
+// predictors.html's leaderboard (up to 100 rows) without N separate
+// requests. Same formula/output shape as GET .../hfx-score per user;
+// capped at 200 ids per call (matches the leaderboard's own row limit with
+// headroom, not an arbitrary guess).
+app.post('/api/predictors/hfx-score-batch', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body && req.body.user_ids) ? req.body.user_ids.slice(0, 200) : [];
+    if (!ids.length) return res.json({ scores: {} });
+    const map = await computeHfxCompositeBatch(ids);
+    const scores = {};
+    for (const [id, v] of map) scores[id] = v;
+    res.json({ scores });
+  } catch (err) {
+    console.error('[hfx-score-batch]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
