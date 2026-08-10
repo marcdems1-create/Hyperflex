@@ -260,7 +260,7 @@ a { color: var(--blue); text-decoration: none; }
     <div class="lb-tabs">
       <button type="button" class="lb-tab active" data-tab="sharpest" onclick="setTab('sharpest')">
         <span class="lb-tab-label">FLEX SCORE</span>
-        <span class="lb-tab-sub">demonstrated ROI</span>
+        <span class="lb-tab-sub">accuracy, calibration + more</span>
       </button>
       <button type="button" class="lb-tab" data-tab="profitable" onclick="setTab('profitable')">
         <span class="lb-tab-label">MOST PROFITABLE</span>
@@ -268,7 +268,7 @@ a { color: var(--blue); text-decoration: none; }
       </button>
       <button type="button" class="lb-tab" data-tab="whales" onclick="setTab('whales')">
         <span class="lb-tab-label">WHALE SCORE</span>
-        <span class="lb-tab-sub">capital-weighted signal</span>
+        <span class="lb-tab-sub">recent calibration (90d)</span>
       </button>
       <button type="button" class="lb-tab" data-tab="roi" onclick="setTab('roi')">
         <span class="lb-tab-label">ROI SCORE</span>
@@ -287,6 +287,7 @@ a { color: var(--blue); text-decoration: none; }
         <option value="50">Min 50 trades</option>
       </select>
       <input type="text" class="search-input" id="traderSearch" placeholder="Search traders…" oninput="onSearch(this.value)">
+      <button type="button" class="how-scores-link" onclick="openSharpModal()" style="background:none;border:1px solid var(--line-strong,rgba(255,255,255,.12));border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--soft,#9a9aa8);cursor:pointer;white-space:nowrap">How scores work</button>
       <a href="/copy-trading" class="copy-top3-btn" onclick="return handleCopyTop3(event)">Copy Top 3 ↗</a>
     </div>
   </div>
@@ -317,11 +318,11 @@ a { color: var(--blue); text-decoration: none; }
   <div class="ss-modal">
     <button class="ss-modal-close" onclick="closeSharpModal()">&times;</button>
     <h3>How scores work</h3>
-    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Three different lenses on Polymarket traders. All data updated daily.</p>
+    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Four different lenses on Polymarket traders. All data updated daily.</p>
     <div class="ss-formula">
-      <div><span style="color:var(--green)">SHARPEST</span> &nbsp;&rarr; Calibration score (0-100). Derived from Brier scoring — how well-calibrated your confidence is across all resolved predictions.</div>
+      <div><span style="color:var(--green)">SHARPEST</span> &nbsp;&rarr; Flex Score (0-100). Five weighted parts: accuracy (35), calibration (25), P&amp;L quality (20), consistency (10), breadth (10) — not calibration alone.</div>
       <div style="margin-top:10px"><span style="color:var(--gold)">MOST PROFITABLE</span> &nbsp;&rarr; Realized P&amp;L. Actual USDC made or lost on closed Polymarket positions.</div>
-      <div style="margin-top:10px"><span style="color:var(--blue)">BIGGEST WHALES</span> &nbsp;&rarr; Total volume deployed. Tracks footprint, not accuracy. Capital ≠ skill.</div>
+      <div style="margin-top:10px"><span style="color:var(--blue)">WHALE SCORE</span> &nbsp;&rarr; Recent calibration (0-100), last 90 days only — a different window than Sharpest, not a capital or volume measure. Realized P&amp;L breaks ties.</div>
       <div style="margin-top:10px"><span style="color:#a855f7">ROI SCORE</span> &nbsp;&rarr; Realized ROI on resolved Polymarket positions, weighted by capital and recency (90-day half-life), then shrunk toward the field average based on sample size — so a 10-trade streak can't outrank a 300-trade record. Requires 10+ resolved trades to rank.</div>
     </div>
     <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>A top-10 whale can rank last on Sharpest. That divergence is the signal — it's where the edge hides.</span></div>
