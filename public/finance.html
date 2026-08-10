@@ -47,7 +47,9 @@ body { background: #08080f; font-family: -apple-system, BlinkMacSystemFont, 'Int
 .mlabel { font-size: 10px; color: #444; }
 .mvol { font-size: 10px; color: #333; }
 
-.detail-panel { width: 280px; background: #0a0a12; border-left: 1px solid #141420; overflow-y: auto; flex-shrink: 0; }
+.detail-panel { width: 280px; background: #0a0a12; border-left: 1px solid #141420; overflow-y: auto; flex-shrink: 0; position: relative; }
+.dp-close { display: none; }
+.dp-backdrop { display: none; }
 .dp-img { width: 100%; height: 150px; object-fit: cover; object-position: center center; filter: brightness(0.5); display: block; background: #1a1a28; }
 .dp-body { padding: 14px; }
 .dp-cat { font-size: 10px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
@@ -67,6 +69,50 @@ body { background: #08080f; font-family: -apple-system, BlinkMacSystemFont, 'Int
 .dp-cta:hover { background: #7577f5; }
 
 .empty-state { text-align: center; padding: 40px 16px; color: #333; font-size: 13px; }
+
+/* ── Mobile (<=768px, matches nav.js's own breakpoint) — the 3-column
+   terminal layout (sidebar / market list / detail panel) has no room to
+   exist side by side below desktop widths. Stack it: category sidebar
+   becomes a horizontal-scroll pill row, the market list goes full-width
+   and the page itself scrolls (body/app-body switch off their desktop
+   fixed-height/overflow:hidden shell), and the detail panel becomes a
+   bottom sheet that slides up over the list instead of a permanent third
+   column — opened only on an explicit tap (see selectMarket's openPanel
+   arg), never on the page-load auto-select. ── */
+@media (max-width: 768px) {
+  body { height: auto; min-height: 100vh; overflow: visible; }
+  .app-body { flex-direction: column; overflow: visible; }
+
+  .sidebar { width: auto; flex-shrink: 0; border-right: none; border-bottom: 1px solid #141420; overflow-x: auto; overflow-y: hidden; padding: 10px 0; }
+  .sg { display: inline-flex; gap: 8px; margin-bottom: 0; padding: 0 12px; white-space: nowrap; }
+  .sg-label { display: none; }
+  .si { margin: 0; flex-shrink: 0; }
+
+  .main-feed { overflow-y: visible; }
+
+  .detail-panel {
+    position: fixed; inset: auto 0 0 0; width: 100%; z-index: 200;
+    max-height: 85vh; border-left: none; border-top: 1px solid #141420;
+    border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
+    transform: translateY(100%); transition: transform 0.25s ease;
+  }
+  .detail-panel.open { transform: translateY(0); }
+
+  .dp-close {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 10px; right: 10px; z-index: 2;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(20,20,32,0.9); border: 1px solid #252535; color: #aaa;
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+
+  .dp-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 199;
+    background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .dp-backdrop.open { opacity: 1; pointer-events: auto; }
+}
   </style>
 </head>
 <body>
@@ -88,6 +134,9 @@ body { background: #08080f; font-family: -apple-system, BlinkMacSystemFont, 'Int
   <div class="detail-panel" id="detail-panel">
     <div class="empty-state">Select a market to see the edge breakdown.</div>
   </div>
+</div>
+
+<div class="dp-backdrop" id="dpBackdrop"></div>
 </div>
 
 <script>
@@ -225,13 +274,26 @@ function renderMarkets(markets) {
   document.querySelectorAll('.mrow').forEach(row => {
     row.addEventListener('click', () => {
       const m = allMarkets[parseInt(row.dataset.idx)];
-      if (m) selectMarket(m);
+      if (m) selectMarket(m, true);
     });
   });
 }
 
-// Detail panel
-function selectMarket(m) {
+// Detail panel — on mobile this is a bottom sheet (see the <=768px media
+// query); openPanel gates whether it slides up. Explicit market taps pass
+// true; the page-load/category-switch auto-selects don't, so the sheet
+// never yanks itself open before the user has asked for it.
+function openDetailPanel() {
+  document.getElementById('detail-panel').classList.add('open');
+  document.getElementById('dpBackdrop').classList.add('open');
+}
+function closeDetailPanel() {
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('dpBackdrop').classList.remove('open');
+}
+document.getElementById('dpBackdrop').addEventListener('click', closeDetailPanel);
+
+function selectMarket(m, openPanel) {
   activeMarketSlug = m.slug;
   document.querySelectorAll('.mrow').forEach(r => r.classList.remove('active'));
   const idx = allMarkets.indexOf(m);
@@ -246,6 +308,7 @@ function selectMarket(m) {
   const starsHtml = '★'.repeat(stars) + '<span style="color:#252535">☆</span>'.repeat(5 - stars);
 
   document.getElementById('detail-panel').innerHTML = `
+    <button type="button" class="dp-close" id="dpClose" aria-label="Close">&times;</button>
     ${img ? `<img class="dp-img" src="${img}" onerror="this.style.display='none'" alt="">` : ''}
     <div class="dp-body">
       <div class="dp-cat">${CAT_LABELS[m._cat] || m._cat} · ${label}</div>
@@ -270,6 +333,8 @@ function selectMarket(m) {
       <a class="dp-cta" href="/market/${slug}">View full analysis →</a>
     </div>
   `;
+  document.getElementById('dpClose').addEventListener('click', closeDetailPanel);
+  if (openPanel) openDetailPanel();
 }
 
 loadMarkets();
