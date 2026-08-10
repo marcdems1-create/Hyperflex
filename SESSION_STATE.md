@@ -49,6 +49,28 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-08c (mobile overflow sweep across the site; fixed /finance's unresponsive 3-column terminal layout — shipped, verified live)
+
+**Shipped (`7153c02`, pushed, verified `git log origin/main --oneline -1` and re-checked live on production after a hard-reload got past a browser-cache false negative):**
+- Swept ~10 major pages at 375px (`/`, `/traders`, `/feed`, `/explore`, `/alpha-live`, `/predictors`, `/connect`, `/challenge`, `/incentives`, a `/market/:slug` page) for horizontal overflow and leftover "recomputing" text (the banner deleted in `9f0476f` — confirmed gone site-wide, the handful of other "recomput" hits across the codebase are all unrelated: FLEX-score methodology tooltips, internal calc comments, `thesis-compose.html`'s summary function). All clean.
+- **`/finance` ("Markets") was genuinely broken on mobile** — its 3-column terminal layout (category sidebar / market list / detail panel, all fixed/flex widths, `body{overflow:hidden}`) had zero responsive breakpoints anywhere in the file. Not a horizontal-scroll bug (the `overflow:hidden` shell prevented that), but content clipped mid-word at 375px — screenshot-confirmed before the fix.
+- Fix: `@media(max-width:768px)` block matching `nav.js`'s own breakpoint. Sidebar becomes a horizontal-scroll pill row (category label hidden). Page switches off the desktop fixed-height/`overflow:hidden` shell so it scrolls normally. Detail panel becomes a bottom sheet (`position:fixed`, slides up via `transform`, rounded top corners, backdrop, close button) instead of a permanent third column. Sheet only opens on an **explicit** market tap — added an `openPanel` arg to `selectMarket()` so the page-load auto-select and category-switch auto-select never yank it open on their own.
+- Verified desktop (>=769px) is byte-identical in behavior: `.detail-panel`'s computed `position`/`width`/`transform` match pre-fix values exactly, `.dp-close`/`.dp-backdrop` stay `display:none` outside the media query.
+
+**Caught mid-verification, worth flagging as a pattern:** immediately after pushing, loading `/finance` live still showed the *old* layout — looked like a failed/not-yet-propagated deploy. It wasn't: `curl`ing the page directly showed the new markup was being served correctly; the browser tab just had the pre-fix page cached (finance.html has no cache-busting query param the way `nav.js?v=NN` does, and `/finance`'s route doesn't set `no-cache` headers the way `/@:handle` does). A hard-reload (`location.reload(true)` + fresh navigate) showed the real, correct, live state. **Lesson: if a just-pushed change doesn't appear live, `curl` the raw response before concluding the deploy failed — a stale browser tab is a much more common cause than a broken deploy in this repo.**
+
+**Active blockers:**
+- (none)
+
+**Queued (priority order):**
+- (none opened this entry)
+
+**Open questions / unverified:**
+- All mobile verification (both this entry and the finance.html fix specifically) used a scratch static server with injected mock data, per CLAUDE.md rule 7 (never start `server.js`). Real end-to-end touch-interaction on an actual mobile device/real MetaMask still unverified, though the live-production `curl` + forced-reload check above did confirm the real deployed HTML/CSS/JS, not just the local mock.
+
+**Notes for next session:**
+- If another page turns up with the same "desktop-only layout, no breakpoints" problem, `/finance`'s fix here (bottom-sheet detail panel + horizontal-pill category filter + `openPanel` tap-gate) is a reusable pattern, not a one-off — same shape as the Comment/Challenge modal pattern already used elsewhere on the site.
+
 ## 2026-08-08b (profile-trader.html mobile-fix task turned out to already be shipped — corrected a false "never touched" premise before acting on it)
 
 **Shipped:** nothing — no code change was needed, see below.
