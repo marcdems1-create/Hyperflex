@@ -115,7 +115,15 @@ nav{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:cente
 <div id="authGate" class="msg-auth-gate" style="display:none">
   <div style="font-size:28px;font-weight:800">Messages</div>
   <div style="font-size:14px;color:var(--muted)">Sign in to send and receive messages.</div>
-  <a href="/creator/login" class="nav-btn nav-btn-primary" style="margin-top:8px">Sign in →</a>
+  <!-- Connecting a wallet (via /connect or the nav pill) is address-only,
+       no signature, by design — the frictionless "see my score" flow.
+       Messages needs a real authenticated session, which is a separate,
+       stronger step. This button reuses the SAME connected wallet for
+       that upgrade (one signature) instead of only offering the
+       generic email/Google sign-in, which looks like a different
+       account system to someone who already thinks they're connected. -->
+  <button type="button" id="walletSigninBtn" class="nav-btn nav-btn-primary" style="margin-top:8px;display:none"></button>
+  <a href="/creator/login" class="nav-btn" style="margin-top:4px">Sign in with email →</a>
 </div>
 
 <div id="appShell" style="display:none">
@@ -200,9 +208,74 @@ function avatarHtml(user, size) {
   return '<div class="'+cls+'" style="width:'+s+'px;height:'+s+'px">'+seed+'</div>';
 }
 
+// Reuses the exact eth_requestAccounts -> personal_sign -> POST /auth/wallet
+// sequence home-kings.html's hfxConnectWallet() already uses, so a wallet
+// connected elsewhere on the site mints the same kind of session here.
+async function signInWithWallet() {
+  var btn = document.getElementById('walletSigninBtn');
+  if (!window.ethereum) {
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
+      return;
+    }
+    return;
+  }
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = 'Signing in…';
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    var address = accounts && accounts[0];
+    if (!address) throw new Error('No account selected');
+    var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
+    var signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+    var res = await fetch('/auth/wallet', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: address, message: message, signature: signature })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Sign-in failed');
+    localStorage.setItem('hf_token', data.token);
+    _token = data.token;
+    document.getElementById('authGate').style.display = 'none';
+    init();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = origLabel;
+    if (e && e.message !== 'User rejected the request.') alert(e.message || 'Sign-in failed. Try again.');
+  }
+}
+
+// If a wallet is already connected elsewhere on the site (cached address,
+// or MetaMask silently confirms a prior permission grant), show the
+// one-click wallet sign-in instead of just the generic email link.
+async function maybeOfferWalletSignin() {
+  var btn = document.getElementById('walletSigninBtn');
+  var cachedAddr = localStorage.getItem('hf_connect_address') || localStorage.getItem('hfx_wallet_address');
+  var addr = cachedAddr;
+  if (!addr && window.ethereum) {
+    try {
+      var accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts[0]) addr = accounts[0];
+    } catch (e) {}
+  }
+  if (addr) {
+    btn.textContent = 'Sign in with ' + addr.slice(0, 6) + '…' + addr.slice(-4) + ' →';
+    btn.style.display = '';
+    btn.addEventListener('click', signInWithWallet);
+  } else if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    // No cached address and no injected provider — still offer the deep
+    // link rather than only the email option.
+    btn.textContent = 'Sign in with wallet →';
+    btn.style.display = '';
+    btn.addEventListener('click', signInWithWallet);
+  }
+}
+
 async function init() {
   if (!_token) {
     document.getElementById('authGate').style.display = 'flex';
+    maybeOfferWalletSignin();
     return;
   }
   // Get own profile
@@ -221,6 +294,7 @@ async function init() {
     if (withId) openOrStartConvo(withId);
   } catch(e) {
     document.getElementById('authGate').style.display = 'flex';
+    maybeOfferWalletSignin();
   }
 }
 
