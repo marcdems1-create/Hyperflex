@@ -938,7 +938,12 @@ dataEngine.init({ pool, fetch: _nodeFetch, supabase: null });
 
 // Mount /api/v1/ routes
 require('./lib/data-api-routes')(app, dataEngine, {
-  getWhaleCache: () => _whaleWatchCache
+  getWhaleCache: () => _whaleWatchCache,
+  // buildAlphaList/dbQuery are declared later in this file as hoisted function
+  // declarations, so referencing them here (before their textual definition)
+  // is safe — they're only actually invoked later, at request time.
+  getAlphaList: (opts) => buildAlphaList(opts),
+  dbQuery: (text, params) => dbQuery(text, params)
 });
 
 // ── ANOMALY ENGINE (Phase 2) — Statistical anomaly detection ─────────────
@@ -42587,6 +42592,48 @@ No markdown, no preamble, just the JSON.`
   }
 }
 
+// Historical liquidity — record a depth snapshot per market on each real
+// buildAlphaList refresh (called from _buildAlphaListInner just before it
+// returns, so it only fires on an actual pipeline run, not on 90s-cache
+// hits). Throttled per market_id in-memory so a market doesn't get a row
+// every 90s forever — that's needless growth for a "history" feature meant
+// to show trend, not a tick-by-tick tape. 5 min is enough resolution to see
+// a depth squeeze forming without the table growing unbounded.
+const _lastLiquiditySnapshotAt = new Map();
+const LIQUIDITY_SNAPSHOT_MIN_INTERVAL_MS = 5 * 60 * 1000;
+async function recordLiquiditySnapshots(markets) {
+  if (!pool) return;
+  const now = Date.now();
+  const due = markets.filter(m => {
+    if (m.depth_ratio == null || !m.market_id) return false;
+    const last = _lastLiquiditySnapshotAt.get(m.market_id);
+    return !last || (now - last) >= LIQUIDITY_SNAPSHOT_MIN_INTERVAL_MS;
+  });
+  if (due.length === 0) return;
+  await Promise.all(due.map(async (m) => {
+    try {
+      await dbQuery(
+        `INSERT INTO market_liquidity_snapshots
+         (market_id, slug, question, volume, yes_price, depth_ratio, depth_side, depth_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [m.market_id, m.slug || null, m.question || null, m.volume || 0, m.yes_price,
+         m.depth_ratio, m.depth_side || null, m.depth_total || 0]
+      );
+      _lastLiquiditySnapshotAt.set(m.market_id, now);
+    } catch (e) {
+      console.warn('[liquidity-snapshot] failed for', m.market_id, e.message);
+    }
+  }));
+  // Occasional prune (roughly every ~200th write batch) instead of a dedicated
+  // cron — keeps this self-contained without adding another setInterval to
+  // track. 30 days of 5-min-resolution depth history is plenty for trend
+  // analysis and caps table growth.
+  if (Math.random() < 0.005) {
+    dbQuery(`DELETE FROM market_liquidity_snapshots WHERE snapshot_at < NOW() - INTERVAL '30 days'`, [])
+      .catch(() => {});
+  }
+}
+
 // In-flight promise lock — coalesces concurrent buildAlphaList() calls so the
 // boot pre-warm doesn't fire 3 parallel pipelines wasting Polymarket API quota.
 let _buildAlphaListPromise = null;
@@ -43671,6 +43718,9 @@ async function _buildAlphaListInner(opts = {}) {
 
     // Auto-create arenas for top-edge markets (fire-and-forget, non-blocking)
     autoCreateArenas().catch(() => {});
+
+    // Persist depth snapshots for /api/v1/liquidity/:marketId/history (fire-and-forget)
+    recordLiquiditySnapshots(markets).catch(() => {});
 
     return markets;
 }
@@ -70957,10 +71007,25 @@ app.listen(PORT, () => {
       );
       CREATE INDEX IF NOT EXISTS idx_api_keys_prefix  ON api_keys (key_prefix) WHERE is_active = true;
       CREATE INDEX IF NOT EXISTS idx_api_keys_user    ON api_keys (user_id);
+
+      CREATE TABLE IF NOT EXISTS market_liquidity_snapshots (
+        id           BIGSERIAL PRIMARY KEY,
+        market_id    TEXT NOT NULL,
+        slug         TEXT,
+        question     TEXT,
+        volume       NUMERIC(18,2),
+        yes_price    NUMERIC(6,4),
+        depth_ratio  NUMERIC(8,3),
+        depth_side   TEXT,
+        depth_total  NUMERIC(18,2),
+        snapshot_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_mls_market_ts    ON market_liquidity_snapshots (market_id, snapshot_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_mls_snapshot_at  ON market_liquidity_snapshots (snapshot_at DESC);
     `;
     try {
       await pool.query(dataEngineSchema);
-      console.log('[boot] ✓ normalized_snapshots + cross_market_refs + api_keys schema ensured');
+      console.log('[boot] ✓ normalized_snapshots + cross_market_refs + api_keys + market_liquidity_snapshots schema ensured');
     } catch (err) {
       console.error('[boot] ✗ failed to ensure data-engine schema:', err.message);
     }
