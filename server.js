@@ -56380,6 +56380,88 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
   }
 });
 
+// Server-side counterpart to scripts/backfill-user-market-interest.js —
+// runs against the live pool directly instead of requiring someone to get
+// DATABASE_URL onto a laptop and run psql/node by hand (see CLAUDE.md's
+// "don't ask Marc to run diagnostics from the terminal" operating rule).
+// Read-only against polymarket_v2_trades/users; only writes to
+// user_market_interest, and idempotently (safe to trigger more than once).
+//
+// Deliberately does NOT reuse _trackMarketInterest() — that helper stamps
+// first/last_traded_at as NOW(), which is correct for a trade that just
+// happened live but wrong here: backfilled rows need to keep each trade's
+// real created_at so the recency-weighted scoring in suggested-markets
+// doesn't treat months-old trades as if they happened today.
+let _backfillMarketInterestRunning = false;
+async function _runMarketInterestBackfill() {
+  console.log('[market-interest-backfill] starting...');
+  const trades = await dbQuery(`
+    SELECT eoa_address, token_id, side, created_at
+    FROM polymarket_v2_trades
+    WHERE clob_status = 'accepted' AND eoa_address IS NOT NULL AND token_id IS NOT NULL
+    ORDER BY created_at ASC
+  `);
+  console.log(`[market-interest-backfill] found ${trades.length} accepted trades`);
+
+  const userRows = await dbQuery(`SELECT id, LOWER(polymarket_address) AS addr FROM users WHERE polymarket_address IS NOT NULL`);
+  const addrToUserId = {};
+  for (const r of userRows) addrToUserId[r.addr] = r.id;
+  console.log(`[market-interest-backfill] mapped ${userRows.length} wallet addresses to users`);
+
+  let tracked = 0, skippedNoUser = 0, skippedNoMeta = 0;
+  for (const t of trades) {
+    const userId = addrToUserId[(t.eoa_address || '').toLowerCase()];
+    if (!userId) { skippedNoUser++; continue; }
+
+    const wasCached = _marketByTokenIdCache.has(t.token_id);
+    const meta = await _fetchMarketByTokenId(t.token_id);
+    if (!wasCached) await new Promise(r => setTimeout(r, 150)); // gentle rate limit on fresh Gamma calls only
+    if (!meta) { skippedNoMeta++; continue; }
+
+    const category = _classifyMarketCategory(meta.question);
+    try {
+      await dbQuery(`
+        INSERT INTO user_market_interest (user_id, token_id, condition_id, question, category, side, trade_count, first_traded_at, last_traded_at)
+        VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $7)
+        ON CONFLICT (user_id, token_id) DO UPDATE SET
+          trade_count = user_market_interest.trade_count + 1,
+          last_traded_at = GREATEST(user_market_interest.last_traded_at, EXCLUDED.last_traded_at),
+          side = EXCLUDED.side,
+          condition_id = COALESCE(user_market_interest.condition_id, EXCLUDED.condition_id),
+          question = COALESCE(user_market_interest.question, EXCLUDED.question)
+      `, [userId, t.token_id, meta.conditionId, meta.question, category, t.side != null ? String(t.side) : null, t.created_at]);
+      tracked++;
+      if (tracked % 100 === 0) console.log(`[market-interest-backfill] progress: ${tracked} tracked so far`);
+    } catch (e) {
+      console.warn('[market-interest-backfill] upsert failed:', e.message);
+    }
+  }
+  console.log(`[market-interest-backfill] done — ${tracked} tracked, ${skippedNoUser} skipped (no matching user), ${skippedNoMeta} skipped (gamma lookup failed)`);
+  return { tracked, skippedNoUser, skippedNoMeta, totalTrades: trades.length };
+}
+
+// POST /api/admin/backfill-market-interest?secret=$ADMIN_SECRET — kicks off
+// the backfill in the background and returns immediately (trade volume is
+// unknown up front and each new token_id costs a real Gamma round-trip, so
+// this can run long). Poll GET /api/admin/market-interest-status or the
+// Railway logs (grep "[market-interest-backfill]") to watch progress.
+app.post('/api/admin/backfill-market-interest', requireAdminSecret, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'no_pool' });
+  if (_backfillMarketInterestRunning) return res.status(409).json({ error: 'already_running' });
+  _backfillMarketInterestRunning = true;
+  res.json({
+    started: true,
+    note: 'Running in the background. Poll GET /api/admin/market-interest-status to watch counts.total grow, or check Railway logs for "[market-interest-backfill]" lines.',
+  });
+  try {
+    await _runMarketInterestBackfill();
+  } catch (e) {
+    console.error('[market-interest-backfill] fatal:', e.message);
+  } finally {
+    _backfillMarketInterestRunning = false;
+  }
+});
+
 app.post('/api/polymarket/order', async (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
   // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
