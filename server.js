@@ -50932,6 +50932,114 @@ app.post('/api/predictors/hfx-score-batch', async (req, res) => {
   }
 });
 
+// GET /api/member/:userId/suggested-markets — personalized market discovery.
+// Blends explicit topic_preferences (flat +30/category) with recency-
+// weighted trade history from user_market_interest (10 * 0.5^(daysAgo/14)
+// per category — a trade from 14 days ago counts for half a fresh one),
+// capping the trade-history contribution at 70% of the combined score mass
+// so a single recent binge on one category can't fully crowd out the
+// user's stated preferences. Top 3 categories by combined score drive an
+// active/untraded pull from buildAlphaList() (never a separate gamma call —
+// per CLAUDE.md, buildAlphaList is the single source of truth for enriched
+// market data). Cold-start users (no prefs, no trade history, or nothing
+// matched) fall back to sitewide-trending markets rather than an empty list.
+app.get('/api/member/:userId/suggested-markets', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { userId } = req.params;
+
+    const userRows = await dbQuery('SELECT id, topic_preferences FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (!userRows.length) return res.status(404).json({ error: 'User not found' });
+    const topicPrefs = userRows[0].topic_preferences || [];
+
+    const interestRows = await dbQuery(
+      'SELECT token_id, category, last_traded_at FROM user_market_interest WHERE user_id = $1',
+      [userId]
+    ).catch(() => []);
+
+    // buildAlphaList()'s category taxonomy (crypto/politics/sports/
+    // entertainment/tech/other) is narrower than topic_preferences' saved
+    // whitelist (which also allows finance/science/world — see POST
+    // /api/user/topics). 'world' maps cleanly onto 'politics' (detectCategory
+    // itself folds geopolitical content into politics); 'finance'/'science'
+    // have no alpha-market equivalent today, so they're dropped from
+    // category scoring rather than producing a category that can never
+    // match a market.
+    const ALPHA_CATEGORIES = new Set(['crypto', 'politics', 'sports', 'entertainment', 'tech', 'other']);
+    const scores = {};
+    for (const pref of topicPrefs) {
+      const mapped = pref === 'world' ? 'politics' : pref;
+      if (!ALPHA_CATEGORIES.has(mapped)) continue;
+      scores[mapped] = (scores[mapped] || 0) + 30;
+    }
+
+    const now = Date.now();
+    const tradedTokenIds = new Set();
+    const recencyScores = {};
+    for (const r of interestRows) {
+      tradedTokenIds.add(r.token_id);
+      const daysAgo = (now - new Date(r.last_traded_at).getTime()) / 86400000;
+      const weight = 10 * Math.pow(0.5, daysAgo / 14);
+      recencyScores[r.category] = (recencyScores[r.category] || 0) + weight;
+    }
+
+    // Cap recency-derived score mass at 70% of the COMBINED (post-scaling)
+    // total. Solving scaledRecency <= 0.7*(prefTotal + scaledRecency) for
+    // scaledRecency gives scaledRecency <= (0.7/0.3) * prefTotal — capping
+    // against the unscaled (recencyTotal + prefTotal) sum instead (as a
+    // prior version of this code did) under-caps: it lets recency's actual
+    // share of the final total exceed 70% whenever recencyTotal is large.
+    // When prefTotal is 0 there's nothing for recency to crowd out, so no
+    // cap applies.
+    const recencyTotal = Object.values(recencyScores).reduce((a, b) => a + b, 0);
+    const prefTotal = Object.values(scores).reduce((a, b) => a + b, 0);
+    let scale = 1;
+    if (prefTotal > 0 && recencyTotal > 0) {
+      const maxScaledRecency = (0.7 / 0.3) * prefTotal;
+      scale = Math.min(1, maxScaledRecency / recencyTotal);
+    }
+    for (const [cat, v] of Object.entries(recencyScores)) {
+      scores[cat] = (scores[cat] || 0) + v * scale;
+    }
+
+    const topCategories = Object.entries(scores)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat]) => cat);
+
+    const alphaList = await buildAlphaList().catch(() => []);
+    let markets = [];
+    let coldStart = false;
+
+    if (topCategories.length) {
+      markets = (alphaList || [])
+        .filter(m => {
+          if (!topCategories.includes(m.category)) return false;
+          // clobTokenIds comes through from raw gamma as either a JSON
+          // string or an array depending on the source endpoint — same
+          // defensive parse used at server.js:42282/42363/etc.
+          let tids = m.clobTokenIds;
+          try { if (typeof tids === 'string') tids = JSON.parse(tids); } catch { tids = null; }
+          if (!Array.isArray(tids)) return true;
+          return !tids.some(tid => tradedTokenIds.has(String(tid)));
+        })
+        .slice(0, 20);
+    }
+    if (!markets.length) {
+      coldStart = true;
+      markets = (alphaList || [])
+        .slice()
+        .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+        .slice(0, 10);
+    }
+
+    res.json({ categories: topCategories, cold_start: coldStart, markets });
+  } catch (err) {
+    console.error('[suggested-markets]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════
 // POLYMARKET ECOSYSTEM — stats, rewards, tools
 // ══════════════════════════════════════════════════════════════════════════
@@ -56138,6 +56246,93 @@ async function _logV2Outcome(rowId, httpStatus, responseText, parsedData) {
   }
 }
 
+// user_market_interest — see supabase_migration_63_user_market_interest.sql.
+// Tracks which markets/categories a user has actually traded, feeding
+// GET /api/member/:userId/suggested-markets. Fire-and-forget: every call
+// site swallows its own errors and is never awaited by a response path.
+//
+// Category taxonomy mirrors buildAlphaList()'s own detectCategory() (the
+// function that tags every market's `.category` field) rather than the
+// simpler catKeywords set used elsewhere for position breakdowns — the
+// suggested-markets route matches this classification directly against
+// alpha markets' `.category`, so the two must agree on labels/order.
+function _classifyMarketCategory(question) {
+  const t = (question || '').toLowerCase();
+  if (/\b(bitcoin|btc|eth|ethereum|crypto|solana|xrp|dogecoin|doge|token|defi|nft|stablecoin|blockchain)\b/i.test(t)) return 'crypto';
+  if (/\b(trump|biden|harris|obama|kamala|president|prime minister|parliament|parliamentary|congress|senate|elections?|democrat|republican|politic|politics|governor|primary|gop|dnc|rnc|impeach|cabinet|supreme court|tariff|treaty|sanction|regime|coup|invasion|invade|ceasefire|nato|united nations|geopolitic)\b/i.test(t)) return 'politics';
+  if (/\b(nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|mma|sport|sports|game|match|playoff|super bowl|world cup|championship|tournament|league|team|player|coach|season|finals|mvp|golf|tennis|pga|lpga|masters|olympic|olympics|wimbledon|formula 1|f1|nascar)\b/i.test(t)) return 'sports';
+  if (/\b(iran|iranian|israel|israeli|russia|russian|ukraine|china|chinese|korea|korean|syria|yemen|afghanistan|palestine|palestinian|gaza|lebanon|taiwan|hungary|hungarian|germany|german|france|french|italy|italian|spain|spanish|uk|britain|british|canada|canadian|brazil|brazilian|mexico|mexican|argentina|turkey|turkish|india|indian|pakistan|venezuela|venezuelan|putin|netanyahu|khamenei|orban|orbán|macron|merkel|scholz|sunak|starmer|trudeau|hamas|hezbollah|taliban|war|conflict|middle east)\b/i.test(t)) return 'politics';
+  if (/\b(movie|film|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|tv show|concert|tour|streaming|actor|singer|rapper|kardashian|taylor swift)\b/i.test(t)) return 'entertainment';
+  if (/\b(ai|openai|chatgpt|apple|google|microsoft|meta|tesla|nvidia|amazon|startup|tech|iphone|android|spacex|bezos|musk|zuckerberg)\b/i.test(t)) return 'tech';
+  return 'other';
+}
+
+// Gamma lookup by CLOB token id — no existing helper covers this param
+// (condition_id/slug lookups exist but token_id doesn't map to either).
+// Cached: question/conditionId for a given token_id are effectively static,
+// and this fires on every accepted order (unlike the backfill script, which
+// only runs once) — an uncached call here would hit Gamma once per trade on
+// popular markets.
+const _marketByTokenIdCache = new Map(); // tokenId -> { ts, meta }
+const _MARKET_BY_TOKEN_ID_TTL_MS = 15 * 60 * 1000;
+async function _fetchMarketByTokenId(tokenId) {
+  if (!tokenId) return null;
+  const cached = _marketByTokenIdCache.get(tokenId);
+  if (cached && (Date.now() - cached.ts < _MARKET_BY_TOKEN_ID_TTL_MS)) return cached.meta;
+  const body = await _gammaFetchJson(`https://gamma-api.polymarket.com/markets?clob_token_ids=${encodeURIComponent(tokenId)}`);
+  const arr = _gammaUnwrap(body);
+  const m = arr[0];
+  const meta = m ? {
+    question: m.question || null,
+    conditionId: m.conditionId || m.condition_id || null,
+  } : null;
+  _marketByTokenIdCache.set(tokenId, { ts: Date.now(), meta });
+  return meta;
+}
+
+// `side` is stored as-is ("BUY"/"SELL", per the CLOB V2 wire body — see
+// CLAUDE.md's "POST /order JSON body" spec). NOT numeric — Number("BUY")
+// is NaN, which a SMALLINT column would reject outright.
+async function _trackMarketInterest(userId, tokenId, conditionId, question, category, side) {
+  if (!userId || !tokenId) return;
+  try {
+    await dbQuery(`
+      INSERT INTO user_market_interest (user_id, token_id, condition_id, question, category, side, trade_count, first_traded_at, last_traded_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+      ON CONFLICT (user_id, token_id) DO UPDATE SET
+        trade_count = user_market_interest.trade_count + 1,
+        last_traded_at = NOW(),
+        side = EXCLUDED.side,
+        condition_id = COALESCE(user_market_interest.condition_id, EXCLUDED.condition_id),
+        question = COALESCE(user_market_interest.question, EXCLUDED.question)
+    `, [userId, String(tokenId), conditionId || null, question || null, category || 'other', side != null ? String(side) : null]);
+  } catch (e) {
+    console.warn('[market-interest] track failed:', e.message);
+  }
+}
+
+// Called fire-and-forget from POST /api/polymarket/order on accepted V2
+// orders. The order route is unauthenticated (proxy-only), so there's no
+// session user in scope — resolve one from the signer/maker wallet address,
+// same join the backfill script uses. Silently no-ops for wallets with no
+// HYPERFLEX account (guest trades via the proxy aren't attributable).
+async function _trackMarketInterestFromOrder(orderObj) {
+  try {
+    if (!orderObj) return;
+    const signerAddr = (orderObj.signer || orderObj.maker || '').toLowerCase();
+    const tokenId = orderObj.tokenId != null ? String(orderObj.tokenId) : null;
+    if (!signerAddr || !tokenId) return;
+    const userRows = await dbQuery(`SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1`, [signerAddr]);
+    const userId = userRows[0] && userRows[0].id;
+    if (!userId) return;
+    const meta = await _fetchMarketByTokenId(tokenId);
+    const category = _classifyMarketCategory(meta && meta.question);
+    await _trackMarketInterest(userId, tokenId, meta && meta.conditionId, meta && meta.question, category, orderObj.side);
+  } catch (e) {
+    console.warn('[market-interest] from-order failed:', e.message);
+  }
+}
+
 app.post('/api/polymarket/order', async (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
   // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
@@ -56213,6 +56408,7 @@ app.post('/api/polymarket/order', async (req, res) => {
     }
 
     _logV2Outcome(v2RowId, r.status, text, data);
+    if (r.ok) _trackMarketInterestFromOrder(req.body && req.body.order);
 
     res.status(r.status).json(data);
   } catch (err) {
@@ -62872,6 +63068,23 @@ if (pool) {
       )`).catch(e => console.warn('[boot] prediction_thesis_leg create:', e.message));
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_thesis ON prediction_thesis_leg(thesis_id)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_condition ON prediction_thesis_leg(condition_id) WHERE resolution IS NULL`).catch(() => {});
+
+      // Migration #63 — user_market_interest. See supabase_migration_63_user_market_interest.sql.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS user_market_interest (
+        id               BIGSERIAL PRIMARY KEY,
+        user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_id         TEXT NOT NULL,
+        condition_id     TEXT,
+        question         TEXT,
+        category         TEXT NOT NULL DEFAULT 'other',
+        side             TEXT,
+        trade_count      INT NOT NULL DEFAULT 1,
+        first_traded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_traded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, token_id)
+      )`).catch(e => console.warn('[boot] user_market_interest create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_user_market_interest_user ON user_market_interest(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_user_market_interest_category ON user_market_interest(user_id, category)`).catch(() => {});
 
       // Messaging v1 — see supabase_migration_messaging.sql for the
       // standalone migration file + scope notes. 1:1 plain-text DMs.
