@@ -36654,25 +36654,47 @@ app.get('/api/admin/tx-trace/:hash', async (req, res) => {
 
 // GET /api/admin/v2-trades?days=7&status=rejected
 // Reads polymarket_v2_trades (from migration #48). Empty until migration runs.
+// ⚠️ 2026-08-12: prod's real schema uses different column names than this
+// route originally assumed (signer_address not eoa_address, order_hash not
+// clob_order_id, builder not builder_code, clob_response_body jsonb +
+// clob_error_message not clob_response_code/clob_error, side is TEXT
+// 'BUY'/'SELL' not a 0/1 SMALLINT) — see the _logV2Attempt/_logV2Outcome
+// comment above for the full story. Aliased back to the OLD field names
+// below via SQL so public/admin.html's rendering (loadV2Trades(), which
+// reads r.eoa_address/r.clob_order_id/r.clob_response_code/r.clob_error/
+// r.side === 0/1) needs zero changes.
 app.get('/api/admin/v2-trades', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const days = Math.max(1, Math.min(30, parseInt(req.query.days, 10) || 7));
   const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   try {
-    let q = supabase.from('polymarket_v2_trades').select('id, eoa_address, proxy_address, token_id, side, maker_amount, taker_amount, clob_status, clob_order_id, clob_response_code, clob_error, builder_code, created_at, updated_at').gte('created_at', sinceIso).order('created_at', { ascending: false }).limit(500);
-    if (req.query.status) q = q.eq('clob_status', String(req.query.status));
-    const { data, error } = await q;
-    if (error) {
-      // Most likely cause: migration #48 hasn't run yet
-      return res.json({ rows: [], summary: {}, error: error.message, hint: 'If error mentions "relation polymarket_v2_trades does not exist", run supabase_migration_polymarket_v2_trades.sql in Railway Postgres.' });
-    }
-    const rows = data || [];
+    const params = [sinceIso];
+    let statusFilter = '';
+    if (req.query.status) { params.push(String(req.query.status)); statusFilter = ' AND clob_status = $2'; }
+    const rows = await dbQuery(`
+      SELECT id, signer_address AS eoa_address, proxy_address, token_id,
+             CASE side WHEN 'BUY' THEN 0 WHEN 'SELL' THEN 1 ELSE NULL END AS side,
+             maker_amount, taker_amount, clob_status,
+             order_hash AS clob_order_id,
+             (clob_response_body ->> 'status')::int AS clob_response_code,
+             clob_error_message AS clob_error,
+             builder AS builder_code,
+             created_at, updated_at
+      FROM polymarket_v2_trades
+      WHERE created_at >= $1${statusFilter}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `, params);
     const summary = { total: rows.length, by_status: {}, unique_proxies: new Set(rows.map(r => r.proxy_address)).size };
     for (const r of rows) summary.by_status[r.clob_status] = (summary.by_status[r.clob_status] || 0) + 1;
     res.json({ rows, summary, since: sinceIso, days });
   } catch (e) {
     console.error('[admin/v2-trades]', e.message);
-    res.status(500).json({ error: e.message });
+    // 200, not 500 — admin.html's loadV2Trades() checks `!r.ok` BEFORE
+    // `j.error`, so a non-2xx status here would swallow this hint entirely.
+    // Matches the original soft-fail shape (rows: [], summary: {}) this
+    // route always used for DB errors.
+    res.json({ rows: [], summary: {}, error: e.message, hint: 'If error mentions "relation polymarket_v2_trades does not exist", run supabase_migration_polymarket_v2_trades.sql in Railway Postgres.' });
   }
 });
 
@@ -56202,29 +56224,46 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 // Detects V2 orders by presence of `order.builder` (not in V1 struct) and
 // logs every attempt/accept/reject row. DB errors are swallowed so the trade
 // flow is never blocked by observability. Non-V2 orders are not logged.
+//
+// ⚠️ 2026-08-12: discovered (while building the user_market_interest
+// backfill, see supabase_migration_user_market_interest.sql) that prod's
+// ACTUAL polymarket_v2_trades schema has never matched what this file
+// assumed — real columns are signer_address (not eoa_address), order_hash
+// (not salt/clob_order_id), builder (not builder_code), clob_response_body
+// jsonb + clob_error_message (not clob_response_code/clob_error), side is
+// TEXT ('BUY'/'SELL', not a 0/1 SMALLINT), and there's no client_ip column
+// at all. Every insert/update against the old column names has been
+// silently failing (caught, console.warn'd, trade flow unaffected — these
+// calls are pure observability) since whatever point the live table
+// diverged from this code. Rewritten below to match the real schema, using
+// dbQuery directly instead of the supabase proxy for explicit jsonb casting.
 function _isV2Order(orderObj) {
   return !!(orderObj && typeof orderObj.builder === 'string' && orderObj.builder.startsWith('0x'));
 }
-async function _logV2Attempt(orderObj, clientIp) {
+async function _logV2Attempt(orderObj) {
   try {
     if (!_isV2Order(orderObj)) return null;
-    const row = {
-      eoa_address:   (orderObj.signer || '').toLowerCase() || null,
-      proxy_address: (orderObj.maker  || '').toLowerCase() || null,
-      token_id:      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
-      side:          orderObj.side != null ? Number(orderObj.side) : null,
-      maker_amount:  orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
-      taker_amount:  orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
-      salt:          orderObj.salt != null ? String(orderObj.salt) : null,
-      builder_code:  orderObj.builder || null,
-      clob_status:   'attempted',
-      client_ip:     clientIp || null,
-    };
-    const { data, error } = await supabase.from('polymarket_v2_trades').insert(row).select('id').maybeSingle();
-    if (error) { console.warn('[v2-trades] insert failed:', error.message); return null; }
-    return data && data.id ? data.id : null;
+    const rows = await dbQuery(`
+      INSERT INTO polymarket_v2_trades
+        (signer_address, proxy_address, token_id, side, maker_amount, taker_amount,
+         timestamp_ms, metadata, builder, signature_type, clob_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'attempted')
+      RETURNING id
+    `, [
+      (orderObj.signer || '').toLowerCase() || null,
+      (orderObj.maker || '').toLowerCase() || null,
+      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
+      orderObj.side != null ? String(orderObj.side) : null,
+      orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
+      orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
+      orderObj.timestamp != null ? Number(orderObj.timestamp) : null,
+      orderObj.metadata != null ? String(orderObj.metadata) : null,
+      orderObj.builder || null,
+      orderObj.signatureType != null ? Number(orderObj.signatureType) : null,
+    ]);
+    return rows[0] && rows[0].id ? rows[0].id : null;
   } catch (e) {
-    console.warn('[v2-trades] insert threw:', e.message);
+    console.warn('[v2-trades] insert failed:', e.message);
     return null;
   }
 }
@@ -56232,15 +56271,19 @@ async function _logV2Outcome(rowId, httpStatus, responseText, parsedData) {
   try {
     if (!rowId) return;
     const ok = httpStatus >= 200 && httpStatus < 300;
-    const update = {
-      clob_status: ok ? 'accepted' : 'rejected',
-      clob_response_code: httpStatus,
-      clob_order_id: ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null,
-      clob_error:   ok ? null : (responseText || '').slice(0, 500),
-      updated_at:   new Date().toISOString(),
-    };
-    const { error } = await supabase.from('polymarket_v2_trades').update(update).eq('id', rowId);
-    if (error) console.warn('[v2-trades] update failed:', error.message);
+    const orderHash = ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null;
+    const responseBody = JSON.stringify(
+      ok ? { status: httpStatus, data: parsedData } : { status: httpStatus, raw: (responseText || '').slice(0, 500) }
+    );
+    await dbQuery(`
+      UPDATE polymarket_v2_trades
+      SET clob_status = $1,
+          order_hash = COALESCE($2, order_hash),
+          clob_response_body = $3::jsonb,
+          clob_error_message = $4,
+          updated_at = NOW()
+      WHERE id = $5
+    `, [ok ? 'accepted' : 'rejected', orderHash, responseBody, ok ? null : (responseText || '').slice(0, 500), rowId]);
   } catch (e) {
     console.warn('[v2-trades] update threw:', e.message);
   }
@@ -56512,7 +56555,7 @@ app.post('/api/polymarket/order', async (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
   // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
   // never responds or we throw before the outcome log fires.
-  const v2RowId = await _logV2Attempt(req.body && req.body.order, clientIp);
+  const v2RowId = await _logV2Attempt(req.body && req.body.order);
   try {
     // Use raw body (byte-exact as the client sent it) so the builder HMAC
     // signs the identical string the CLOB receives. JSON.stringify(req.body)
@@ -62725,30 +62768,45 @@ if (pool) {
       `).catch(() => {});
 
       // Migration #48 — polymarket_v2_trades (V2 trade observability)
+      // ⚠️ 2026-08-12: rewritten to match prod's REAL live schema, discovered
+      // via information_schema introspection (see GET
+      // /api/admin/market-interest-status's polymarket_v2_trades_columns).
+      // The table already exists in production with this shape — this
+      // CREATE TABLE IF NOT EXISTS is a no-op there and only matters for a
+      // genuinely fresh DB, but it must match reality so a fresh install
+      // stays compatible with _logV2Attempt/_logV2Outcome/the admin viewer,
+      // all of which were rewritten the same day to target these columns.
       await dbQuery(`CREATE TABLE IF NOT EXISTS polymarket_v2_trades (
-        id             BIGSERIAL PRIMARY KEY,
-        user_id        UUID,
-        eoa_address    TEXT NOT NULL,
-        proxy_address  TEXT NOT NULL,
-        token_id       TEXT,
-        side           SMALLINT,
-        maker_amount   TEXT,
-        taker_amount   TEXT,
-        salt           TEXT,
-        builder_code   TEXT,
-        clob_status         TEXT NOT NULL DEFAULT 'attempted',
-        clob_order_id       TEXT,
-        clob_response_code  SMALLINT,
-        clob_error          TEXT,
-        fill_tx_hash   TEXT,
-        fill_price     NUMERIC,
-        filled_at      TIMESTAMPTZ,
-        client_ip      TEXT,
-        created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+        id                   BIGSERIAL PRIMARY KEY,
+        user_id              TEXT,
+        proxy_address        TEXT,
+        signer_address       TEXT,
+        order_hash           TEXT,
+        market_id            TEXT,
+        condition_id         TEXT,
+        token_id             TEXT,
+        side                 TEXT,
+        is_neg_risk          BOOLEAN,
+        maker_amount         TEXT,
+        taker_amount         TEXT,
+        price                NUMERIC,
+        size                 NUMERIC,
+        timestamp_ms         BIGINT,
+        metadata             TEXT,
+        builder              TEXT,
+        signature_type       SMALLINT,
+        clob_status          TEXT NOT NULL DEFAULT 'attempted',
+        clob_response_body   JSONB,
+        clob_error_message   TEXT,
+        fill_confirmed_at    TIMESTAMPTZ,
+        fill_tx_hash         TEXT,
+        fill_size            NUMERIC,
+        fill_price           NUMERIC,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
       )`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_status_created ON polymarket_v2_trades(clob_status, created_at DESC)`).catch(() => {});
-      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_eoa ON polymarket_v2_trades(eoa_address)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_signer ON polymarket_v2_trades(signer_address)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_created ON polymarket_v2_trades(created_at DESC)`).catch(() => {});
 
       // Influencer feed tables (migration #45 + #46)
