@@ -68,10 +68,13 @@ async function main() {
   });
 
   console.log('[backfill] reading accepted polymarket_v2_trades...');
+  // Live schema uses signer_address, not eoa_address — see the 2026-08-12
+  // market-interest-status investigation (server.js's _runMarketInterestBackfill
+  // has the same fix and a longer explanation of the drift).
   const { rows: trades } = await pool.query(`
-    SELECT eoa_address, token_id, side, created_at
+    SELECT signer_address, token_id, side, created_at
     FROM polymarket_v2_trades
-    WHERE clob_status = 'accepted' AND eoa_address IS NOT NULL AND token_id IS NOT NULL
+    WHERE clob_status = 'accepted' AND signer_address IS NOT NULL AND token_id IS NOT NULL
     ORDER BY created_at ASC
   `);
   console.log(`[backfill] found ${trades.length} accepted trades`);
@@ -87,7 +90,7 @@ async function main() {
   let tracked = 0, skippedNoUser = 0, skippedNoMeta = 0;
 
   for (const t of trades) {
-    const userId = addrToUserId[(t.eoa_address || '').toLowerCase()];
+    const userId = addrToUserId[(t.signer_address || '').toLowerCase()];
     if (!userId) { skippedNoUser++; continue; }
 
     let meta = metaCache.get(t.token_id);

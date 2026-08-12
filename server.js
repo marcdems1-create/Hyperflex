@@ -56362,7 +56362,7 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
     // EXISTS for that table, so this isn't a typo in the backfill query,
     // it's real drift between what the code assumes and what's actually
     // deployed. Introspect it here rather than guessing at a fix.
-    const [counts, sample, v2TradesCols] = await Promise.all([
+    const [counts, sample, v2TradesCols, v2TradesCounts] = await Promise.all([
       dbQuery(`
         SELECT COUNT(*)::int AS total,
                COUNT(DISTINCT user_id)::int AS users,
@@ -56377,6 +56377,21 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
         WHERE table_name = 'polymarket_v2_trades'
         ORDER BY ordinal_position
       `).catch(() => []),
+      // Row count on the real live schema — tells us up front whether this
+      // is a stale table with old rows from before the code drifted (worth
+      // backfilling) or genuinely empty (nothing to do either way). Every
+      // write path in the current codebase (_logV2Attempt et al.) targets
+      // eoa_address/salt/clob_order_id, none of which exist here, so no NEW
+      // rows have been landing via that path — whatever is in this table
+      // predates that drift.
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE clob_status = 'accepted')::int AS accepted,
+               COUNT(DISTINCT signer_address)::int AS distinct_signers,
+               COUNT(DISTINCT user_id)::int AS distinct_user_ids,
+               MAX(created_at) AS most_recent_trade
+        FROM polymarket_v2_trades
+      `).catch(e => ([{ error: e.message }])),
     ]);
 
     res.json({
@@ -56386,6 +56401,7 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
       counts: counts[0] || null,
       most_recent_rows: sample,
       polymarket_v2_trades_columns: v2TradesCols,
+      polymarket_v2_trades_counts: v2TradesCounts[0] || null,
       // Distinguishes "backfill is still working through trade history" from
       // "it already ran and finished (possibly finding nothing to do)" —
       // without this, counts.total staying at 0 right after triggering the
@@ -56417,10 +56433,16 @@ let _backfillMarketInterestRunning = false;
 let _lastMarketInterestBackfillResult = null; // { ranAt, tracked, skippedNoUser, skippedNoMeta, totalTrades, error }
 async function _runMarketInterestBackfill() {
   console.log('[market-interest-backfill] starting...');
+  // Live schema uses signer_address, not eoa_address (see the 2026-08-12
+  // market-interest-status investigation — every write path in this file,
+  // including this backfill originally, assumed a schema that doesn't
+  // match what's actually deployed). signer_address is the EOA half of
+  // maker=proxy/signer=EOA, same value _logV2Attempt intended for
+  // eoa_address.
   const trades = await dbQuery(`
-    SELECT eoa_address, token_id, side, created_at
+    SELECT signer_address, token_id, side, created_at
     FROM polymarket_v2_trades
-    WHERE clob_status = 'accepted' AND eoa_address IS NOT NULL AND token_id IS NOT NULL
+    WHERE clob_status = 'accepted' AND signer_address IS NOT NULL AND token_id IS NOT NULL
     ORDER BY created_at ASC
   `);
   console.log(`[market-interest-backfill] found ${trades.length} accepted trades`);
@@ -56432,7 +56454,7 @@ async function _runMarketInterestBackfill() {
 
   let tracked = 0, skippedNoUser = 0, skippedNoMeta = 0;
   for (const t of trades) {
-    const userId = addrToUserId[(t.eoa_address || '').toLowerCase()];
+    const userId = addrToUserId[(t.signer_address || '').toLowerCase()];
     if (!userId) { skippedNoUser++; continue; }
 
     const wasCached = _marketByTokenIdCache.has(t.token_id);
