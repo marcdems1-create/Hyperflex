@@ -49,6 +49,33 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-12 (⚠️ found: 9f0476f's "wholesale copy" of profile-trader.html left the live tap-tooltip/peak-annotation chart feature silently broken — server.js half was never landed; fixed)
+
+**Context — this session started as a plain feature ask** ("fix the cumulative ROI chart on the trader profile page") that turned into PR #223 on `claude/cumulative-roi-chart-6vppgi`: server-side `computeTraderCard` extended to emit `trade_roi_pct`/`market_question`/`side`/`pnl_usd` per `roi_series` point (`537259a`), then a full mobile-first redesign of `profile-trader.html` (`788e5b1`) after Marc reported the page looking broken on phone/desktop. Both verified locally via mocked-data Playwright, pushed, PR opened, CI green, no review comments — normal-looking flow.
+
+**Marc then asked to re-read the whole conversation for anything forgotten.** That audit is what surfaced this — not a new bug report, a self-check that paid off:
+1. **SESSION_STATE.md/CHANGELOG.md had never been touched this session** (fixed first, see the entries this replaced/sits above — since folded into this one after the reset below).
+2. **On re-fetching `origin/main` to check PR #223's mergeable state, it had gone `dirty`** (a real conflict, not the clean state from 6 days earlier) — `git merge origin/main` hit conflicts in `profile-trader.html` and `SESSION_STATE.md`.
+3. **Reading the conflict + a `git log` search explained why: `9f0476f`** ("Land the trader-profile mobile fix that never merged; delete the recomputing banner," 2026-08-06 01:05, per its own commit message) **found `788e5b1` sitting on this exact "orphaned" branch and took its `profile-trader.html` wholesale onto `main` directly** — i.e., the redesign from this session's second commit is **already live in production**, landed by a different session/path entirely, days before this session resumed.
+4. **But `9f0476f`'s file list never touched `server.js`.** Direct verification (`git show origin/main:server.js | grep roi_series`) confirmed `computeTraderCard`'s `roi_series` push on `main` still only emits `{t, roi_pct}` — the `trade_roi_pct`/`market_question`/`side`/`pnl_usd` fields from `537259a` were never carried over, because that fix only ever shipped as `public/*.html` files, not `server.js`. Cross-checked against `main`'s live frontend (`git show origin/main:public/profile-trader.html | grep trade_roi_pct`) — it unambiguously reads `p.trade_roi_pct`, `p.market_question`, `p.side` on every chart point.
+5. **Net effect: the tap-tooltip and peak-annotation feature has been live on production since 2026-08-06, silently degraded.** Every tap shows "Unknown market," no YES/NO side, and a "—" delta instead of the real per-trade number; the peak-point auto-annotation (dot + label near the largest single-trade swing) never renders at all, since `Math.abs(undefined)` never beats the `-1` initial `peakAbs` and `peakIdx` never leaves `-1`. No crash, no console error — just a quietly non-functional feature nobody would notice without reading the code both sides.
+
+**Fix shipped this session:** re-applied just the missing `server.js` half (`computeTraderCard`'s `roi_series.push` now carries all four fields again) directly on top of current `origin/main` — the frontend needed zero changes since it's already correct and already live. Branch `claude/cumulative-roi-chart-6vppgi` was reset to `origin/main` and this one fix pushed on top (force-with-lease), since the redesign commits it used to carry are superseded/already-shipped and would only produce conflict noise against `main`'s own subsequent additions (a FLEX-score info-tooltip button landed by yet another session in the interim). PR #223 now carries just this server.js diff.
+
+**Shipped (with hash):** — see next push; branch reset + this fix committed together, hash follows in the next entry once pushed (multi-Claude contract: hash required before claiming "shipped" — check `git log origin/main --oneline -1` / the PR diff rather than trust this paragraph).
+
+**Active blockers:** none.
+
+**Queued:** none from this arc.
+
+**Open questions / unverified:**
+- Nobody has confirmed live-in-production that the tooltip/annotation actually render correctly post-fix (same standing sandbox limitation — no path to `hyperflex.network` or the Netlify preview from here). The fix is a straightforward field-addition matching an already-deployed, already-verified frontend contract, so confidence is high, but a real post-deploy check is still owed.
+- Two other sessions (`2026-08-06` "Land the trader-profile mobile fix…", `2026-08-08b` "corrected a false 'never touched' premise") both independently investigated this exact file in the days since and neither caught this split — both verified the frontend rendered without horizontal overflow/clipping (true) but neither diffed the chart's actual per-point data contract against what `server.js` was emitting. **Lesson for this class of bug: verifying a frontend "looks right" against a live page is not the same as verifying its data contract is actually satisfied** — a missing field degrades gracefully (fallback text, empty peak) rather than crashing, so it's invisible to a visual pass alone.
+
+**Notes for next session:**
+- If picking up `profile-trader.html`/`computeTraderCard` again: the two are coupled by the `roi_series` per-point shape (`t`, `roi_pct`, `trade_roi_pct`, `market_question`, `side`, `pnl_usd`) — if either side changes that shape, grep the other side before shipping just one half again. This exact split-ship failure mode (frontend lands, backend half doesn't, because a "wholesale copy" only grabbed one file) is worth remembering as a concrete example, not just an abstract warning.
+- This repo's concurrent-session traffic is heavy enough that a branch sitting unmerged for even a few hours can have its content independently landed elsewhere under a different commit — always re-`git fetch origin main` and re-read the target file fresh before resuming multi-day-old work, per the pattern several other SESSION_STATE entries this month already called out (2026-08-06/06b/06c all hit variants of this).
+
 ## 2026-08-08c (mobile overflow sweep across the site; fixed /finance's unresponsive 3-column terminal layout — shipped, verified live)
 
 **Shipped (`7153c02`, pushed, verified `git log origin/main --oneline -1` and re-checked live on production after a hard-reload got past a browser-cache false negative):**

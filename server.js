@@ -31239,9 +31239,26 @@ async function computeTraderCard(userId) {
     // Cumulative ROI point — running pnl over running deployed capital, so
     // the curve reads as "return on everything staked so far", matching how
     // the headline realized-ROI number is computed rather than diverging.
+    // Per-point trade fields (market_question, side, trade_roi_pct, pnl_usd)
+    // ride along for the profile chart's tap-tooltip and peak annotation —
+    // the underlying columns were already selected above for the ledger,
+    // just not previously threaded through to the series. NOTE: the
+    // frontend chart code that reads these fields already shipped to main
+    // via 9f0476f (a wholesale copy of profile-trader.html off this same
+    // branch) — this commit supplies the backend half that copy missed,
+    // since it only touched public/*.html, not server.js. Until this
+    // lands, the live tap-tooltip/peak-annotation render with blank
+    // market/side and a "—" delta on every point.
     if (cost != null && cost > 0 && pnl != null) {
       cumCost += cost; cumPnl += pnl;
-      series.push({ t: r.closed_at, roi_pct: Math.round((cumPnl / cumCost) * 1000) / 10 });
+      series.push({
+        t: r.closed_at,
+        roi_pct: Math.round((cumPnl / cumCost) * 1000) / 10,
+        trade_roi_pct: Math.round((pnl / cost) * 1000) / 10,
+        market_question: r.market_question || null,
+        side: r.side || null,
+        pnl_usd: Math.round(pnl),
+      });
     }
   }
 
