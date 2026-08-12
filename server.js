@@ -56373,7 +56373,15 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
       side_column_type_ok: !!sideCol && sideCol.data_type === 'text',
       counts: counts[0] || null,
       most_recent_rows: sample,
-      note: 'side_column_type_ok must be true — a "smallint" here means this DB still has the pre-fix schema and every live _trackMarketInterestFromOrder() write will fail silently (caught + console.warn only). counts.total will be 0 until either the backfill script runs or a live order gets tracked.',
+      // Distinguishes "backfill is still working through trade history" from
+      // "it already ran and finished (possibly finding nothing to do)" —
+      // without this, counts.total staying at 0 right after triggering the
+      // backfill is ambiguous from the outside.
+      backfill: {
+        running: _backfillMarketInterestRunning,
+        last_run: _lastMarketInterestBackfillResult,
+      },
+      note: 'side_column_type_ok must be true — a "smallint" here means this DB still has the pre-fix schema and every live _trackMarketInterestFromOrder() write will fail silently (caught + console.warn only). counts.total will be 0 until either the backfill script runs or a live order gets tracked. backfill.last_run.totalTrades === 0 means no accepted V2 trades exist yet to backfill from — not a bug. backfill.last_run.skippedNoUser === totalTrades means the trades exist but none of their eoa_address values match a users.polymarket_address.',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -56393,6 +56401,7 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
 // real created_at so the recency-weighted scoring in suggested-markets
 // doesn't treat months-old trades as if they happened today.
 let _backfillMarketInterestRunning = false;
+let _lastMarketInterestBackfillResult = null; // { ranAt, tracked, skippedNoUser, skippedNoMeta, totalTrades, error }
 async function _runMarketInterestBackfill() {
   console.log('[market-interest-backfill] starting...');
   const trades = await dbQuery(`
@@ -56454,9 +56463,11 @@ app.post('/api/admin/backfill-market-interest', requireAdminSecret, async (req, 
     note: 'Running in the background. Poll GET /api/admin/market-interest-status to watch counts.total grow, or check Railway logs for "[market-interest-backfill]" lines.',
   });
   try {
-    await _runMarketInterestBackfill();
+    const result = await _runMarketInterestBackfill();
+    _lastMarketInterestBackfillResult = { ranAt: new Date().toISOString(), ...result };
   } catch (e) {
     console.error('[market-interest-backfill] fatal:', e.message);
+    _lastMarketInterestBackfillResult = { ranAt: new Date().toISOString(), error: e.message };
   } finally {
     _backfillMarketInterestRunning = false;
   }
