@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-08-12 — fix(server.js): restore the ROI chart's per-trade data fields that a wholesale file copy dropped (branch `claude/cumulative-roi-chart-6vppgi`, PR #223)
+
+### fix(server.js): `computeTraderCard`'s `roi_series` was silently missing the fields its own live frontend requires
+- **Root cause:** a prior fix on this branch (`537259a`) added `trade_roi_pct`/`market_question`/`side`/`pnl_usd` to each `roi_series` point so the profile chart's tap-tooltip and peak-annotation feature could show real per-trade data instead of faking it off the aggregate. The accompanying frontend (`788e5b1`, same branch) shipped to `main` separately and early — commit `9f0476f` found this branch sitting unmerged and took `public/profile-trader.html` "wholesale" onto `main` directly, per its own commit message. That copy only touched `public/*.html` files. `server.js` was never part of it, so `main`'s `computeTraderCard` kept emitting the old two-field `{t, roi_pct}` shape while its own frontend — live in production since 2026-08-06 — expected the full four-field shape.
+- **Effect while broken:** no crash, no console error, just silent degradation — every chart-point tap showed "Unknown market" and a "—" delta instead of the real trade info, and the peak-point auto-annotation (dot + label on the largest single-trade swing) never rendered at all, since `Math.abs(undefined)` can never beat the loop's `-1` initial max.
+- **Fix:** re-added the same four fields to the `roi_series.push(...)` call in `computeTraderCard`. No frontend changes needed — `main`'s `profile-trader.html` already reads exactly these field names.
+- **Don't break:** don't ship `computeTraderCard` and `profile-trader.html` changes as separate, independently-landable units again — they share one data contract (the `roi_series` point shape) and a partial land degrades silently rather than erroring, which is exactly what makes this failure mode easy to miss.
+- **Verify:** `node --check server.js` passes. No live production check possible from this environment (sandbox has no network path to `hyperflex.network` or its Netlify previews) — confidence is high because the fix is a direct field-for-field match against `main`'s already-deployed, already-verified frontend contract, confirmed by reading both sides' source directly rather than assuming.
+- See SESSION_STATE.md 2026-08-12 for the full discovery trace (found during a self-audit of this session's own prior work, not from a bug report).
+
+---
+
 ## 2026-08-04 — fix(trading): stop wiping the CLOB session when MetaMask is merely locked (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 ### fix(market.html, creator-dashboard.html): distinguish "MetaMask locked" from "wallet actually switched"
