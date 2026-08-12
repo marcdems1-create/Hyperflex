@@ -56356,7 +56356,13 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
     }
 
     const sideCol = cols.find(c => c.column_name === 'side');
-    const [counts, sample] = await Promise.all([
+    // The backfill's first live run hit `column "eoa_address" does not
+    // exist` against polymarket_v2_trades — that name matches both the
+    // migration file AND server.js's own boot-time CREATE TABLE IF NOT
+    // EXISTS for that table, so this isn't a typo in the backfill query,
+    // it's real drift between what the code assumes and what's actually
+    // deployed. Introspect it here rather than guessing at a fix.
+    const [counts, sample, v2TradesCols] = await Promise.all([
       dbQuery(`
         SELECT COUNT(*)::int AS total,
                COUNT(DISTINCT user_id)::int AS users,
@@ -56365,6 +56371,12 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
         FROM user_market_interest
       `).catch(() => []),
       dbQuery(`SELECT user_id, token_id, category, side, trade_count, last_traded_at FROM user_market_interest ORDER BY last_traded_at DESC LIMIT 5`).catch(() => []),
+      dbQuery(`
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'polymarket_v2_trades'
+        ORDER BY ordinal_position
+      `).catch(() => []),
     ]);
 
     res.json({
@@ -56373,6 +56385,7 @@ app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res
       side_column_type_ok: !!sideCol && sideCol.data_type === 'text',
       counts: counts[0] || null,
       most_recent_rows: sample,
+      polymarket_v2_trades_columns: v2TradesCols,
       // Distinguishes "backfill is still working through trade history" from
       // "it already ran and finished (possibly finding nothing to do)" —
       // without this, counts.total staying at 0 right after triggering the
