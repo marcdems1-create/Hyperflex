@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-08-11 — feat(trading, data-api): capped-impact FAK execution + hedge-fund liquidity/edge/consensus API (PR #224, `ce75f3a`, branch `claude/polymarket-liquidity-market-making-g77fqp`)
+
+### feat(market.html, creator-dashboard.html): pre-trade slippage estimate + capped market-impact FAK execution
+- **Scope:** scoped down from "become a market maker" (out of scope for this codebase/business model) to two things that fit HYPERFLEX directly: better execution for our own users' trades, and a liquidity data product for the "Data API for Hedge Funds" revenue stream already named in CLAUDE.md.
+- **Slippage estimate:** the existing FOK-style book walk already found a safe worst-case limit price but told the user nothing about expected cost. Now computes a volume-weighted average fill price from the same walk (no extra fetch) and surfaces it before signing.
+- **Capped market-impact:** orders were already tagged `orderType: 'FAK'` on the wire (CLAUDE.md rule 13) but priced like FOK — walking as deep into the book as needed to guarantee a full fill regardless of price. Limit is now capped at best price ± 3% (`MAX_MARKET_IMPACT_PCT`). Small/typical orders unaffected (already clear within a level or two); a large order against a thin book fills whatever clears within the cap and lets FAK's native partial-fill behavior cancel the rest.
+- **Partial-fill handling:** compares `takingAmount`/`makingAmount` against the requested amount post-response; a genuine partial fill pre-fills the same still-open form with the remainder (1-2 signatures worst case, never a resubmit-from-scratch). Explicitly skips detection on `status:'delayed'` (order accepted, not yet matched) to avoid double-filling a pending order — a separate, already-documented open issue, not touched here.
+- **Don't break:** the 3% cap (`MAX_MARKET_IMPACT_PCT`) is a fixed constant, not user-adjustable yet — open question on record for whether to match Polymarket's own ~10% default instead.
+- **Verify:** simulated a thin-book walk — a $1000 BUY that would have paid 63.0¢ to force a full fill instead fills 24% at 60.8¢ avg, with $760 correctly pre-filled as the remainder. `node --check server.js` clean.
+
+### feat(lib/data-api-routes.js, server.js, public/api-docs.html): hedge-fund liquidity/edge/consensus data API
+- Fixed `active_consensus` hardcoded to `0` in `/api/v1/smart-money/flow` despite `whale_consensus_signals` holding real data.
+- Added `GET /api/v1/liquidity` — live CLOB depth/imbalance per market, reusing `buildAlphaList()`'s existing depth computation.
+- Added `GET /api/v1/edge-scores` — full 8-signal Edge Score breakdown per market.
+- Added `GET /api/v1/smart-money/consensus` — active whale consensus signals with full detail.
+- Added `GET /api/v1/liquidity/:marketId/history` — historical depth trend from a new `market_liquidity_snapshots` table, written from real `buildAlphaList` pipeline runs at ~5min resolution, self-pruning past 30 days.
+- All free/unauthenticated, matching the existing "EARLY ACCESS: All endpoints free until 1K users" posture in `server.js` — no billing/tier work included this round.
+- Documented all four new endpoints on `/api-docs`.
+- **Verify:** `node --check` clean on `server.js`, `lib/data-api-routes.js`, and the changed inline scripts. **Not yet live-verified against production** — this environment (and a second Claude Code Remote session spawned specifically to try a different network path) both hit a hard 403 org-egress-policy denial on `hyperflex.network:443`. Someone with real browser/curl access needs to confirm all four endpoints return non-empty, correctly-shaped data, especially `active_consensus` on the consensus endpoint. See SESSION_STATE.md 2026-08-11 for the full trace.
+
+---
+
 ## 2026-08-04 — fix(trading): stop wiping the CLOB session when MetaMask is merely locked (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 ### fix(market.html, creator-dashboard.html): distinguish "MetaMask locked" from "wallet actually switched"
