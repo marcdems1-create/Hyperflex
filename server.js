@@ -56333,6 +56333,53 @@ async function _trackMarketInterestFromOrder(orderObj) {
   }
 }
 
+// One-shot diagnostic for migration #63 — confirms the table actually
+// exists with the right column types (side must be TEXT, not the original
+// SMALLINT — see the post-merge review fix) without digging through
+// Railway boot logs. GET /api/admin/market-interest-status?secret=$ADMIN_SECRET
+app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const cols = await dbQuery(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_name = 'user_market_interest'
+      ORDER BY ordinal_position
+    `).catch(() => []);
+
+    if (!cols.length) {
+      return res.json({
+        table_exists: false,
+        note: 'user_market_interest has no columns per information_schema — either the boot bootstrap has not run yet (check for a "[boot] user_market_interest create:" warning in Railway logs) or this DB predates migration #63.',
+      });
+    }
+
+    const sideCol = cols.find(c => c.column_name === 'side');
+    const [counts, sample] = await Promise.all([
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(DISTINCT user_id)::int AS users,
+               COUNT(*) FILTER (WHERE side IS NOT NULL)::int AS with_side,
+               MAX(last_traded_at) AS most_recent_trade
+        FROM user_market_interest
+      `).catch(() => []),
+      dbQuery(`SELECT user_id, token_id, category, side, trade_count, last_traded_at FROM user_market_interest ORDER BY last_traded_at DESC LIMIT 5`).catch(() => []),
+    ]);
+
+    res.json({
+      table_exists: true,
+      columns: cols,
+      side_column_type_ok: !!sideCol && sideCol.data_type === 'text',
+      counts: counts[0] || null,
+      most_recent_rows: sample,
+      note: 'side_column_type_ok must be true — a "smallint" here means this DB still has the pre-fix schema and every live _trackMarketInterestFromOrder() write will fail silently (caught + console.warn only). counts.total will be 0 until either the backfill script runs or a live order gets tracked.',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/polymarket/order', async (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
   // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
