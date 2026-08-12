@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS user_market_interest (
   condition_id     TEXT,
   question         TEXT,
   category         TEXT NOT NULL DEFAULT 'other',
-  side             SMALLINT,
+  -- 'BUY'/'SELL' as sent in the CLOB V2 wire body — not numeric.
+  side             TEXT,
   trade_count      INT NOT NULL DEFAULT 1,
   first_traded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_traded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),

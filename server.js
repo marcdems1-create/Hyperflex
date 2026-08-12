@@ -50957,8 +50957,21 @@ app.get('/api/member/:userId/suggested-markets', async (req, res) => {
       [userId]
     ).catch(() => []);
 
+    // buildAlphaList()'s category taxonomy (crypto/politics/sports/
+    // entertainment/tech/other) is narrower than topic_preferences' saved
+    // whitelist (which also allows finance/science/world — see POST
+    // /api/user/topics). 'world' maps cleanly onto 'politics' (detectCategory
+    // itself folds geopolitical content into politics); 'finance'/'science'
+    // have no alpha-market equivalent today, so they're dropped from
+    // category scoring rather than producing a category that can never
+    // match a market.
+    const ALPHA_CATEGORIES = new Set(['crypto', 'politics', 'sports', 'entertainment', 'tech', 'other']);
     const scores = {};
-    for (const pref of topicPrefs) scores[pref] = (scores[pref] || 0) + 30;
+    for (const pref of topicPrefs) {
+      const mapped = pref === 'world' ? 'politics' : pref;
+      if (!ALPHA_CATEGORIES.has(mapped)) continue;
+      scores[mapped] = (scores[mapped] || 0) + 30;
+    }
 
     const now = Date.now();
     const tradedTokenIds = new Set();
@@ -50970,11 +50983,21 @@ app.get('/api/member/:userId/suggested-markets', async (req, res) => {
       recencyScores[r.category] = (recencyScores[r.category] || 0) + weight;
     }
 
-    // Cap recency-derived score mass at 70% of the combined total.
+    // Cap recency-derived score mass at 70% of the COMBINED (post-scaling)
+    // total. Solving scaledRecency <= 0.7*(prefTotal + scaledRecency) for
+    // scaledRecency gives scaledRecency <= (0.7/0.3) * prefTotal — capping
+    // against the unscaled (recencyTotal + prefTotal) sum instead (as a
+    // prior version of this code did) under-caps: it lets recency's actual
+    // share of the final total exceed 70% whenever recencyTotal is large.
+    // When prefTotal is 0 there's nothing for recency to crowd out, so no
+    // cap applies.
     const recencyTotal = Object.values(recencyScores).reduce((a, b) => a + b, 0);
     const prefTotal = Object.values(scores).reduce((a, b) => a + b, 0);
-    const recencyCap = (recencyTotal + prefTotal) * 0.7;
-    const scale = (recencyTotal > recencyCap && recencyTotal > 0) ? (recencyCap / recencyTotal) : 1;
+    let scale = 1;
+    if (prefTotal > 0 && recencyTotal > 0) {
+      const maxScaledRecency = (0.7 / 0.3) * prefTotal;
+      scale = Math.min(1, maxScaledRecency / recencyTotal);
+    }
     for (const [cat, v] of Object.entries(recencyScores)) {
       scores[cat] = (scores[cat] || 0) + v * scale;
     }
@@ -56246,18 +56269,30 @@ function _classifyMarketCategory(question) {
 
 // Gamma lookup by CLOB token id — no existing helper covers this param
 // (condition_id/slug lookups exist but token_id doesn't map to either).
+// Cached: question/conditionId for a given token_id are effectively static,
+// and this fires on every accepted order (unlike the backfill script, which
+// only runs once) — an uncached call here would hit Gamma once per trade on
+// popular markets.
+const _marketByTokenIdCache = new Map(); // tokenId -> { ts, meta }
+const _MARKET_BY_TOKEN_ID_TTL_MS = 15 * 60 * 1000;
 async function _fetchMarketByTokenId(tokenId) {
   if (!tokenId) return null;
+  const cached = _marketByTokenIdCache.get(tokenId);
+  if (cached && (Date.now() - cached.ts < _MARKET_BY_TOKEN_ID_TTL_MS)) return cached.meta;
   const body = await _gammaFetchJson(`https://gamma-api.polymarket.com/markets?clob_token_ids=${encodeURIComponent(tokenId)}`);
   const arr = _gammaUnwrap(body);
   const m = arr[0];
-  if (!m) return null;
-  return {
+  const meta = m ? {
     question: m.question || null,
     conditionId: m.conditionId || m.condition_id || null,
-  };
+  } : null;
+  _marketByTokenIdCache.set(tokenId, { ts: Date.now(), meta });
+  return meta;
 }
 
+// `side` is stored as-is ("BUY"/"SELL", per the CLOB V2 wire body — see
+// CLAUDE.md's "POST /order JSON body" spec). NOT numeric — Number("BUY")
+// is NaN, which a SMALLINT column would reject outright.
 async function _trackMarketInterest(userId, tokenId, conditionId, question, category, side) {
   if (!userId || !tokenId) return;
   try {
@@ -56270,7 +56305,7 @@ async function _trackMarketInterest(userId, tokenId, conditionId, question, cate
         side = EXCLUDED.side,
         condition_id = COALESCE(user_market_interest.condition_id, EXCLUDED.condition_id),
         question = COALESCE(user_market_interest.question, EXCLUDED.question)
-    `, [userId, String(tokenId), conditionId || null, question || null, category || 'other', side != null ? Number(side) : null]);
+    `, [userId, String(tokenId), conditionId || null, question || null, category || 'other', side != null ? String(side) : null]);
   } catch (e) {
     console.warn('[market-interest] track failed:', e.message);
   }
@@ -63042,7 +63077,7 @@ if (pool) {
         condition_id     TEXT,
         question         TEXT,
         category         TEXT NOT NULL DEFAULT 'other',
-        side             SMALLINT,
+        side             TEXT,
         trade_count      INT NOT NULL DEFAULT 1,
         first_traded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_traded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
