@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-12 (Smart-money-on-your-book vs. Bullpen Whales — comparison doc + illustrative mockup, research only, nothing built)
+
+**Shipped (with hashes):**
+- `20f595c` (pushed to `claude/smart-money-comparison-5rj4d7`, **not merged to main, no PR opened** — wasn't asked for one) — `docs/specs/smart-money-book-bullpen-comparison-2026-08-10.md`. Covers: (1) Bullpen frames inflow as direction+convergence first, wallet-grade second (WalletScope is a drill-down); our planned Phase 1 SHARP-tier list inverts that — CLV grade is the filter before a row ever renders. (2) Bullpen's language is real-time streaming ("before the crowd piles in"); we're snapshot-on-login, consistent with the rest of the platform (`syncAllUserPositions()` hourly, `/connect` ingestion at 8.5–14.7s) — recommends NOT chasing real-time parity. (3) UI patterns worth taking: direction-as-text not just color, convergence grouping (maps onto the existing whale-cluster `consensusMap` logic already in server.js), size-as-visual-weight. Worth explicitly skipping: chronological sort, grade-behind-a-click.
+- Followed by an illustrative HTML mockup (Artifact + sent directly as a file, **not committed to the repo** — lives only in this session's `/tmp` scratchpad and as a private claude.ai artifact) showing the three recommended patterns applied to a fake SHARP-tier wallet list, styled with the site's real tokens (Inter/JetBrains Mono, paper/gold/green/red/blue). Wallet handles reused from CLAUDE.md's already-public hand-verified set (taerv534, MELOCOTON007, TB14, gloriafoster); dollar figures are placeholders, not real data.
+
+**Active blockers:**
+- **Doc's Bullpen claims are secondary-source only, not first-hand-verified.** WebFetch to `bullpen.fi`, `docs.bullpen.fi`, and `cli.bullpen.fi` all returned `EGRESS_BLOCKED` this session — every claim about Bullpen's actual UI comes from search-engine snippets of Bullpen's own blog/docs and third-party "7 tools" roundups (Medium/PANews/Odaily/MEXC), never a direct screenshot or walkthrough. Flagged inline in the doc itself. If this feature moves toward a real build, get an actual look at Bullpen (Marc likely has access) before copying any specific pattern as gospel.
+- **Unrelated, but still open and directly gates this whole feature regardless of the doc/mockup above:** the `GET /api/admin/wallet-position-schema` live curl from 2026-08-05c is still not run. Not touched this session. Still needs Marc to run it with the real `ADMIN_SECRET` (or paste the value) — Claude has no way to obtain that secret in this sandbox.
+- **The mockup exists nowhere durable.** It's not in the repo, not linked from any doc. If Marc wants to keep referencing it, it should get pulled into `docs/specs/` as a static file (or at minimum this entry is the only pointer to where it came from) — right now it only survives as long as the sent file / artifact link does.
+
+**Queued (priority order):**
+1. Marc reviews the comparison doc + mockup and decides whether/how the expanded SHARP-tier wallet list should differ from Bullpen's pattern (convergence grouping, row-level grade, weight bars) — this doc's whole purpose was to unblock that decision, nothing past it has happened yet.
+2. Wallet-position-schema curl (see blocker above) — separate, older ask, still open, still gates actual Phase 1 build start per the 9d7341d prerequisite named in this session's own task.
+3. If Marc wants a PR for the comparison doc, open one — not done, wasn't requested.
+
+**Notes for next session:**
+- Comparison doc + mockup are prep/scoping only — no schema, endpoint, or `public/` changes happened this session, matching the explicit "what this doesn't do" scope from the task.
+- If the mockup's direction gets picked up for a real build, treat it as a rough sketch of the three patterns only — it wasn't built against `home-kings.html`'s actual component conventions (trader-card.js render path, existing CSS classes) and shouldn't be copy-pasted as production CSS.
+
 ## 2026-08-08c (mobile overflow sweep across the site; fixed /finance's unresponsive 3-column terminal layout — shipped, verified live)
 
 **Shipped (`7153c02`, pushed, verified `git log origin/main --oneline -1` and re-checked live on production after a hard-reload got past a browser-cache false negative):**
