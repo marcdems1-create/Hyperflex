@@ -1438,7 +1438,13 @@ function initCardVisuals(root){
 // fetch never blocks card paint. A trader with no open position gets no
 // Trade button at all — an honest gap, not a fabricated link.
 var TRADE_DEFAULT_USD = 25; // matches profile-trader.html's copy-chip default
+// Prefer the position's own market slug. market_url points at the PARENT
+// event, which for a multi-outcome market (most of them) is a different
+// market at a different price than the one this position is in — a Trade
+// button quoting 41¢ must not land on a page offering 96¢. The market_url
+// parse stays as a fallback for any position without market_slug.
 function tradeMarketSlug(p){
+  if (p.market_slug) return p.market_slug;
   var m = /polymarket\.com\/event\/([^/?#]+)/.exec(p.market_url || '');
   return m ? m[1] : null;
 }

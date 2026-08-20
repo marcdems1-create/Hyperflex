@@ -13884,8 +13884,20 @@ app.get('/api/live-calls', async (req, res) => {
         const movePct = ((price - entry) / entry) * 100;
         if (Math.abs(movePct) > LIVE_CALLS_MAX_MOVE_PCT) continue;
 
-        const slug = p.eventSlug || p.slug || null;
-        if (!slug) continue; // without a slug there is no trade page to send anyone to
+        // `slug` (the individual market), NOT `eventSlug` (its parent
+        // event). Nearly every position is one leg of a multi-outcome
+        // event: the position, the title, and curPrice all describe the
+        // LEG, so linking to the parent lands the user on a different
+        // market at a different price than the card just quoted.
+        // Verified against production 2026-08-20 — for a real card quoting
+        // "Trade NO at 90¢":
+        //   leg   slug -> "YES 11¢ · NO 89¢ · Volume $9K"   (matches)
+        //   event slug -> "YES  4¢ · NO 96¢ · Volume $0K"   (wrong market)
+        // Sending someone to buy at a price we did not quote is the single
+        // worst thing this surface could do, so the leg slug is required
+        // and a position without one is dropped.
+        const slug = p.slug || null;
+        if (!slug) continue; // without a market slug there is no honest trade page to send anyone to
 
         calls.push({
           market: {
@@ -36137,6 +36149,15 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       pnl: parseFloat(p.cashPnl) || 0,
       pnl_pct: (parseFloat(p.initialValue) || 0) > 0 ? ((parseFloat(p.cashPnl) || 0) / parseFloat(p.initialValue)) * 100 : 0,
       market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+      // The INDIVIDUAL market's slug, additive alongside market_url. Nearly
+      // every position is one leg of a multi-outcome event, and market_url
+      // deliberately points at the parent event (correct for "view this on
+      // Polymarket"). But an internal /market/:slug trade link must target
+      // the leg the position is actually in — the parent event page quotes
+      // a different market at a different price (verified on production
+      // 2026-08-20: leg "NO 89¢" vs parent "NO 96¢" for the same position).
+      // Existing consumers of market_url are unaffected.
+      market_slug: p.slug || null,
       icon: p.icon || null,
       end_date: p.endDateIso || p.endDate || null,
       // Settlement state — lets the client compute correct open/settled/total
