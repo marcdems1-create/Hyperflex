@@ -734,10 +734,25 @@
     object-fit:cover;background:var(--surface-2);
     border:1px solid var(--border);
   }
+  /* Deterministic stand-in when Polymarket has no icon for a market, or the
+     one it has fails to load. Same box as .call-icon so the card's layout is
+     identical either way. */
+  .call-icon-fb{
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-sans);font-size:1.05rem;font-weight:800;
+    letter-spacing:-0.02em;
+  }
   .call-q{
     font-size:0.95rem;line-height:1.4;color:var(--ink);
     margin:0;font-weight:600;flex:1;min-width:0;
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  }
+
+  /* Plain-English framing above the rail, for visitors who have never used a
+     prediction market and would otherwise bounce off the pricing. */
+  .calls-intro{
+    font-family:var(--font-sans);font-size:0.79rem;line-height:1.55;
+    color:var(--ink-muted);padding:0 20px 12px;margin:-4px 0 0;max-width:66ch;
   }
   .call-side{
     display:inline-block;
@@ -1087,6 +1102,7 @@
     hr.div{margin:22px 40px;}
 
     .calls-rail{padding:2px 40px 10px;gap:16px;}
+    .calls-intro{padding:0 40px 14px;}
     .calls-rail .call-card{flex:0 0 330px;}
     .calls-disclosure{padding:12px 40px 0;}
 
@@ -1139,7 +1155,7 @@
   <header class="hero">
     <p class="eyebrow">On-chain trading, graded honestly</p>
     <h1 class="headline">What&rsquo;s your score?</h1>
-    <p class="subline">Every trade you&rsquo;ve made, on the record — <b>wins and losses</b>, graded against what actually happened. Not what you screenshotted.</p>
+    <p class="subline">Connect a wallet to see its real Polymarket record — every resolved trade, <b>wins and losses</b>, scored against how the market actually settled.</p>
 
     <div class="cta-row">
       <a class="btn-connect" href="/connect">Connect Wallet</a>
@@ -1162,6 +1178,7 @@
       <span class="section-title hero-title">Live calls <span class="section-count" id="countCalls"></span></span>
       <a class="section-more" href="/traders">SEE THE BOARD &rarr;</a>
     </div>
+    <p class="calls-intro">On Polymarket, an outcome trades between 1&cent; and 99&cent; &mdash; buy a share at 90&cent; and it pays $1 if that outcome happens. These are positions traders on the verified board hold right now.</p>
     <div class="calls-rail" id="callsRail"><div class="skel" style="width:280px;flex-shrink:0;height:300px;"></div></div>
     <p class="calls-disclosure" id="callsDisclosure"></p>
   </section>
@@ -1721,6 +1738,28 @@ function tickCountdowns(){
 }
 setInterval(tickCountdowns, 1000);
 
+// Market artwork. Polymarket's positions API exposes exactly one image
+// field (`icon`) and it can be null, or a URL that 404s. Rather than leave a
+// ragged hole in the card, fall back to a deterministic tile: colour derived
+// from the slug so a given market always looks the same, plus its first
+// letter. Never a broken-image glyph, never an empty gap.
+function marketTileHtml(m){
+  var seed = String(m.slug || m.question || '');
+  var hash = 0;
+  for (var i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  var hue = hash % 360;
+  var letter = (String(m.question || '?').trim()[0] || '?').toUpperCase();
+  return '<span class="call-icon call-icon-fb" aria-hidden="true" style="background:hsl(' + hue + ',38%,26%);color:hsl(' + hue + ',70%,78%)">' + esc(letter) + '</span>';
+}
+function marketIconHtml(m){
+  if (!m.icon) return marketTileHtml(m);
+  // onerror swaps in the same tile rather than removing the image, so a dead
+  // URL cannot change the card's layout.
+  return '<img class="call-icon" src="' + esc(m.icon) + '" alt="" loading="lazy"'
+    + ' onerror="this.outerHTML=this.getAttribute(\'data-fb\')"'
+    + ' data-fb="' + esc(marketTileHtml(m)) + '">';
+}
+
 function callCardHtml(c){
   var t = c.trader, m = c.market;
   // Defence in depth: /api/live-calls already drops multi-outcome markets
@@ -1756,7 +1795,7 @@ function callCardHtml(c){
     + '</a>'
 
     + '<div class="call-market">'
-      + (m.icon ? '<img class="call-icon" src="' + esc(m.icon) + '" alt="" loading="lazy" onerror="this.remove()">' : '')
+      + marketIconHtml(m)
       + '<p class="call-q">' + esc(m.question) + '</p>'
     + '</div>'
     + '<span class="call-side ' + sideCls + '">' + esc(m.side) + '</span>'
@@ -1776,8 +1815,14 @@ function callCardHtml(c){
       + '<span class="call-roi-key">RETURN IF<br>' + esc(m.side) + ' RESOLVES</span>'
     + '</div>'
 
-    + '<a class="call-cta" href="' + esc(tradeHref) + '">Trade ' + esc(m.side) + ' at ' + esc(centsOf(c.current_price)) + ' &rarr;</a>'
-    + '<p class="call-foot">They hold $' + esc(Number(c.trader_position_usd).toLocaleString('en-US')) + ' · you set your own size</p>'
+    + '<a class="call-cta" href="' + esc(tradeHref) + '">Trade ' + esc(m.side) + ' at ' + esc(centsOf(c.current_price)) + ' on Polymarket &rarr;</a>'
+    // Spells out the mechanic in plain English. Someone who has never used a
+    // prediction market cannot tell what "Trade NO at 90¢" buys or what it
+    // pays, and bouncing them for lack of jargon costs us the exact visitor
+    // this surface exists to convert.
+    + '<p class="call-foot">' + esc(centsOf(c.current_price)) + ' a share, pays $1 if ' + esc(m.side) + ' resolves'
+      + ' · they hold $' + esc(Number(c.trader_position_usd).toLocaleString('en-US'))
+      + ' · you set your own size</p>'
   + '</article>';
 }
 
