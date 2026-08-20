@@ -13642,6 +13642,7 @@ app.get('/api/board-stats', async (req, res) => {
     // OUR tracked wallets deployed, not Polymarket's own category volume.
     const catAgg = new Map();
     let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
+    let uncategorizedCapital = 0, uncategorizedTrades = 0;
     let firstClose = null, lastClose = null;
 
     for (const t of durableRows) {
@@ -13657,7 +13658,18 @@ app.get('/api/board-stats', async (req, res) => {
       }
 
       const category = classifyCardCategory(t.market_question);
-      if (category === 'other') continue; // classifier residual, not a category — same exclusion as /api/kings
+      if (category === 'other') {
+        // The classifier's residual bucket. It is NOT a category (same
+        // exclusion /api/kings makes), so it never gets a leaderboard or a
+        // win-rate row — but its capital is real and must be reported, or a
+        // share-of-capital chart silently drops it. Measured 2026-08-20:
+        // $25.1M of $163M, 15% of the board. A donut summing to 85% of the
+        // headline "capital graded" figure is a number that contradicts the
+        // tile directly above it.
+        uncategorizedCapital += cost;
+        uncategorizedTrades++;
+        continue;
+      }
       if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
       const c = catAgg.get(category);
       c.trades++; c.capital += cost;
@@ -13712,6 +13724,9 @@ app.get('/api/board-stats', async (req, res) => {
         last_resolution_at: lastClose ? new Date(lastClose).toISOString() : null,
       },
       categories,
+      // Reported so the capital-share chart can account for 100% of the
+      // graded capital rather than silently dropping the residual.
+      uncategorized: { capital_usd: Math.round(uncategorizedCapital), trades: uncategorizedTrades },
       score_distribution: { buckets: scoreBuckets, unscored },
       wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
       scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',

@@ -1664,6 +1664,7 @@ function fmtCountdown(ms){
   var s = Math.floor(ms / 1000);
   var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
       m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (d >= 30) return d + 'd';
   if (d > 0) return d + 'd ' + h + 'h';
   if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
   return m + 'm ' + String(sec).padStart(2, '0') + 's';
@@ -1847,29 +1848,37 @@ function renderKpis(t){
 // folds into one neutral Other slice rather than being given generated
 // hues that would be indistinguishable under colour-vision deficiency.
 var CAT_COLORS = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)'];
-function foldToTopThree(categories){
-  var total = categories.reduce(function(s, c){ return s + (c.capital_usd || 0); }, 0);
+// `residual` is the classifier's unclassified bucket (board-stats'
+// `uncategorized`). It is folded into the Other slice so the donut accounts
+// for 100% of graded capital — without it the ring summed to 85% of the
+// "Capital graded" figure in the tile directly above, which read as one of
+// the two numbers being wrong.
+function foldToTopThree(categories, residual){
+  residual = residual || { capital_usd: 0, trades: 0 };
+  var total = categories.reduce(function(s, c){ return s + (c.capital_usd || 0); }, 0)
+            + (residual.capital_usd || 0);
   if (!total) return null;
   var sorted = categories.slice().sort(function(a, b){ return b.capital_usd - a.capital_usd; });
   var head = sorted.slice(0, 3).map(function(c, i){
     return { label: c.label, value: c.capital_usd, color: CAT_COLORS[i], trades: c.trades };
   });
   var tail = sorted.slice(3);
-  if (tail.length) {
+  var otherValue = tail.reduce(function(s, c){ return s + c.capital_usd; }, 0) + (residual.capital_usd || 0);
+  if (otherValue > 0) {
     head.push({
       label: 'Other',
-      value: tail.reduce(function(s, c){ return s + c.capital_usd; }, 0),
+      value: otherValue,
       color: 'var(--cat-other)',
-      trades: tail.reduce(function(s, c){ return s + c.trades; }, 0),
-      tailCount: tail.length
+      trades: tail.reduce(function(s, c){ return s + c.trades; }, 0) + (residual.trades || 0),
+      tailCount: tail.length || null
     });
   }
   return { slices: head, total: total };
 }
 
-function renderCapitalDonut(categories){
+function renderCapitalDonut(categories, residual){
   var host = document.getElementById('capitalChart');
-  var folded = foldToTopThree(categories || []);
+  var folded = foldToTopThree(categories || [], residual);
   if (!folded) { host.innerHTML = '<p class="chart-empty">No graded capital to break down yet.</p>'; return; }
 
   var R = 58, C = 2 * Math.PI * R, GAP = 3;
@@ -1959,7 +1968,8 @@ function renderScoreHist(dist){
       return '<span class="hist-tick">' + b.min + '</span>';
     }).join('') + '</div>'
   + (dist.unscored ? '<p class="chart-note" style="margin:12px 0 0;">' + fmtInt(dist.unscored)
-      + ' ranked wallet' + (dist.unscored === 1 ? ' has' : 's have') + ' no Flex Score yet and are not plotted.</p>' : '');
+      + (dist.unscored === 1 ? ' ranked wallet has no Flex Score yet and is not plotted.'
+                             : ' ranked wallets have no Flex Score yet and are not plotted.') + '</p>' : '');
 
   document.getElementById('tblScores').innerHTML = tableHtml(
     'Ranked wallets by Flex Score',
@@ -2026,7 +2036,7 @@ function loadBoardStats(){
     .then(function(d){
       if (!d) throw new Error('no data');
       renderKpis(d.totals || {});
-      renderCapitalDonut(d.categories);
+      renderCapitalDonut(d.categories, d.uncategorized);
       renderWinLoss(d.categories);
       renderScoreHist(d.score_distribution || {});
       renderSplit(d.wallet_roi_split);
