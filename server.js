@@ -13594,6 +13594,286 @@ app.get('/api/kings', async (req, res) => {
   }
 });
 
+// ── GET /api/board-stats ─────────────────────────────────────────────────
+// Public, no auth — the homepage's chart data. Every figure here is an
+// aggregate of the SAME durable-trade population the leaderboard scores on,
+// computed from the same helpers (_computeRoiLeaderboard,
+// _computeCategoryRoiLeaderboards, classifyCardCategory). No new grading
+// math, no estimates, no sampling. A chart on the front page is a public
+// claim about the record, so it must be derivable from the same rows a
+// trader's own profile is derivable from — anything that can't be is simply
+// omitted (null) rather than approximated.
+//
+// Deliberately includes losses in every breakdown. The wins/losses split IS
+// the chart — a scoreboard that only plots wins is the thing this product
+// exists to replace.
+let _boardStatsCache = null;
+const BOARD_STATS_TTL_MS = 5 * 60 * 1000; // matches the homepage's own 3-min poll comfortably
+
+app.get('/api/board-stats', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    if (_boardStatsCache && Date.now() - _boardStatsCache.ts < BOARD_STATS_TTL_MS) {
+      return res.json(_boardStatsCache.data);
+    }
+
+    const [board, byCategory, durableRows, totalsRows] = await Promise.all([
+      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
+      _computeCategoryRoiLeaderboards().catch(() => null),
+      dbQuery(`
+        SELECT market_question, entry_cost_usd, realized_pnl, closed_at
+        FROM realized_trades
+        WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL
+          AND closed_at IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+      `).catch(e => { console.warn('[board-stats] durable fetch:', e.message); return null; }),
+      dbQuery(`
+        SELECT COUNT(*)::int AS graded_trades,
+               COUNT(DISTINCT user_id)::int AS wallets_tracked,
+               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable_trades
+        FROM realized_trades WHERE closed_at IS NOT NULL
+      `).catch(() => null),
+    ]);
+    if (durableRows == null) return res.status(500).json({ error: 'durable trade query failed' });
+
+    // ── per-category rollup over every durable trade (not just ranked
+    // wallets') so a category's real depth isn't understated by a thin
+    // qualifying set — same choice /api/feed/category-wins makes for its
+    // liquidity figure, and the same documented caveat: this is capital
+    // OUR tracked wallets deployed, not Polymarket's own category volume.
+    const catAgg = new Map();
+    let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
+    let firstClose = null, lastClose = null;
+
+    for (const t of durableRows) {
+      const pnl = Number(t.realized_pnl);
+      const cost = Number(t.entry_cost_usd);
+      capitalUsd += cost;
+      if (pnl > 0) wins++; else if (pnl < 0) losses++; else pushes++;
+
+      const ms = new Date(t.closed_at).getTime();
+      if (!Number.isNaN(ms)) {
+        if (firstClose == null || ms < firstClose) firstClose = ms;
+        if (lastClose == null || ms > lastClose) lastClose = ms;
+      }
+
+      const category = classifyCardCategory(t.market_question);
+      if (category === 'other') continue; // classifier residual, not a category — same exclusion as /api/kings
+      if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
+      const c = catAgg.get(category);
+      c.trades++; c.capital += cost;
+      if (pnl > 0) c.wins++; else if (pnl < 0) c.losses++;
+    }
+
+    const categories = [...catAgg.entries()]
+      .map(([category, c]) => ({
+        category,
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+        trades: c.trades,
+        wins: c.wins,
+        losses: c.losses,
+        // Win rate is over decided trades only (wins+losses); a push is not
+        // a graded outcome and must not dilute the denominator.
+        win_rate_pct: (c.wins + c.losses) > 0 ? Math.round((c.wins / (c.wins + c.losses)) * 1000) / 10 : null,
+        capital_usd: Math.round(c.capital),
+        ranked_wallets: (byCategory && byCategory[category]) ? byCategory[category].qualifying_count : null,
+      }))
+      .sort((a, b) => b.capital_usd - a.capital_usd);
+
+    // ── Flex Score distribution across the ranked board, in tens. A wallet
+    // on the board with no flex_score yet is counted separately rather than
+    // bucketed at zero, which would invent a rating it doesn't have.
+    const rankedRows = board ? board.rows : [];
+    const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
+      label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
+    }));
+    let unscored = 0, profitableWallets = 0, losingWallets = 0;
+    for (const r of rankedRows) {
+      if (r.flex_score == null) unscored++;
+      else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
+      if (r.raw_weighted_roi_pct != null) {
+        if (r.raw_weighted_roi_pct > 0) profitableWallets++;
+        else if (r.raw_weighted_roi_pct < 0) losingWallets++;
+      }
+    }
+
+    const totals = totalsRows && totalsRows[0] ? totalsRows[0] : {};
+    const data = {
+      totals: {
+        ranked_wallets: board ? rankedRows.length : null,
+        minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+        wallets_tracked: totals.wallets_tracked ?? null,
+        graded_trades: totals.graded_trades ?? null,
+        durable_trades: totals.durable_trades ?? null,
+        scored_trades: durableRows.length,
+        wins, losses, pushes,
+        win_rate_pct: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 1000) / 10 : null,
+        capital_usd: Math.round(capitalUsd),
+        first_resolution_at: firstClose ? new Date(firstClose).toISOString() : null,
+        last_resolution_at: lastClose ? new Date(lastClose).toISOString() : null,
+      },
+      categories,
+      score_distribution: { buckets: scoreBuckets, unscored },
+      wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
+      scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',
+      updated_at: new Date().toISOString(),
+    };
+
+    _boardStatsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (e) {
+    console.error('[board-stats]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/live-calls ──────────────────────────────────────────────────
+// Public, no auth — OPEN positions currently held by traders who are on the
+// verified durable board, for the homepage's "take this trade" surface.
+//
+// ⛔ Gate 4 (CLAUDE.md) governs this endpoint. Read it before changing:
+//   · The trader set is taken from _computeRoiLeaderboard — the SAME
+//     verified durable board every other score-bearing surface uses. A
+//     wallet that is not on that board can never appear here, and
+//     eligibility is computed server-side, never inferred by the client.
+//     A copy affordance on an unverified record is precisely the failure
+//     Gate 1 exists to prevent.
+//   · Score AND n travel with every call (rule 3 — a call never appears
+//     naked). If a trader has no flex_score, the call is dropped rather
+//     than shown with a missing number.
+//   · This endpoint returns no size recommendation. The user's stake is
+//     set by the user on the market page; the trader's own position size
+//     is shown as disclosure, never as a suggested amount.
+//   · Nothing here executes anything. It is a link to the existing manual,
+//     user-signed trade flow.
+//
+// A position is only a "live call" if it is genuinely still open and still
+// tradeable: not settled, priced strictly between 0 and 1, and with a
+// resolution date in the future. Anything else is history, not a call.
+let _liveCallsCache = null;
+const LIVE_CALLS_TTL_MS = 3 * 60 * 1000;
+const LIVE_CALLS_MIN_POSITION_USD = 50;   // dust isn't a call
+const LIVE_CALLS_TRADERS = 8;             // caps upstream fan-out
+
+app.get('/api/live-calls', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    if (_liveCallsCache && Date.now() - _liveCallsCache.ts < LIVE_CALLS_TTL_MS) {
+      return res.json(_liveCallsCache.data);
+    }
+
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    if (!computed.rows.length) return res.json({ calls: [], updated_at: new Date().toISOString() });
+
+    const cards = await _buildTraderCards(computed.rows);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+
+    // Highest-rated verified wallets that actually have an address to read
+    // positions from. flex_score is required — see the rule-3 note above.
+    const shortlist = cards
+      .filter(c => c.polymarket_address && c.flex_score != null)
+      .sort((a, b) => b.flex_score - a.flex_score)
+      .slice(0, LIVE_CALLS_TRADERS);
+
+    const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+    const now = Date.now();
+
+    const perTrader = await Promise.all(shortlist.map(async (card) => {
+      const base = 'https://data-api.polymarket.com/positions?user=' + card.polymarket_address + '&limit=100&sortBy=CURRENT';
+      const [a, b] = await Promise.all([
+        fetch(base + '&winning=false', H).catch(() => null),
+        fetch(base + '&winning=true', H).catch(() => null),
+      ]);
+      const parse = async (r) => (r && r.ok) ? (await r.json().catch(() => [])) : [];
+      const raw = [...await parse(a), ...await parse(b)];
+
+      const byKey = new Map();
+      for (const p of raw) {
+        if (!p || !p.conditionId) continue;
+        byKey.set(p.conditionId + ':' + (p.outcome || ''), p);
+      }
+
+      const calls = [];
+      for (const p of byKey.values()) {
+        const price = parseFloat(p.curPrice);
+        const cost = parseFloat(p.initialValue) || 0;
+        const shares = parseFloat(p.size) || 0;
+        if (!(price > 0 && price < 1)) continue;          // resolved or untradeable
+        if (p.redeemed || p.redeemable) continue;          // already settled
+        if (cost < LIVE_CALLS_MIN_POSITION_USD) continue;  // dust
+        if (shares <= 0) continue;
+
+        const endMs = p.endDateIso || p.endDate ? new Date(p.endDateIso || p.endDate).getTime() : null;
+        if (endMs == null || Number.isNaN(endMs) || endMs <= now) continue; // no live countdown = not a live call
+
+        const entry = cost / shares;
+        if (!(entry > 0 && entry < 1)) continue;
+
+        const slug = p.eventSlug || p.slug || null;
+        if (!slug) continue; // without a slug there is no trade page to send anyone to
+
+        calls.push({
+          market: {
+            question: p.title || p.question || 'Unknown market',
+            slug,
+            condition_id: p.conditionId,
+            token_id: p.asset || null,
+            icon: p.icon || null,
+            side: (p.outcome || 'YES').toUpperCase(),
+            end_date: new Date(endMs).toISOString(),
+          },
+          entry_price: Math.round(entry * 1000) / 1000,
+          current_price: Math.round(price * 1000) / 1000,
+          // How far the price has moved since they got in, as a share of
+          // their entry — this is the trade's unrealized move, not a forecast.
+          price_move_pct: Math.round(((price - entry) / entry) * 1000) / 10,
+          // Payout math, nothing more: a share resolving in-the-money pays
+          // $1, so buying now at `price` returns (1 - price) / price. This
+          // is arithmetic on the current price, NOT a probability estimate
+          // and NOT a prediction that it will resolve that way.
+          potential_roi_pct: Math.round(((1 - price) / price) * 1000) / 10,
+          trader_position_usd: Math.round(cost),
+        });
+      }
+
+      // One call per trader — their largest live position. Showing a
+      // trader's whole book here would turn this into a market list, which
+      // is the surface the product definition rules out.
+      calls.sort((x, y) => y.trader_position_usd - x.trader_position_usd);
+      if (!calls.length) return null;
+
+      return Object.assign(calls[0], {
+        trader: {
+          user_id: card.user_id,
+          username: card.username,
+          display_name: card.display_name,
+          polymarket_address: card.polymarket_address,
+          flex_score: card.flex_score,
+          win_rate_pct: card.win_rate_pct,
+          n: card.n,
+          scope_label: card.scope_label,
+          streak: card.streak || null,
+          durable_verified: true, // server-computed: membership in the board above IS the verification
+        },
+      });
+    }));
+
+    const calls = perTrader.filter(Boolean)
+      .sort((x, y) => y.trader.flex_score - x.trader.flex_score);
+
+    const data = {
+      calls,
+      disclosure: 'Open positions held by traders on the verified board. Potential return is the payout if the market resolves in that outcome’s favour — it is arithmetic on the current price, not a forecast. Nothing here is advice.',
+      updated_at: new Date().toISOString(),
+    };
+    _liveCallsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (e) {
+    console.error('[live-calls]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/feed/category-wins ──────────────────────────────────────────
 // Public, no auth — the /feed page's "score wall": one row per market
 // category, most-liquid category first, each row a wall of real winning

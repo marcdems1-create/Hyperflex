@@ -322,6 +322,19 @@
     background:var(--green);
     flex:0 0 auto;
   }
+  /* Decorative identity glyph (HFXTraderCard.avatarHtml, shared component) —
+     sits beside the rank badge, which keeps doing its existing job. Ring
+     color reflects current streak so a rail scans for "who's hot" at a
+     glance, same convention as trader-card.css's .tcard-avatar-wrap. */
+  .card-avatar-wrap{
+    flex:0 0 auto; width:30px; height:30px; border-radius:50%;
+    padding:2px; border:1.5px solid var(--border-soft, var(--border));
+    display:flex; align-items:center; justify-content:center;
+  }
+  .card-avatar-wrap svg{display:block;width:100%;height:100%;border-radius:50%;}
+  .card-avatar-wrap.is-hot{border-color:rgba(53,176,117,.6);}
+  .card-avatar-wrap.is-cold{border-color:rgba(226,73,90,.55);}
+  .hero-card .card-avatar-wrap{width:40px;height:40px;}
   .card-handle{
     font-family:var(--font-sans);
     font-size:2.1rem;
@@ -644,6 +657,411 @@
   .hfx-stake-row input[type=range]{flex:1;}
 
   /* ══════════════════════════════════════════════════════════════════════
+     LIVE CALLS — open positions held by verified-board traders, fed by
+     GET /api/live-calls. This is the surface that turns a record into an
+     action: the trader's score and sample size are what make the market
+     worth looking at, so they lead the card and the market follows as
+     evidence — never the other way round.
+
+     The CTA links into the existing manual /market/:slug trade flow. It
+     does not size the trade and it does not execute anything (Gate 4).
+     ══════════════════════════════════════════════════════════════════════ */
+  .calls-rail{
+    display:flex;gap:12px;overflow-x:auto;
+    padding:2px 20px 8px;
+    scroll-snap-type:x proximity;scrollbar-width:none;
+  }
+  .calls-rail::-webkit-scrollbar{display:none;}
+
+  .call-card{
+    flex:0 0 86%;scroll-snap-align:start;
+    display:flex;flex-direction:column;
+    background:
+      radial-gradient(420px 150px at 50% -30px, rgba(201,146,13,0.10), transparent 70%),
+      var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px 15px 15px;
+  }
+  .call-card:hover{border-color:var(--ink-faint);}
+
+  .call-top{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:10px;margin-bottom:12px;
+  }
+  .call-live{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.11em;
+    color:var(--green);
+  }
+  .call-timer{
+    font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.04em;
+    color:var(--ink-muted);font-variant-numeric:tabular-nums;
+    background:var(--surface-2);border:1px solid var(--border);
+    border-radius:100px;padding:4px 9px;white-space:nowrap;
+  }
+  .call-timer.is-soon{color:var(--gold-bright);border-color:rgba(201,146,13,.45);}
+
+  .call-trader{
+    display:flex;align-items:center;gap:9px;
+    text-decoration:none;color:inherit;margin-bottom:12px;min-width:0;
+  }
+  .call-badge{
+    flex:0 0 auto;width:38px;height:38px;border-radius:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--gold-bright),var(--gold));
+    color:#151109;line-height:1;
+  }
+  .call-badge-val{font-family:var(--font-sans);font-size:0.95rem;font-weight:800;letter-spacing:-0.03em;}
+  .call-badge-key{font-family:var(--font-mono);font-size:0.4rem;letter-spacing:0.08em;margin-top:1px;}
+  .call-trader-id{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .call-handle{
+    font-family:var(--font-sans);font-size:0.95rem;font-weight:700;
+    color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .call-cred{
+    font-family:var(--font-mono);font-size:0.63rem;color:var(--ink-muted);
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* Market row — the event's own artwork beside the question. Polymarket
+     serves these icons, so a call reads as the actual market rather than a
+     line of text. Missing/failed icons collapse to nothing (onerror), never
+     to a broken-image glyph or a placeholder box. */
+  .call-market{display:flex;gap:10px;align-items:flex-start;margin-bottom:9px;}
+  .call-icon{
+    flex:0 0 auto;width:38px;height:38px;border-radius:8px;
+    object-fit:cover;background:var(--surface-2);
+    border:1px solid var(--border);
+  }
+  .call-q{
+    font-size:0.95rem;line-height:1.4;color:var(--ink);
+    margin:0;font-weight:600;flex:1;min-width:0;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .call-side{
+    display:inline-block;
+    /* .call-card is a flex column, so this pill would otherwise stretch to
+       the full card width — inline-block does not prevent cross-axis
+       stretch on a flex item. */
+    align-self:flex-start;
+    font-family:var(--font-mono);font-size:0.6rem;font-weight:700;letter-spacing:0.06em;
+    padding:2px 6px;border-radius:4px;margin-bottom:12px;
+  }
+  .call-side.yes{color:var(--green);background:var(--green-soft);border:1px solid rgba(53,176,117,0.35);}
+  .call-side.no{color:var(--red);background:var(--red-soft);border:1px solid rgba(226,73,90,0.35);}
+
+  /* Price track — the whole 0–100¢ range, filled to the live price, with a
+     tick where this trader actually got in. The gap between the tick and
+     the fill edge IS the move, which is the thing worth seeing. */
+  .call-track{
+    position:relative;height:6px;border-radius:3px;
+    background:var(--surface-2);margin-bottom:8px;overflow:visible;
+  }
+  .call-track-fill{
+    position:absolute;left:0;top:0;bottom:0;border-radius:3px;
+    background:linear-gradient(90deg,var(--gold),var(--gold-bright));
+  }
+  .call-entry-tick{
+    position:absolute;top:-3px;width:2px;height:12px;border-radius:1px;
+    background:var(--ink-muted);
+  }
+  .call-price-meta{
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;font-family:var(--font-mono);font-size:0.7rem;
+    color:var(--ink-faint);font-variant-numeric:tabular-nums;margin-bottom:13px;
+  }
+  .call-price-meta b{color:var(--ink);font-weight:700;}
+  .call-move{font-weight:700;font-style:normal;}
+  .call-move.up{color:var(--green);}
+  .call-move.down{color:var(--red);}
+
+  .call-roi{
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    padding:11px 12px;margin-bottom:12px;
+    background:var(--surface-2);border:1px solid var(--border-soft);
+    border-radius:var(--radius-sm);
+  }
+  .call-roi-val{
+    font-family:var(--font-sans);font-size:1.5rem;font-weight:800;
+    letter-spacing:-0.03em;color:var(--gold-bright);line-height:1;
+  }
+  .call-roi-key{
+    font-family:var(--font-mono);font-size:0.55rem;letter-spacing:0.08em;
+    color:var(--ink-faint);text-align:right;line-height:1.45;
+  }
+
+  .call-cta{
+    display:block;text-align:center;text-decoration:none;
+    font-family:var(--font-sans);font-weight:700;font-size:0.88rem;
+    color:#151109;background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+    border:1px solid var(--gold);border-radius:var(--radius-sm);
+    padding:11px 14px;
+    box-shadow:0 1px 0 rgba(255,255,255,0.25) inset, 0 8px 18px -10px rgba(201,146,13,0.6);
+    transition:transform .15s ease;
+  }
+  .call-cta:hover{transform:translateY(-1px);}
+  .call-cta:focus-visible{outline:2px solid var(--gold-bright);outline-offset:3px;}
+
+  .call-foot{
+    font-family:var(--font-mono);font-size:0.58rem;color:var(--ink-faint);
+    margin:9px 0 0;text-align:center;line-height:1.5;
+  }
+
+  .calls-disclosure{
+    font-family:var(--font-sans);font-size:0.71rem;line-height:1.55;
+    color:var(--ink-faint);padding:10px 20px 0;margin:0;max-width:62ch;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .call-cta{transition:none;}
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     THE BOARD — aggregate charts, fed by GET /api/board-stats.
+
+     Palette note (do not "improve" these hues without re-running the
+     check): the three categorical slices are #3b82f6 / #d97706 / #db2777,
+     chosen because that exact trio is the largest set that passes an
+     all-pairs colour-vision-deficiency separation check against this
+     surface (#12151b) — blue+purple and blue+cyan both collapse under
+     deuteranopia, which is why the obvious brand purple isn't here. A
+     donut is an all-pairs form, so three is the cap; everything past the
+     top three folds into a neutral "Other" slice that is always direct-
+     labelled. Green/red stay RESERVED for win/loss status and are never
+     used as a category identity.
+     ══════════════════════════════════════════════════════════════════════ */
+  :root{
+    --cat-1:#3b82f6;
+    --cat-2:#d97706;
+    --cat-3:#db2777;
+    --cat-other:#3f4654;
+    --grid-line:#1b1f29;
+  }
+
+  .board{padding:4px 0 2px;position:relative;z-index:2;}
+
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+    padding:0 20px;
+    margin-bottom:14px;
+  }
+  .kpi{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px 14px 12px;
+    position:relative;
+    overflow:hidden;
+  }
+  .kpi::after{
+    content:"";position:absolute;left:0;top:0;height:2px;width:100%;
+    background:linear-gradient(90deg,var(--gold),transparent 78%);
+    opacity:.5;
+  }
+  .kpi-val{
+    font-family:var(--font-sans);
+    font-size:1.75rem;
+    font-weight:800;
+    letter-spacing:-0.03em;
+    line-height:1.05;
+    color:var(--ink);
+  }
+  .kpi-val.is-mute{color:var(--ink-faint);}
+  .kpi-key{
+    display:block;
+    font-family:var(--font-mono);
+    font-size:0.58rem;
+    letter-spacing:0.11em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-top:7px;
+  }
+  .kpi-sub{
+    font-family:var(--font-sans);
+    font-size:0.71rem;
+    line-height:1.45;
+    color:var(--ink-muted);
+    margin-top:5px;
+  }
+
+  .chart-stack{display:flex;flex-direction:column;gap:12px;padding:0 20px;}
+  .chart-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 16px 14px;
+  }
+  .chart-head{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    gap:10px;margin-bottom:3px;
+  }
+  .chart-title{
+    font-family:var(--font-sans);
+    font-size:0.97rem;font-weight:700;letter-spacing:-0.01em;color:var(--ink);
+  }
+  .chart-note{
+    font-family:var(--font-sans);
+    font-size:0.72rem;line-height:1.5;color:var(--ink-muted);
+    margin:0 0 14px;max-width:52ch;
+  }
+  .chart-toggle{
+    flex:0 0 auto;
+    font-family:var(--font-mono);font-size:0.57rem;letter-spacing:0.09em;
+    color:var(--ink-faint);background:var(--surface-2);
+    border:1px solid var(--border);border-radius:5px;
+    padding:4px 8px;cursor:pointer;white-space:nowrap;
+  }
+  .chart-toggle:hover{color:var(--ink-muted);border-color:var(--ink-faint);}
+  .chart-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+
+  /* ---------- donut: capital share by category ---------- */
+  .donut-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  .donut{width:150px;height:150px;flex:0 0 auto;position:relative;}
+  .donut svg{width:100%;height:100%;transform:rotate(-90deg);overflow:visible;}
+  .donut-seg{
+    fill:none;stroke-width:15;
+    transition:stroke-width .18s ease,opacity .18s ease;
+    cursor:default;
+  }
+  .donut-seg:hover{stroke-width:19;}
+  .donut.has-hover .donut-seg:not(:hover){opacity:.4;}
+  .donut-center{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:1px;pointer-events:none;text-align:center;
+  }
+  .donut-center-val{
+    font-family:var(--font-sans);font-size:1.25rem;font-weight:800;
+    letter-spacing:-0.03em;color:var(--ink);line-height:1;
+  }
+  .donut-center-key{
+    font-family:var(--font-mono);font-size:0.52rem;letter-spacing:0.1em;
+    color:var(--ink-faint);text-transform:uppercase;
+  }
+
+  .legend{display:flex;flex-direction:column;gap:8px;flex:1 1 190px;min-width:170px;}
+  .legend-item{display:flex;align-items:baseline;gap:8px;font-size:0.79rem;}
+  .legend-swatch{
+    width:9px;height:9px;border-radius:2px;flex:0 0 auto;
+    transform:translateY(-1px);
+  }
+  .legend-name{color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .legend-val{
+    font-family:var(--font-mono);font-size:0.76rem;font-weight:600;
+    color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+
+  /* ---------- horizontal stacked bars: wins vs losses ---------- */
+  .wl-list{display:flex;flex-direction:column;gap:13px;}
+  .wl-row-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;margin-bottom:5px;
+  }
+  .wl-name{font-size:0.82rem;color:var(--ink);font-weight:600;}
+  .wl-rate{
+    font-family:var(--font-mono);font-size:0.76rem;font-weight:700;
+    color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+  .wl-bar{
+    display:flex;height:9px;border-radius:4px;overflow:hidden;
+    background:var(--surface-2);gap:2px; /* 2px surface gap, not a border */
+  }
+  .wl-seg{height:100%;transition:opacity .15s ease;}
+  .wl-seg.win{background:var(--green);border-radius:4px 0 0 4px;}
+  .wl-seg.loss{background:var(--red);border-radius:0 4px 4px 0;}
+  .wl-meta{
+    display:flex;gap:12px;margin-top:5px;
+    font-family:var(--font-mono);font-size:0.64rem;color:var(--ink-faint);
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- histogram: Flex Score distribution ---------- */
+  .hist{
+    display:flex;align-items:flex-end;gap:3px;
+    height:110px;padding-top:16px;
+    border-bottom:1px solid var(--grid-line);
+  }
+  .hist-col{
+    flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+    align-items:center;height:100%;position:relative;min-width:0;
+  }
+  .hist-bar{
+    width:100%;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+    border-radius:4px 4px 0 0; /* 4px rounded data-end, anchored to baseline */
+    min-height:2px;
+    transition:height .7s cubic-bezier(.16,.8,.3,1);
+  }
+  .hist-bar.is-empty{background:var(--grid-line);}
+  .hist-count{
+    position:absolute;top:-15px;left:0;right:0;text-align:center;
+    font-family:var(--font-mono);font-size:0.58rem;color:var(--ink-muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .hist-axis{
+    display:flex;gap:3px;margin-top:6px;
+  }
+  .hist-tick{
+    flex:1;text-align:center;min-width:0;
+    font-family:var(--font-mono);font-size:0.52rem;color:var(--ink-faint);
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- split bar: profitable vs losing ranked wallets ---------- */
+  .split-bar{display:flex;height:11px;border-radius:5px;overflow:hidden;gap:2px;background:var(--surface-2);}
+  .split-seg{height:100%;}
+  .split-seg.up{background:var(--green);border-radius:5px 0 0 5px;}
+  .split-seg.down{background:var(--red);border-radius:0 5px 5px 0;}
+  .split-legend{
+    display:flex;justify-content:space-between;gap:12px;margin-top:9px;
+    font-size:0.77rem;
+  }
+  .split-legend b{font-family:var(--font-mono);font-weight:700;font-variant-numeric:tabular-nums;}
+  .split-legend .up b{color:var(--green);}
+  .split-legend .down b{color:var(--red);}
+  .split-legend span{color:var(--ink-muted);}
+
+  /* ---------- table view (the WCAG-clean twin of every chart) ---------- */
+  .chart-table{width:100%;border-collapse:collapse;margin-top:4px;}
+  .chart-table caption{
+    text-align:left;font-family:var(--font-mono);font-size:0.58rem;
+    letter-spacing:0.09em;color:var(--ink-faint);text-transform:uppercase;
+    padding-bottom:8px;
+  }
+  .chart-table th,.chart-table td{
+    text-align:right;padding:6px 4px;font-size:0.75rem;
+    border-bottom:1px solid var(--border-soft);
+    font-variant-numeric:tabular-nums;
+  }
+  .chart-table th{
+    font-family:var(--font-mono);font-size:0.57rem;letter-spacing:0.08em;
+    color:var(--ink-faint);text-transform:uppercase;font-weight:400;
+  }
+  .chart-table th:first-child,.chart-table td:first-child{text-align:left;}
+  .chart-table td{color:var(--ink-muted);font-family:var(--font-mono);}
+  .chart-table td:first-child{color:var(--ink);font-family:var(--font-sans);}
+  [hidden]{display:none !important;}
+
+  .board-foot{
+    font-family:var(--font-sans);font-size:0.71rem;line-height:1.55;
+    color:var(--ink-faint);padding:14px 20px 0;margin:0;max-width:60ch;
+  }
+
+  .chart-empty{
+    font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-faint);
+    line-height:1.6;padding:10px 0;
+  }
+  .skel-chart{height:150px;}
+
+  @media (prefers-reduced-motion: reduce){
+    .hist-bar{transition:none;}
+    .donut-seg{transition:none;}
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
      DESKTOP LAYOUT (≥1024px) — additive only. Mobile (the rules above,
      built around --col:480px) is untouched below this breakpoint. On
      desktop the app-shell itself widens to a real content column; the
@@ -668,6 +1086,34 @@
     .rail{padding:2px 40px 10px;gap:16px;}
     hr.div{margin:22px 40px;}
 
+    .calls-rail{padding:2px 40px 10px;gap:16px;}
+    .calls-rail .call-card{flex:0 0 330px;}
+    .calls-disclosure{padding:12px 40px 0;}
+
+    /* The board uses the full widened shell — four KPI tiles across, and
+       the charts in two columns, since each is independently readable. */
+    .kpi-row{grid-template-columns:repeat(4,minmax(0,1fr));padding:0 40px;gap:14px;}
+    .kpi-val{font-size:2.1rem;}
+    /* Column packing, not a 2-col grid. The four cards have genuinely
+       different natural heights (the win/loss list grows with however many
+       categories have graded trades), and a grid row-aligns to its tallest
+       item — which left a large void under the short donut card. CSS
+       columns pack each card directly under the previous one and stay
+       correct for any category count. */
+    .chart-stack{
+      display:block;
+      columns:2;
+      column-gap:16px;
+      padding:0 40px;
+    }
+    .chart-stack .chart-card{
+      break-inside:avoid;
+      -webkit-column-break-inside:avoid;
+      margin-bottom:16px;
+    }
+    .board-foot{padding:18px 40px 0;}
+    .donut{width:170px;height:170px;}
+
     /* Rail cards are wrapped in .trader-card-block (card + action row);
        override the mobile 84%-of-container flex-basis with a fixed width
        so several sit in a row instead of one huge card per screen. */
@@ -682,6 +1128,7 @@
 
 <div id="nav-root"></div>
 <script src="/nav.js?v=28"></script>
+<script src="/trader-card.js?v=3"></script>
 
 <div class="app-shell">
 
@@ -704,6 +1151,87 @@
     <p class="connect-err" id="connectErr" style="display:none;"></p>
     <p class="listing-note">Connecting lists you on the public leaderboard. <a href="/connect">Opt out anytime.</a></p>
   </header>
+
+  <hr class="div" />
+
+  <!-- LIVE CALLS — GET /api/live-calls. Open positions held by traders who
+       are on the verified durable board. The trader's score and sample size
+       are the reason the market is here at all, so they lead the card. -->
+  <section class="section" id="liveCallsSection">
+    <div class="section-head">
+      <span class="section-title hero-title">Live calls <span class="section-count" id="countCalls"></span></span>
+      <a class="section-more" href="/traders">SEE THE BOARD &rarr;</a>
+    </div>
+    <div class="calls-rail" id="callsRail"><div class="skel" style="width:280px;flex-shrink:0;height:300px;"></div></div>
+    <p class="calls-disclosure" id="callsDisclosure"></p>
+  </section>
+
+  <hr class="div" />
+
+  <!-- THE BOARD — aggregate charts, populated from GET /api/board-stats.
+       Every figure is an aggregate of the same durable-trade rows a single
+       trader's own profile is built from. Each chart ships a table-view
+       twin (the "TABLE" toggle) so no value is reachable only by colour or
+       only by hover. -->
+  <section class="section board">
+    <div class="section-head">
+      <span class="section-title hero-title">The Board</span>
+      <span class="section-more" id="boardUpdated"></span>
+    </div>
+
+    <div class="kpi-row" id="kpiRow">
+      <div class="kpi"><div class="kpi-val is-mute">—</div><span class="kpi-key">Ranked wallets</span></div>
+      <div class="kpi"><div class="kpi-val is-mute">—</div><span class="kpi-key">Trades scored</span></div>
+      <div class="kpi"><div class="kpi-val is-mute">—</div><span class="kpi-key">Capital graded</span></div>
+      <div class="kpi"><div class="kpi-val is-mute">—</div><span class="kpi-key">Board win rate</span></div>
+    </div>
+
+    <div class="chart-stack">
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Where the money is</span>
+          <button type="button" class="chart-toggle" data-table="tblCapital" aria-expanded="false">TABLE</button>
+        </div>
+        <p class="chart-note">Share of graded capital by market category. Top three shown; everything else folds into Other.</p>
+        <div class="chart-plot" id="capitalChart"><div class="skel skel-chart"></div></div>
+        <div id="tblCapital" hidden></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Wins and losses, by category</span>
+          <button type="button" class="chart-toggle" data-table="tblWinLoss" aria-expanded="false">TABLE</button>
+        </div>
+        <p class="chart-note">Every graded trade on the board, split by outcome. Losses are counted in full — they are the point.</p>
+        <div class="chart-plot" id="winLossChart"><div class="skel skel-chart"></div></div>
+        <div id="tblWinLoss" hidden></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Flex Score distribution</span>
+          <button type="button" class="chart-toggle" data-table="tblScores" aria-expanded="false">TABLE</button>
+        </div>
+        <p class="chart-note">How the ranked wallets actually spread across the 0–100 rating. Most traders are not elite.</p>
+        <div class="chart-plot" id="scoreChart"><div class="skel skel-chart"></div></div>
+        <div id="tblScores" hidden></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <span class="chart-title">Profitable vs losing</span>
+          <button type="button" class="chart-toggle" data-table="tblSplit" aria-expanded="false">TABLE</button>
+        </div>
+        <p class="chart-note">Ranked wallets by weighted ROI. A scoreboard that showed only the winners would not be a record.</p>
+        <div class="chart-plot" id="splitChart"><div class="skel skel-chart" style="height:60px;"></div></div>
+        <div id="tblSplit" hidden></div>
+      </div>
+
+    </div>
+
+    <p class="board-foot" id="boardScopeNote"></p>
+  </section>
 
   <hr class="div" />
 
@@ -996,8 +1524,14 @@ function cardArticleHtml(card, isHero, rank){
 
   var html = '<div class="trader-card-block"><a class="trader-card' + (isHero ? ' hero-card' : '') + '" href="' + esc(hrefOf(card)) + '" data-observe>';
 
+  var avSeed = card.polymarket_address || card.username || card.user_id;
+  var streakRing = card.streak && card.streak.type === 'win' ? ' is-hot' : card.streak && card.streak.type === 'loss' ? ' is-cold' : '';
+  var avatarGlyph = (window.HFXTraderCard && window.HFXTraderCard.avatarHtml)
+    ? '<span class="card-avatar-wrap' + streakRing + '">' + window.HFXTraderCard.avatarHtml(avSeed, isHero ? 40 : 30) + '</span>'
+    : '';
+
   html += '<div class="card-top"><div class="card-id">'
-    + '<div class="card-id-row"><span class="avatar' + rankTier + '" title="Rank #' + rankDisplay + '">#' + rankDisplay + '</span>'
+    + '<div class="card-id-row">' + avatarGlyph + '<span class="avatar' + rankTier + '" title="Rank #' + rankDisplay + '">#' + rankDisplay + '</span>'
     + '<span class="verified-dot" title="Verified"></span></div>'
     + '<span class="card-handle">' + esc(handle) + '</span>'
     + '</div>';
@@ -1105,6 +1639,402 @@ function loadCategory(cat){
 }
 CATS.forEach(loadCategory);
 setInterval(function(){ CATS.forEach(loadCategory); }, 3 * 60 * 1000);
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIVE CALLS — GET /api/live-calls.
+
+   Every card pairs a market with the verified record of the person who is
+   actually in it. The score and n are not decoration: a call with no
+   record behind it is exactly the unfalsifiable "alpha" this product
+   exists to replace, so the server drops any trader without a score and
+   the card renders score + sample size on the face.
+
+   The CTA is a link into the existing /market/:slug flow. It carries no
+   amount derived from the trader's position — the user sets their own
+   size there and signs it themselves.
+   ══════════════════════════════════════════════════════════════════════ */
+var CALL_DEFAULT_USD = 25; // the site's standing default, NOT the trader's size
+
+function centsOf(p){ return Math.round(p * 100) + '¢'; }
+
+// Countdown to market resolution. Re-read from the deadline on every tick
+// rather than decrementing a counter, so a backgrounded tab can't drift.
+function fmtCountdown(ms){
+  if (ms <= 0) return 'closed';
+  var s = Math.floor(ms / 1000);
+  var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+      m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+  return m + 'm ' + String(sec).padStart(2, '0') + 's';
+}
+function tickCountdowns(){
+  var now = Date.now();
+  document.querySelectorAll('[data-deadline]').forEach(function(el){
+    var end = new Date(el.getAttribute('data-deadline')).getTime();
+    if (Number.isNaN(end)) { el.textContent = '—'; return; }
+    var left = end - now;
+    el.textContent = fmtCountdown(left) + (left > 0 ? ' left' : '');
+    // Under 24h the clock is the story, so it stops being quiet chrome.
+    el.classList.toggle('is-soon', left > 0 && left < 86400000);
+  });
+}
+setInterval(tickCountdowns, 1000);
+
+function callCardHtml(c){
+  var t = c.trader, m = c.market;
+  var handle = t.username ? '@' + t.username : (t.display_name || (t.polymarket_address || '').slice(0, 6) + '…');
+  var href = t.username ? '/@' + encodeURIComponent(t.username) : (t.user_id ? '/m/' + encodeURIComponent(t.user_id) : '/traders');
+  var sideCls = m.side === 'NO' ? 'no' : 'yes';
+  var up = c.price_move_pct >= 0;
+  var cur = Math.max(0, Math.min(1, c.current_price));
+  var ent = Math.max(0, Math.min(1, c.entry_price));
+
+  var tradeHref = '/market/' + encodeURIComponent(m.slug)
+    + '?from=live-call&side=' + encodeURIComponent(m.side.toLowerCase())
+    + '&size=' + CALL_DEFAULT_USD
+    + (t.user_id ? '&copy_user_id=' + encodeURIComponent(t.user_id) : '');
+
+  return '<article class="call-card">'
+    + '<div class="call-top">'
+      + '<span class="call-live"><span class="live-dot"></span>LIVE</span>'
+      + '<span class="call-timer" data-deadline="' + esc(m.end_date) + '">—</span>'
+    + '</div>'
+
+    + '<a class="call-trader" href="' + esc(href) + '">'
+      + '<span class="call-badge"><span class="call-badge-val">' + esc(t.flex_score) + '</span>'
+        + '<span class="call-badge-key">FLEX</span></span>'
+      + '<span class="call-trader-id">'
+        + '<span class="call-handle">' + esc(handle) + '</span>'
+        + '<span class="call-cred">' + esc(fmtPlainPct(t.win_rate_pct)) + ' won · ' + esc(t.n) + ' resolved</span>'
+      + '</span>'
+    + '</a>'
+
+    + '<div class="call-market">'
+      + (m.icon ? '<img class="call-icon" src="' + esc(m.icon) + '" alt="" loading="lazy" onerror="this.remove()">' : '')
+      + '<p class="call-q">' + esc(m.question) + '</p>'
+    + '</div>'
+    + '<span class="call-side ' + sideCls + '">' + esc(m.side) + '</span>'
+
+    + '<div class="call-track">'
+      + '<div class="call-track-fill" style="width:' + (cur * 100).toFixed(1) + '%"></div>'
+      + '<span class="call-entry-tick" style="left:' + (ent * 100).toFixed(1) + '%" title="Entry ' + esc(centsOf(ent)) + '"></span>'
+    + '</div>'
+    + '<div class="call-price-meta">'
+      + '<span>In at <b>' + esc(centsOf(c.entry_price)) + '</b></span>'
+      + '<span>Now <b>' + esc(centsOf(c.current_price)) + '</b> '
+        + '<em class="call-move ' + (up ? 'up' : 'down') + '">' + esc(fmtPct(c.price_move_pct)) + '</em></span>'
+    + '</div>'
+
+    + '<div class="call-roi">'
+      + '<span class="call-roi-val">+' + esc(c.potential_roi_pct.toFixed(0)) + '%</span>'
+      + '<span class="call-roi-key">RETURN IF<br>' + esc(m.side) + ' RESOLVES</span>'
+    + '</div>'
+
+    + '<a class="call-cta" href="' + esc(tradeHref) + '">Trade ' + esc(m.side) + ' at ' + esc(centsOf(c.current_price)) + ' &rarr;</a>'
+    + '<p class="call-foot">They hold $' + esc(Number(c.trader_position_usd).toLocaleString('en-US')) + ' · you set your own size</p>'
+  + '</article>';
+}
+
+function loadLiveCalls(){
+  fetch('/api/live-calls')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var rail = document.getElementById('callsRail');
+      var calls = (d && d.calls) || [];
+      var countEl = document.getElementById('countCalls');
+      if (countEl) countEl.textContent = calls.length ? '· ' + calls.length : '';
+      if (!calls.length) {
+        rail.innerHTML = '<p class="rail-empty">No verified trader currently holds an open position that is still tradeable. Nothing to show rather than something invented.</p>';
+        return;
+      }
+      rail.innerHTML = calls.map(callCardHtml).join('');
+      tickCountdowns();
+      var disc = document.getElementById('callsDisclosure');
+      if (disc && d.disclosure) disc.textContent = d.disclosure;
+    })
+    .catch(function(){
+      var rail = document.getElementById('callsRail');
+      if (rail) rail.innerHTML = '<p class="rail-empty">Could not load live calls.</p>';
+    });
+}
+loadLiveCalls();
+setInterval(loadLiveCalls, 2 * 60 * 1000);
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE BOARD — chart rendering off GET /api/board-stats.
+
+   All four charts are hand-rolled (divs + one inline SVG donut) rather
+   than pulling a chart library: the page has no bundler and no CDN
+   budget, and these four forms are simple enough that a library would be
+   more code than the charts. Rules being followed deliberately, so a
+   future pass doesn't "tidy" them away:
+     · every chart has a table-view twin — no value is reachable only by
+       colour or only by hover;
+     · the donut caps at three coloured slices + a neutral Other, because
+       three is the largest set that survives an all-pairs colour-vision
+       check on this surface (see the palette note in the CSS);
+     · green/red mean win/loss and nothing else;
+     · a null from the API renders "—", never a zero and never a guess.
+   ══════════════════════════════════════════════════════════════════════ */
+var BOARD_REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function fmtInt(n){ return n == null ? '—' : Number(n).toLocaleString('en-US'); }
+function fmtUsdCompact(n){
+  if (n == null) return '—';
+  var a = Math.abs(n);
+  if (a >= 1e9) return '$' + (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (a >= 1e6) return '$' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (a >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+  return '$' + Math.round(n);
+}
+function fmtPct1(p){ return p == null ? '—' : p.toFixed(1) + '%'; }
+
+// Count-up on the KPI tiles. Purely presentational — the final value is
+// always the exact number from the API, and reduced-motion jumps straight
+// to it.
+function animateCount(el, target, render){
+  if (target == null) { el.textContent = '—'; el.classList.add('is-mute'); return; }
+  el.classList.remove('is-mute');
+  if (BOARD_REDUCED) { el.textContent = render(target); return; }
+  var start = performance.now(), dur = 900;
+  function step(now){
+    var t = Math.min(1, (now - start) / dur);
+    var eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = render(target * eased);
+    if (t < 1) requestAnimationFrame(step);
+    else el.textContent = render(target);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderKpis(t){
+  var row = document.getElementById('kpiRow');
+  var tiles = [
+    { key: 'Ranked wallets', val: t.ranked_wallets, render: function(v){ return fmtInt(Math.round(v)); },
+      sub: t.minimum_trades_to_rank != null ? 'Minimum ' + t.minimum_trades_to_rank + ' resolved trades to rank' : null },
+    { key: 'Trades scored', val: t.scored_trades, render: function(v){ return fmtInt(Math.round(v)); },
+      sub: t.graded_trades != null ? fmtInt(t.graded_trades) + ' tracked, durable only are scored' : null },
+    { key: 'Capital graded', val: t.capital_usd, render: fmtUsdCompact,
+      sub: 'Entry cost across every scored trade' },
+    { key: 'Board win rate', val: t.win_rate_pct, render: function(v){ return v.toFixed(1) + '%'; },
+      sub: t.wins != null && t.losses != null ? fmtInt(t.wins) + ' won · ' + fmtInt(t.losses) + ' lost' : null }
+  ];
+  row.innerHTML = tiles.map(function(tile){
+    return '<div class="kpi">'
+      + '<div class="kpi-val' + (tile.val == null ? ' is-mute' : '') + '">—</div>'
+      + '<span class="kpi-key">' + esc(tile.key) + '</span>'
+      + (tile.sub ? '<div class="kpi-sub">' + esc(tile.sub) + '</div>' : '')
+      + '</div>';
+  }).join('');
+  var vals = row.querySelectorAll('.kpi-val');
+  tiles.forEach(function(tile, i){ animateCount(vals[i], tile.val, tile.render); });
+}
+
+// Top three categories by graded capital keep their own colour; the tail
+// folds into one neutral Other slice rather than being given generated
+// hues that would be indistinguishable under colour-vision deficiency.
+var CAT_COLORS = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)'];
+function foldToTopThree(categories){
+  var total = categories.reduce(function(s, c){ return s + (c.capital_usd || 0); }, 0);
+  if (!total) return null;
+  var sorted = categories.slice().sort(function(a, b){ return b.capital_usd - a.capital_usd; });
+  var head = sorted.slice(0, 3).map(function(c, i){
+    return { label: c.label, value: c.capital_usd, color: CAT_COLORS[i], trades: c.trades };
+  });
+  var tail = sorted.slice(3);
+  if (tail.length) {
+    head.push({
+      label: 'Other',
+      value: tail.reduce(function(s, c){ return s + c.capital_usd; }, 0),
+      color: 'var(--cat-other)',
+      trades: tail.reduce(function(s, c){ return s + c.trades; }, 0),
+      tailCount: tail.length
+    });
+  }
+  return { slices: head, total: total };
+}
+
+function renderCapitalDonut(categories){
+  var host = document.getElementById('capitalChart');
+  var folded = foldToTopThree(categories || []);
+  if (!folded) { host.innerHTML = '<p class="chart-empty">No graded capital to break down yet.</p>'; return; }
+
+  var R = 58, C = 2 * Math.PI * R, GAP = 3;
+  var cum = 0;
+  var segs = folded.slices.map(function(s){
+    var frac = s.value / folded.total;
+    var len = Math.max(0, frac * C - GAP);
+    var off = -(cum * C);
+    cum += frac;
+    s.pct = frac * 100;
+    return '<circle class="donut-seg" cx="75" cy="75" r="' + R + '"'
+      + ' stroke="' + s.color + '"'
+      + ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '"'
+      + ' stroke-dashoffset="' + off.toFixed(2) + '">'
+      + '<title>' + esc(s.label) + ' — ' + esc(fmtUsdCompact(s.value)) + ' (' + s.pct.toFixed(1) + '%)</title>'
+      + '</circle>';
+  }).join('');
+
+  host.innerHTML = '<div class="donut-row">'
+    + '<div class="donut"><svg viewBox="0 0 150 150" role="img" aria-label="Share of graded capital by category">' + segs + '</svg>'
+      + '<div class="donut-center"><span class="donut-center-val">' + esc(fmtUsdCompact(folded.total)) + '</span>'
+      + '<span class="donut-center-key">Graded</span></div></div>'
+    + '<div class="legend">' + folded.slices.map(function(s){
+        return '<div class="legend-item"><span class="legend-swatch" style="background:' + s.color + '"></span>'
+          + '<span class="legend-name">' + esc(s.label) + (s.tailCount ? ' (' + s.tailCount + ')' : '') + '</span>'
+          + '<span class="legend-val">' + s.pct.toFixed(1) + '%</span></div>';
+      }).join('') + '</div>'
+    + '</div>';
+
+  // Dim-the-rest on hover reads much better than per-segment highlight
+  // alone, but only once the pointer is actually over the ring.
+  var donut = host.querySelector('.donut');
+  donut.addEventListener('mouseover', function(){ donut.classList.add('has-hover'); });
+  donut.addEventListener('mouseleave', function(){ donut.classList.remove('has-hover'); });
+
+  document.getElementById('tblCapital').innerHTML = tableHtml(
+    'Graded capital by category',
+    ['Category', 'Capital', 'Share', 'Trades'],
+    folded.slices.map(function(s){
+      return [s.label, fmtUsdCompact(s.value), s.pct.toFixed(1) + '%', fmtInt(s.trades)];
+    })
+  );
+}
+
+function renderWinLoss(categories){
+  var host = document.getElementById('winLossChart');
+  var rows = (categories || []).filter(function(c){ return (c.wins + c.losses) > 0; })
+    .sort(function(a, b){ return (b.wins + b.losses) - (a.wins + a.losses); })
+    .slice(0, 6);
+  if (!rows.length) { host.innerHTML = '<p class="chart-empty">No graded outcomes to split yet.</p>'; return; }
+
+  host.innerHTML = '<div class="wl-list">' + rows.map(function(c){
+    var decided = c.wins + c.losses;
+    var winPct = (c.wins / decided) * 100;
+    return '<div class="wl-row">'
+      + '<div class="wl-row-head"><span class="wl-name">' + esc(c.label) + '</span>'
+        + '<span class="wl-rate">' + fmtPct1(c.win_rate_pct) + ' won</span></div>'
+      + '<div class="wl-bar" role="img" aria-label="' + esc(c.label + ': ' + c.wins + ' won, ' + c.losses + ' lost') + '">'
+        + '<div class="wl-seg win" style="width:' + winPct.toFixed(2) + '%"></div>'
+        + '<div class="wl-seg loss" style="width:' + (100 - winPct).toFixed(2) + '%"></div>'
+      + '</div>'
+      + '<div class="wl-meta"><span>' + fmtInt(c.wins) + ' won</span><span>' + fmtInt(c.losses) + ' lost</span></div>'
+      + '</div>';
+  }).join('') + '</div>';
+
+  document.getElementById('tblWinLoss').innerHTML = tableHtml(
+    'Outcomes by category',
+    ['Category', 'Won', 'Lost', 'Win rate'],
+    rows.map(function(c){ return [c.label, fmtInt(c.wins), fmtInt(c.losses), fmtPct1(c.win_rate_pct)]; })
+  );
+}
+
+function renderScoreHist(dist){
+  var host = document.getElementById('scoreChart');
+  var buckets = (dist && dist.buckets) || [];
+  var max = buckets.reduce(function(m, b){ return Math.max(m, b.count); }, 0);
+  if (!max) { host.innerHTML = '<p class="chart-empty">No rated wallets on the board yet.</p>'; return; }
+
+  host.innerHTML = '<div class="hist">' + buckets.map(function(b){
+    var h = (b.count / max) * 100;
+    return '<div class="hist-col" title="' + esc(b.label + ': ' + b.count + ' wallet' + (b.count === 1 ? '' : 's')) + '">'
+      + (b.count ? '<span class="hist-count">' + b.count + '</span>' : '')
+      + '<div class="hist-bar' + (b.count ? '' : ' is-empty') + '" style="height:' + (b.count ? h.toFixed(1) : '2') + '%"></div>'
+      + '</div>';
+  }).join('') + '</div>'
+  + '<div class="hist-axis">' + buckets.map(function(b){
+      return '<span class="hist-tick">' + b.min + '</span>';
+    }).join('') + '</div>'
+  + (dist.unscored ? '<p class="chart-note" style="margin:12px 0 0;">' + fmtInt(dist.unscored)
+      + ' ranked wallet' + (dist.unscored === 1 ? ' has' : 's have') + ' no Flex Score yet and are not plotted.</p>' : '');
+
+  document.getElementById('tblScores').innerHTML = tableHtml(
+    'Ranked wallets by Flex Score',
+    ['Score band', 'Wallets'],
+    buckets.map(function(b){ return [b.label, fmtInt(b.count)]; })
+  );
+}
+
+function renderSplit(split){
+  var host = document.getElementById('splitChart');
+  var up = (split && split.profitable) || 0, down = (split && split.losing) || 0;
+  var total = up + down;
+  if (!total) { host.innerHTML = '<p class="chart-empty">No ranked wallets with a weighted ROI yet.</p>'; return; }
+  var upPct = (up / total) * 100;
+
+  host.innerHTML = '<div class="split-bar" role="img" aria-label="' + esc(up + ' profitable, ' + down + ' losing') + '">'
+      + '<div class="split-seg up" style="width:' + upPct.toFixed(2) + '%"></div>'
+      + '<div class="split-seg down" style="width:' + (100 - upPct).toFixed(2) + '%"></div>'
+    + '</div>'
+    + '<div class="split-legend">'
+      + '<span class="up"><b>' + fmtInt(up) + '</b> <span>profitable · ' + upPct.toFixed(0) + '%</span></span>'
+      + '<span class="down"><b>' + fmtInt(down) + '</b> <span>losing · ' + (100 - upPct).toFixed(0) + '%</span></span>'
+    + '</div>';
+
+  document.getElementById('tblSplit').innerHTML = tableHtml(
+    'Ranked wallets by weighted ROI',
+    ['Result', 'Wallets', 'Share'],
+    [['Profitable', fmtInt(up), upPct.toFixed(1) + '%'],
+     ['Losing', fmtInt(down), (100 - upPct).toFixed(1) + '%']]
+  );
+}
+
+function tableHtml(caption, headers, rows){
+  return '<table class="chart-table"><caption>' + esc(caption) + '</caption><thead><tr>'
+    + headers.map(function(h){ return '<th scope="col">' + esc(h) + '</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + rows.map(function(r){
+        return '<tr>' + r.map(function(cell, i){
+          return i === 0 ? '<th scope="row" style="text-align:left;font-family:var(--font-sans);color:var(--ink);font-weight:600;text-transform:none;letter-spacing:0;font-size:.75rem;">' + esc(cell) + '</th>'
+                         : '<td>' + esc(cell) + '</td>';
+        }).join('') + '</tr>';
+      }).join('')
+    + '</tbody></table>';
+}
+
+// Chart ↔ table toggle. The chart is the default view; the table is the
+// accessible twin, not a fallback, so both stay in the DOM.
+document.querySelectorAll('.chart-toggle').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var tbl = document.getElementById(btn.getAttribute('data-table'));
+    if (!tbl) return;
+    var chart = btn.closest('.chart-card').querySelector('.chart-plot');
+    var showTable = tbl.hidden;
+    tbl.hidden = !showTable;
+    if (chart) chart.hidden = showTable;
+    btn.textContent = showTable ? 'CHART' : 'TABLE';
+    btn.setAttribute('aria-expanded', String(showTable));
+  });
+});
+
+function loadBoardStats(){
+  fetch('/api/board-stats')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d) throw new Error('no data');
+      renderKpis(d.totals || {});
+      renderCapitalDonut(d.categories);
+      renderWinLoss(d.categories);
+      renderScoreHist(d.score_distribution || {});
+      renderSplit(d.wallet_roi_split);
+      var note = document.getElementById('boardScopeNote');
+      if (note && d.scope_note) note.textContent = d.scope_note;
+      var stamp = document.getElementById('boardUpdated');
+      if (stamp && d.updated_at) {
+        stamp.textContent = 'UPDATED ' + new Date(d.updated_at).toLocaleTimeString('en-US',
+          { hour: '2-digit', minute: '2-digit' }).toUpperCase();
+      }
+    })
+    .catch(function(){
+      ['capitalChart', 'winLossChart', 'scoreChart', 'splitChart'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.innerHTML = '<p class="chart-empty">Could not load board figures.</p>';
+      });
+    });
+}
+loadBoardStats();
+setInterval(loadBoardStats, 5 * 60 * 1000);
 
 // Connect flow — unchanged behavior from the live site: validate, then
 // hand off to /connect, which owns the real wallet-connect + polling +

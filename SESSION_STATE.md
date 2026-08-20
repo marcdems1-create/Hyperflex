@@ -49,6 +49,36 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-17 (homepage rebuild: aggregate charts + a "take this trade" live-calls surface — BUILT, VERIFIED LOCALLY, **NOT COMMITTED, NOT PUSHED**)
+
+**Status: drafted, not shipped.** No commit hash, nothing on origin. Working tree only. Marc asked for the build, not for a commit — and the tree also carries another session's in-flight edits (see Active blockers), so committing would have bundled them.
+
+**What Marc asked for, in two parts:**
+1. "Redo the entire homepage — make HYPERFLEX an attraction with flare and graphics, pie chart, bar graphs, make it pop."
+2. Mid-session redirect: "lean more towards pushing people to actually bet on one of these markets… our record shows this trader has a 90 flex score and a great win rate! he just got in on this market around current prices! and the timer ticks down as the price goes up or down and the potential roi."
+
+**Built (all in `public/home-kings.html` + `server.js`, additive — no existing card/rail logic touched):**
+- `GET /api/board-stats` (public, 5-min cache) — aggregates for the chart section. Reuses `_computeRoiLeaderboard` / `_computeCategoryRoiLeaderboards` / `classifyCardCategory`; **no new grading math**. Returns per-category capital+wins+losses, Flex Score histogram, wins/losses totals, profitable-vs-losing wallet split.
+- `GET /api/live-calls` (public, 3-min cache) — OPEN positions held by traders **on the verified durable board only** (trader set comes straight from `_computeRoiLeaderboard`, so eligibility is server-computed and can't be spoofed client-side). Drops any trader with a null `flex_score` rather than showing a call with no record behind it. One call per trader (their largest live position) — deliberately NOT their whole book, which would turn the homepage into the market-list surface the product definition rules out.
+- Homepage "LIVE CALLS" rail (now the first section under the hero): FLEX badge + win rate + n on the card face, market question, YES/NO, a 0–100¢ price track with a tick at the trader's entry, "In at 32¢ / Now 41¢ +28.1%", big potential-return figure, ticking countdown (goes gold under 24h), gold CTA into the existing `/market/:slug` manual flow.
+- Homepage "THE BOARD" section: 4 KPI tiles (count-up animated) + 4 charts — capital-share donut, wins/losses stacked bars by category, Flex Score histogram, profitable/losing split.
+
+**Gate 4 compliance (deliberate, do not "simplify" these away):**
+- Copy affordance renders only for durable-verified wallets, computed server-side.
+- CTA carries the site default size (`$25`), **never** the copied trader's position size; their size is shown as disclosure only ("They hold $1,250 · you set your own size").
+- Nothing auto-executes. The CTA is a link into the existing user-signed flow.
+- Rule 3 held: score + n travel with every call.
+- Potential-return copy states explicitly that it is payout arithmetic on the current price, **not a forecast** — the endpoint ships that sentence as `disclosure` so the page can't drift from it.
+
+**Chart-palette decision (do NOT re-pick these hues by eye):** categorical slices are `#3b82f6` / `#d97706` / `#db2777`. That trio is the largest set that passes an **all-pairs** colour-vision-deficiency check against the `#12151b` surface — blue+purple (ΔE 0.9 deutan) and blue+cyan (ΔE 12.3 normal-vision) both fail, which is why the obvious brand purple is absent. Donut therefore caps at top-3 + a neutral "Other". Green/red stay reserved for win/loss status and are never a category identity. Every chart ships a table-view twin so no value is colour- or hover-only.
+
+**How it was verified without starting the server (rule 7):** built a harness at `scratchpad/prerender.js` that extracts the page's real render functions, runs them in Node against endpoint-shaped fixtures, bakes the output into a static copy, and screenshots it with headless Chrome at 1280px and a true 390px viewport (Chrome headless has a 500px window floor — needed an iframe wrapper to get a real mobile viewport; a naive `--window-size=390` gives a cropped 500px render that looks like an overflow bug and isn't). Caught two real bugs this way: the YES/NO pill stretching full-width (flex-column children stretch on the cross axis — `inline-block` does not prevent it) and grid row-alignment leaving a large void under the short donut card (fixed with CSS columns).
+
+**Active blockers / not done:**
+- **Neither endpoint has been exercised against the real database or the live Polymarket API.** All local verification used fixtures. `/api/live-calls` fans out to `data-api.polymarket.com` for up to 8 wallets per cache miss — latency and rate-limit behaviour are UNMEASURED. Check this before or immediately after deploy.
+- Uncommitted third-party work was already in the tree when this session started and is still there: `public/connect.html`, `public/feed.html`, `public/home-traders-preview.html`, `public/trader-card.css`, `public/trader-card.js`, `.DS_Store`. `home-kings.html` also carried a small pre-existing avatar-glyph change that is now mixed in with this session's edits in the same file. Untangle before committing.
+- `node --check server.js` passes. Nothing else run.
+
 ## 2026-08-08c (mobile overflow sweep across the site; fixed /finance's unresponsive 3-column terminal layout — shipped, verified live)
 
 **Shipped (`7153c02`, pushed, verified `git log origin/main --oneline -1` and re-checked live on production after a hard-reload got past a browser-cache false negative):**
