@@ -13899,6 +13899,16 @@ app.get('/api/live-calls', async (req, res) => {
         const slug = p.slug || null;
         if (!slug) continue; // without a market slug there is no honest trade page to send anyone to
 
+        // Publish the ROUNDED price and derive everything shown from it, so
+        // the payload reconciles against itself. Deriving the return from
+        // the raw price while publishing a rounded one made the card fail
+        // its own arithmetic: a position at 0.0625 shipped current_price
+        // 0.063 next to "+1500%", but (1-0.063)/0.063 is 1487%. Anyone
+        // checking our maths would have found it wrong — on the one product
+        // whose entire claim is that its numbers reconcile. Rounding first
+        // also means the figure is never overstated.
+        const shownPrice = Math.round(price * 1000) / 1000;
+
         calls.push({
           market: {
             question: p.title || p.question || 'Unknown market',
@@ -13910,7 +13920,7 @@ app.get('/api/live-calls', async (req, res) => {
             end_date: new Date(endMs).toISOString(),
           },
           entry_price: Math.round(entry * 1000) / 1000,
-          current_price: Math.round(price * 1000) / 1000,
+          current_price: shownPrice,
           // How far the price has moved since they got in, as a share of
           // their entry — this is the trade's unrealized move, not a forecast.
           price_move_pct: Math.round(movePct * 10) / 10,
@@ -13918,7 +13928,7 @@ app.get('/api/live-calls', async (req, res) => {
           // $1, so buying now at `price` returns (1 - price) / price. This
           // is arithmetic on the current price, NOT a probability estimate
           // and NOT a prediction that it will resolve that way.
-          potential_roi_pct: Math.round(((1 - price) / price) * 1000) / 10,
+          potential_roi_pct: Math.round(((1 - shownPrice) / shownPrice) * 1000) / 10,
           trader_position_usd: Math.round(cost),
         });
       }
