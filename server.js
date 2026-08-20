@@ -13752,7 +13752,8 @@ app.get('/api/board-stats', async (req, res) => {
 let _liveCallsCache = null;
 const LIVE_CALLS_TTL_MS = 3 * 60 * 1000;
 const LIVE_CALLS_MIN_POSITION_USD = 50;   // dust isn't a call
-const LIVE_CALLS_TRADERS = 20;            // caps upstream fan-out (2 fetches each)
+const LIVE_CALLS_TRADERS = 40;            // widened to keep supply under the filters below
+const LIVE_CALLS_BATCH = 10;              // traders fetched at a time (2 upstream calls each)
 const LIVE_CALLS_MAX = 9;                 // enough for a rail, not a market list
 
 // Tradeable price band. Found against live data 2026-08-20: a position at
@@ -13774,6 +13775,28 @@ const LIVE_CALLS_MAX_PRICE = 0.95;
 //      underneath a durable-board score.
 const LIVE_CALLS_MIN_HORIZON_MS = 24 * 60 * 60 * 1000;
 
+// Upper bound on runway. A "countdown" of 809 days (2028 nomination
+// markets were coming through) is not a countdown — it's a date. Anything
+// past a year reads as dead air on a surface built around a ticking clock.
+const LIVE_CALLS_MAX_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
+
+// "Around current prices." Live output was promoting positions the price
+// had already run 118% past — the entry being cited is long gone, so the
+// card implicitly sells an opportunity that no longer exists — and, worse,
+// positions down 87%, where the trader is being crushed and the card still
+// advertised a +3,074% "potential return". Both directions are excluded:
+// the point is that you can still get in near where a good trader got in.
+const LIVE_CALLS_MAX_MOVE_PCT = 25;
+
+// The record has to actually be good to be worth citing next to a trade
+// button. This selects what gets PROMOTED; it hides nothing — losing
+// traders keep their board placement, their profile, and their full record
+// with every loss intact. It only means a weak record doesn't get a CTA
+// attached to it, which is the same discipline Gate 4 applies to
+// unverified wallets. Live output was pairing a 30% win rate with a
+// "Trade this" button.
+const LIVE_CALLS_MIN_WIN_RATE = 55;
+
 app.get('/api/live-calls', async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: 'unavailable' });
@@ -13791,14 +13814,15 @@ app.get('/api/live-calls', async (req, res) => {
     // Highest-rated verified wallets that actually have an address to read
     // positions from. flex_score is required — see the rule-3 note above.
     const shortlist = cards
-      .filter(c => c.polymarket_address && c.flex_score != null)
+      .filter(c => c.polymarket_address && c.flex_score != null
+        && c.win_rate_pct != null && c.win_rate_pct >= LIVE_CALLS_MIN_WIN_RATE)
       .sort((a, b) => b.flex_score - a.flex_score)
       .slice(0, LIVE_CALLS_TRADERS);
 
     const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
     const now = Date.now();
 
-    const perTrader = await Promise.all(shortlist.map(async (card) => {
+    const fetchTraderCall = async (card) => {
       const base = 'https://data-api.polymarket.com/positions?user=' + card.polymarket_address + '&limit=100&sortBy=CURRENT';
       const [a, b] = await Promise.all([
         fetch(base + '&winning=false', H).catch(() => null),
@@ -13835,10 +13859,15 @@ app.get('/api/live-calls', async (req, res) => {
 
         const endMs = p.endDateIso || p.endDate ? new Date(p.endDateIso || p.endDate).getTime() : null;
         if (endMs == null || Number.isNaN(endMs)) continue;
-        if (endMs - now < LIVE_CALLS_MIN_HORIZON_MS) continue; // see LIVE_CALLS_MIN_HORIZON_MS
+        const runway = endMs - now;
+        if (runway < LIVE_CALLS_MIN_HORIZON_MS || runway > LIVE_CALLS_MAX_HORIZON_MS) continue;
 
         const entry = cost / shares;
         if (!(entry > 0 && entry < 1)) continue;
+
+        // Still gettable at roughly their price — see LIVE_CALLS_MAX_MOVE_PCT.
+        const movePct = ((price - entry) / entry) * 100;
+        if (Math.abs(movePct) > LIVE_CALLS_MAX_MOVE_PCT) continue;
 
         const slug = p.eventSlug || p.slug || null;
         if (!slug) continue; // without a slug there is no trade page to send anyone to
@@ -13857,7 +13886,7 @@ app.get('/api/live-calls', async (req, res) => {
           current_price: Math.round(price * 1000) / 1000,
           // How far the price has moved since they got in, as a share of
           // their entry — this is the trade's unrealized move, not a forecast.
-          price_move_pct: Math.round(((price - entry) / entry) * 1000) / 10,
+          price_move_pct: Math.round(movePct * 10) / 10,
           // Payout math, nothing more: a share resolving in-the-money pays
           // $1, so buying now at `price` returns (1 - price) / price. This
           // is arithmetic on the current price, NOT a probability estimate
@@ -13887,7 +13916,21 @@ app.get('/api/live-calls', async (req, res) => {
           durable_verified: true, // server-computed: membership in the board above IS the verification
         },
       });
-    }));
+    };
+
+    // Batched rather than one 80-request burst: the shortlist is now up to
+    // 40 wallets and each costs 2 upstream calls, which is enough to look
+    // like abuse to Polymarket's data API. Batches run in parallel
+    // internally, sequentially between — and the whole result is cached for
+    // LIVE_CALLS_TTL_MS, so this cost is paid once every few minutes, not
+    // per visitor. Stops early once there are enough calls to fill the rail.
+    const perTrader = [];
+    for (let i = 0; i < shortlist.length; i += LIVE_CALLS_BATCH) {
+      const batch = shortlist.slice(i, i + LIVE_CALLS_BATCH);
+      const settled = await Promise.all(batch.map(c => fetchTraderCall(c).catch(() => null)));
+      perTrader.push(...settled);
+      if (perTrader.filter(Boolean).length >= LIVE_CALLS_MAX) break;
+    }
 
     const calls = perTrader.filter(Boolean)
       .sort((x, y) => y.trader.flex_score - x.trader.flex_score)
