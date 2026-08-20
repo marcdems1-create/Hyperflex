@@ -1453,13 +1453,43 @@ function tradeHref(slug, side, uid){
   if (uid) params.push('copy_user_id=' + encodeURIComponent(uid));
   return '/market/' + slug + '?' + params.join('&');
 }
+// One in-flight request per wallet, shared across every card that needs it.
+// The same wallet can appear in more than one category rail, and the
+// network trace showed the identical address being fetched twice on a
+// single page load.
+var _positionsInFlight = {};
+function fetchPositionsOnce(address){
+  if (!_positionsInFlight[address]) {
+    _positionsInFlight[address] = fetch('/api/polymarket/positions/' + encodeURIComponent(address))
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
+  }
+  return _positionsInFlight[address];
+}
+
 function loadTradeSlots(root){
   root = root || document;
-  root.querySelectorAll('.hfx-act-trade[data-address]').forEach(function(slot){
+  // Deferred until the card is actually on screen. Every one of these
+  // proxies several upstream Polymarket calls, and firing them for all ~25
+  // cards at once on page load (measured in the live network trace) is slow
+  // for the user and a rate-limit risk for us — most of those cards are
+  // several rails below the fold and many are never scrolled to at all.
+  var slots = [].slice.call(root.querySelectorAll('.hfx-act-trade[data-address]'));
+  if (!('IntersectionObserver' in window)) { slots.forEach(fillTradeSlot); return; }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target);
+      fillTradeSlot(e.target);
+    });
+  }, { rootMargin: '200px' }); // start just before it scrolls into view
+  slots.forEach(function(s){ io.observe(s); });
+}
+
+function fillTradeSlot(slot){
     var address = slot.getAttribute('data-address');
     var uid = slot.getAttribute('data-uid');
-    fetch('/api/polymarket/positions/' + encodeURIComponent(address))
-      .then(function(r){ return r.ok ? r.json() : null; })
+    fetchPositionsOnce(address)
       .then(function(d){
         var all = (d && (d.positions || d)) || [];
         if (!Array.isArray(all)) return;
@@ -1469,16 +1499,19 @@ function loadTradeSlots(root){
         var p = open[0];
         var slug = tradeMarketSlug(p);
         var side = String(p.side || '').toLowerCase();
-        var price = p.current_price != null ? Math.round(p.current_price * 100) + '¢' : null;
-        if (!slug || (side !== 'yes' && side !== 'no') || price == null) { slot.remove(); return; }
+        var raw = p.current_price;
+        // Same tradeable band /api/live-calls enforces: a "Trade · 99¢"
+        // button offers ~1% upside, and a 1¢ one is lottery noise. Neither
+        // is worth pushing someone into.
+        if (raw == null || raw < 0.03 || raw > 0.95) { slot.remove(); return; }
+        if (!slug || (side !== 'yes' && side !== 'no')) { slot.remove(); return; }
         var link = document.createElement('a');
         link.className = 'hfx-act-trade';
         link.href = tradeHref(slug, side, uid);
-        link.textContent = 'Trade · ' + price;
+        link.textContent = 'Trade · ' + Math.round(raw * 100) + '¢';
         slot.replaceWith(link);
       })
       .catch(function(){ slot.remove(); }); // no open position reachable — remove, don't leave a dead placeholder
-  });
 }
 
 /* ══════════════════════════════════════════════════════════════════════
