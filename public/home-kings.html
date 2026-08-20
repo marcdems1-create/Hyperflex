@@ -1683,6 +1683,11 @@ setInterval(tickCountdowns, 1000);
 
 function callCardHtml(c){
   var t = c.trader, m = c.market;
+  // Defence in depth: /api/live-calls already drops multi-outcome markets
+  // (a named outcome like "ELENA RYBAKINA" can't be passed to the prefilled
+  // trade widget), but a card whose CTA can't work must never render, so
+  // the rule is enforced on both sides of the wire.
+  if (m.side !== 'YES' && m.side !== 'NO') return '';
   var handle = t.username ? '@' + t.username : (t.display_name || (t.polymarket_address || '').slice(0, 6) + '…');
   var href = t.username ? '/@' + encodeURIComponent(t.username) : (t.user_id ? '/m/' + encodeURIComponent(t.user_id) : '/traders');
   var sideCls = m.side === 'NO' ? 'no' : 'yes';
@@ -1748,7 +1753,14 @@ function loadLiveCalls(){
         rail.innerHTML = '<p class="rail-empty">No verified trader currently holds an open position that is still tradeable. Nothing to show rather than something invented.</p>';
         return;
       }
-      rail.innerHTML = calls.map(callCardHtml).join('');
+      var cardsHtml = calls.map(callCardHtml).filter(Boolean);
+      if (!cardsHtml.length) {
+        rail.innerHTML = '<p class="rail-empty">No verified trader currently holds an open position that is still tradeable. Nothing to show rather than something invented.</p>';
+        if (countEl) countEl.textContent = '';
+        return;
+      }
+      if (countEl) countEl.textContent = '· ' + cardsHtml.length;
+      rail.innerHTML = cardsHtml.join('');
       tickCountdowns();
       var disc = document.getElementById('callsDisclosure');
       if (disc && d.disclosure) disc.textContent = d.disclosure;

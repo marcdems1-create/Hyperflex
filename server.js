@@ -13752,7 +13752,27 @@ app.get('/api/board-stats', async (req, res) => {
 let _liveCallsCache = null;
 const LIVE_CALLS_TTL_MS = 3 * 60 * 1000;
 const LIVE_CALLS_MIN_POSITION_USD = 50;   // dust isn't a call
-const LIVE_CALLS_TRADERS = 8;             // caps upstream fan-out
+const LIVE_CALLS_TRADERS = 20;            // caps upstream fan-out (2 fetches each)
+const LIVE_CALLS_MAX = 9;                 // enough for a rail, not a market list
+
+// Tradeable price band. Found against live data 2026-08-20: a position at
+// curPrice 0.9996 cleared a naive `< 1` check and rendered as "Trade at
+// 100¢" for a +0.1% return — a dead card that pushes someone into a trade
+// with no upside. Below 3¢ is lottery noise. Neither belongs on a surface
+// whose whole job is "this is worth taking".
+const LIVE_CALLS_MIN_PRICE = 0.03;
+const LIVE_CALLS_MAX_PRICE = 0.95;
+
+// Minimum runway. Two reasons, both found on live data:
+//   1. A countdown that expires while someone is reading the card is worse
+//      than no card.
+//   2. Same-day sports/esports markets are the EPHEMERAL bucket this
+//      product explicitly refuses to score (CLAUDE.md, Gate 1). Selling an
+//      ephemeral trade on the credibility of a durable-market score is a
+//      mismatch — the record being cited wasn't earned on markets like
+//      that. Live output was surfacing a LoL match resolving the next day
+//      underneath a durable-board score.
+const LIVE_CALLS_MIN_HORIZON_MS = 24 * 60 * 60 * 1000;
 
 app.get('/api/live-calls', async (req, res) => {
   try {
@@ -13798,13 +13818,24 @@ app.get('/api/live-calls', async (req, res) => {
         const price = parseFloat(p.curPrice);
         const cost = parseFloat(p.initialValue) || 0;
         const shares = parseFloat(p.size) || 0;
-        if (!(price > 0 && price < 1)) continue;          // resolved or untradeable
+        if (!(price >= LIVE_CALLS_MIN_PRICE && price <= LIVE_CALLS_MAX_PRICE)) continue;
         if (p.redeemed || p.redeemable) continue;          // already settled
         if (cost < LIVE_CALLS_MIN_POSITION_USD) continue;  // dust
         if (shares <= 0) continue;
 
+        // Only plain YES/NO binaries. Multi-outcome markets carry a named
+        // outcome ("ELENA RYBAKINA", "CUPID ESPORTS") which the prefilled
+        // /market/:slug trade widget cannot consume — the CTA would render
+        // "Trade ELENA RYBAKINA at 19¢" and land on a broken side param.
+        // This is the same yes/no-only rule the existing homepage trade
+        // slot already applies (loadTradeSlots in home-kings.html); a
+        // named-outcome call is dropped rather than shipped broken.
+        const side = String(p.outcome || '').trim().toUpperCase();
+        if (side !== 'YES' && side !== 'NO') continue;
+
         const endMs = p.endDateIso || p.endDate ? new Date(p.endDateIso || p.endDate).getTime() : null;
-        if (endMs == null || Number.isNaN(endMs) || endMs <= now) continue; // no live countdown = not a live call
+        if (endMs == null || Number.isNaN(endMs)) continue;
+        if (endMs - now < LIVE_CALLS_MIN_HORIZON_MS) continue; // see LIVE_CALLS_MIN_HORIZON_MS
 
         const entry = cost / shares;
         if (!(entry > 0 && entry < 1)) continue;
@@ -13819,7 +13850,7 @@ app.get('/api/live-calls', async (req, res) => {
             condition_id: p.conditionId,
             token_id: p.asset || null,
             icon: p.icon || null,
-            side: (p.outcome || 'YES').toUpperCase(),
+            side,
             end_date: new Date(endMs).toISOString(),
           },
           entry_price: Math.round(entry * 1000) / 1000,
@@ -13859,7 +13890,8 @@ app.get('/api/live-calls', async (req, res) => {
     }));
 
     const calls = perTrader.filter(Boolean)
-      .sort((x, y) => y.trader.flex_score - x.trader.flex_score);
+      .sort((x, y) => y.trader.flex_score - x.trader.flex_score)
+      .slice(0, LIVE_CALLS_MAX);
 
     const data = {
       calls,
