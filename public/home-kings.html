@@ -21,7 +21,16 @@
     --border-soft:#191d27;
     --ink:#eceef2;
     --ink-muted:#8890a3;
-    --ink-faint:#565d70;
+    /* Lifted from #565d70 (2026-08-20). At the old value every piece of
+       small text using this token failed WCAG AA on all three surfaces —
+       measured 2.59:1 to 2.96:1 against a 4.5:1 requirement, across 12
+       styles including the risk disclosure, the listing notice, KPI
+       labels and chart axis ticks. #7d8599 is the minimum that clears 4.5
+       on the lightest surface (--surface-2), so it stays as quiet as the
+       role allows while actually being readable. --ink-muted already
+       passed (5.33–6.08) and is unchanged, so the two still read as
+       distinct levels. Do not darken this again without re-measuring. */
+    --ink-faint:#7d8599;
     --gold:#c9920d;
     --gold-bright:#e0ab2c;
     --gold-soft:rgba(201,146,13,0.14);
@@ -1180,7 +1189,12 @@
     </div>
     <p class="calls-intro">On Polymarket, an outcome trades between 1&cent; and 99&cent; &mdash; buy a share at 90&cent; and it pays $1 if that outcome happens. These are positions traders on the verified board hold right now.</p>
     <div class="calls-rail" id="callsRail"><div class="skel" style="width:280px;flex-shrink:0;height:300px;"></div></div>
-    <p class="calls-disclosure" id="callsDisclosure"></p>
+    <!-- Rendered statically, not left empty for JS to fill. /api/live-calls
+         ships the authoritative wording and overwrites this on load, but a
+         risk disclosure attached to financial content must never depend on
+         a fetch succeeding — if the script fails, the sentence still has to
+         be on the page. Keep the two wordings in sync. -->
+    <p class="calls-disclosure" id="callsDisclosure">Open positions held by traders on the verified board. Potential return is the payout if the market resolves in that outcome&rsquo;s favour &mdash; it is arithmetic on the current price, not a forecast. Nothing here is advice.</p>
   </section>
 
   <hr class="div" />
@@ -1618,7 +1632,7 @@ function cardArticleHtml(card, isHero, rank){
   html += '</div>';
 
   html += '<div class="score-block">'
-    + '<div class="gauge-wrap"><svg viewBox="0 0 84 84">'
+    + '<div class="gauge-wrap"><svg viewBox="0 0 84 84" aria-hidden="true" focusable="false">'
       + '<circle class="gauge-track" cx="42" cy="42" r="36"></circle>'
       + '<circle class="gauge-ring" data-score="' + (known ? card.flex_score : 0) + '" cx="42" cy="42" r="36"></circle>'
       + '</svg><div class="gauge-center' + (known ? '' : ' is-mute') + '">' + esc(scoreDisplay) + '</div></div>'

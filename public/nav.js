@@ -520,7 +520,7 @@
       }).join('') +
       (isLoggedIn ? '<a href="#" onclick="event.preventDefault();_goToMyProfile()" class="nav-link' + (path.indexOf('/m/') === 0 ? ' active' : '') + '">👤 Profile</a>' : '') +
       '<div class="nav-more-wrap">' +
-        '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More">' +
+        '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More" aria-label="More links" aria-haspopup="true">' +
           '<svg viewBox="0 0 24 24" style="width:18px;height:18px"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>' +
         '</button>' +
         '<div class="nav-more-dd" id="navMoreDd">' +
@@ -549,7 +549,7 @@
         ? ''
         : '<a href="/creator/login?next=' + encodeURIComponent(location.pathname + location.search) + '" class="nav-signin" id="navSignin">Sign in</a>') +
     '</div>' +
-    '<button class="nav-hamburger" id="navHamburger">' +
+    '<button class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-haspopup="true">' +
       '<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' +
     '</button>';
 
@@ -624,7 +624,7 @@
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
         '<a href="/" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
-        '<button class="nav-mobile-close" id="navMobileClose">' +
+        '<button class="nav-mobile-close" id="navMobileClose" aria-label="Close menu">' +
           '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
         '</button>' +
       '</div>' +

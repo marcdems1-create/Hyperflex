@@ -313,6 +313,40 @@ ok('table: escapes cell content', !t.includes('<script>'));
 ok('table: has caption', t.includes('<caption>Cap</caption>'));
 ok('table: row headers are th scope=row', t.includes('scope="row"'));
 
+
+// ===== PAGE-LEVEL / ACCESSIBILITY ======================================
+// Asserted against the raw file, not the render functions — these are
+// properties of the served document.
+{
+  ok('page: risk disclosure is STATIC, not fetch-dependent',
+    /class="calls-disclosure"[^>]*>[^<]*not a forecast/.test(html.replace(/\n/g, ' ')));
+  ok('page: score gauge is aria-hidden (decorative, number is adjacent text)',
+    /class="gauge-wrap"><svg[^>]*aria-hidden="true"/.test(html));
+  ok('page: donut carries an accessible name',
+    /<svg viewBox="0 0 150 150" role="img" aria-label=/.test(html));
+  ok('page: has exactly one h1', (html.match(/<h1/g) || []).length === 1);
+  ok('page: html lang set', /<html lang="en"/.test(html));
+  ok('page: four chart/table toggles', (html.match(/class="chart-toggle"/g) || []).length === 4);
+  ok('page: prediction-market explainer present for newcomers',
+    /an outcome trades between/.test(html));
+  // --ink-faint failed WCAG AA at #565d70 across 12 styles; do not regress
+  const faint = /--ink-faint:\s*(#[0-9a-fA-F]{6})/.exec(html);
+  ok('page: --ink-faint token present', !!faint);
+  if (faint) {
+    const lum = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+        .map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (f, b) => { const L1 = lum(f), L2 = lum(b); return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05); };
+    // measured against --surface-2 #181c25, the lightest surface it sits on
+    const r = ratio(faint[1], '#181c25');
+    ok('page: --ink-faint meets WCAG AA (4.5:1) on the lightest surface',
+      r >= 4.5, faint[1] + ' = ' + r.toFixed(2) + ':1');
+  }
+}
+
 // ---------------------------------------------------------------------
 console.log('\n' + '='.repeat(56));
 console.log('FRONTEND SUITE:  ' + pass + ' passed, ' + fail + ' failed');
