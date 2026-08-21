@@ -1497,10 +1497,21 @@ function loadTradeSlots(root){
     entries.forEach(function(e){
       if (!e.isIntersecting) return;
       io.unobserve(e.target);
-      fillTradeSlot(e.target);
+      var pending = e.target._hfxSlots || [];
+      pending.forEach(fillTradeSlot);
     });
   }, { rootMargin: '200px' }); // start just before it scrolls into view
-  slots.forEach(function(s){ io.observe(s); });
+  slots.forEach(function(s){
+    // Observe the slot's CARD, not the slot. The placeholder is an empty
+    // <span> with zero width and height, and a zero-area box never reports
+    // itself as intersecting — observing it directly meant the callback
+    // never fired and every Trade button stayed empty forever, at any
+    // scroll position. Verified in a real browser: 25 slots pending, 0
+    // filled, 0 requests made.
+    var host = s.closest('.card-actions') || s.parentElement || s;
+    (host._hfxSlots = host._hfxSlots || []).push(s);
+    io.observe(host);
+  });
 }
 
 function fillTradeSlot(slot){
