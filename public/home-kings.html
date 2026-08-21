@@ -1502,12 +1502,22 @@ function loadTradeSlots(root){
     });
   }, { rootMargin: '200px' }); // start just before it scrolls into view
   slots.forEach(function(s){
-    // Observe the slot's CARD, not the slot. The placeholder is an empty
-    // <span> with zero width and height, and a zero-area box never reports
-    // itself as intersecting — observing it directly meant the callback
-    // never fired and every Trade button stayed empty forever, at any
-    // scroll position. Verified in a real browser: 25 slots pending, 0
-    // filled, 0 requests made.
+    // Observe the slot's containing row rather than the slot itself. The
+    // placeholder is an empty <span>, so it has zero width.
+    //
+    // ⚠️ CORRECTION — an earlier commit message claimed zero-area elements
+    // never fire IntersectionObserver and that this had been verified as a
+    // live regression. BOTH CLAIMS WERE WRONG. Chrome does fire IO for a
+    // zero-width element (measured twice, isIntersecting true at w=0), so
+    // observing the span directly worked fine. The "0 filled, 0 requests"
+    // reading that prompted the change came from an automated browser whose
+    // document was `visibilityState: "hidden"` — IO never fires in a hidden
+    // document, which also froze the page's own card-entrance animation at
+    // opacity 0. The tooling was broken, not the page.
+    //
+    // Observing the row is kept because a non-degenerate box is the more
+    // robust thing to observe, not because the alternative was broken. If
+    // you are ever debugging IO here, check `document.hidden` FIRST.
     var host = s.closest('.card-actions') || s.parentElement || s;
     (host._hfxSlots = host._hfxSlots || []).push(s);
     io.observe(host);
