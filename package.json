@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "lint": "eslint server.js public/creator-dashboard.html public/community.html public/creator-login.html public/creator-signup.html",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:homepage": "node test/homepage.test.js",
+    "test:homepage:live": "node test/homepage-live.test.js"
   },
   "keywords": [],
   "author": "",
