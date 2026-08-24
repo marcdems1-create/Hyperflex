@@ -49,6 +49,54 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-24 (homepage visual pass — Gate 3 landing-page freeze lifted)
+
+**Shipped (with hashes):**
+- (branch `claude/homepage-visual-pass`, not yet merged — no squash hash)
+
+**Gate 3 — READ THIS BEFORE "fixing" the homepage back:**
+- Marc explicitly lifted the *landing-page* half of Gate 3 for this session's
+  visual work, after being shown the gate text verbatim. The **publish-the-
+  edge-number** half of Gate 3 still stands and nothing derived from the
+  grader was published — n=83 / 53.0% is still below bar and still unpublished.
+- Rule 2 (traders lead, markets are evidence), the "do not build, do not
+  polish" list, and the voice charter were NOT lifted and were held to: no
+  market grid, no trending rail, no decorative emoji, mono tabular numerals.
+
+**Changed:**
+- `_buildTraderCards` now also returns `form_pnl` — cumulative realized P&L
+  over the same last-8 durable trades, leading 0, null when unusable.
+- Card sparkline draws that equity curve instead of `card.form`. `form` is
+  win/loss flags (1/0/0.5); drawn as a line it was a square wave between two
+  fixed heights — identical shape for every trader, magnitude invisible.
+  `form` still feeds the streak, and is still the fallback.
+- Sparkline gained a dashed zero baseline, area fill closing to that baseline,
+  a `role="img"` + `aria-label` (a canvas had no accessible name at all), and
+  now takes its size from CSS instead of two hardcoded constants.
+- New hero board pulse (`#heroProof`): the four KPI-row figures + a green/red
+  won/lost ribbon, rendered from the response `loadBoardStats` already
+  fetches. No new endpoint, no new request, no new claim. Hides itself
+  entirely when the board has nothing to report.
+- Desktop hero is now two columns (copy keeps its 680px measure, pulse takes
+  the rest). `.topbar` re-aligned to the hero's left edge as a result.
+- Market artwork: added `decoding="async"`, `referrerpolicy="no-referrer"`,
+  explicit `width`/`height`. Fallback tile behaviour unchanged.
+
+**Active blockers:**
+- Nothing in this pass was verified against production. It was verified
+  offline: `npm run test:homepage` 143/143, plus headless-Chromium renders at
+  1280px and 390px with fixture payloads. `test:homepage:live` and
+  `:deep` hit hyperflex.network, which the agent proxy blocks (403 CONNECT).
+
+**Open questions / unverified:**
+- `form_pnl` has never run against real `realized_trades` rows. Curve shape
+  and colour are only as good as `realized_pnl` on durable trades.
+
+**Notes for next session:**
+- Run `npm run test:homepage:live` and `:deep` against production once
+  deployed; both were unrunnable from the agent sandbox.
+- Decide whether Gate 3's landing-page clause goes back on after this pass.
+
 ## 2026-08-20 (homepage rebuild SHIPPED + verified live; six real bugs found only against production; one false diagnosis corrected)
 
 **Shipped and on origin/main.** Verify with `git log origin/main --oneline -8`. Commits: `5baf5b5` (build), `89e781c`, `38494c7`, `6b91165`, `178cc41`, `90b435a`, `45a2e54`, `327c348`, `4888ef5`. Live and confirmed at hyperflex.network.

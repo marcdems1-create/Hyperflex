@@ -410,6 +410,10 @@
   .score-info[hidden]{display:none;}
 
   .spark-canvas{display:block;margin-left:auto;height:34px;width:100px;flex:0 0 auto;}
+  /* The hero card renders at roughly twice a rail card's width; at 100x34
+     the curve read as an afterthought pinned in the corner. initCardVisuals
+     measures the box, so this is the only place the size needs to change. */
+  .hero-card .spark-canvas{height:48px;width:150px;}
 
   .stat-row{
     display:grid;
@@ -1094,17 +1098,100 @@
      so 3-4 trader cards sit side by side (still horizontally scrollable
      for more, same .rail behavior as mobile).
      ══════════════════════════════════════════════════════════════════════ */
+  /* ---------- board pulse (hero) ----------
+     Mobile-first: stacked under the CTA as a compact 2x2 of the same
+     figures the KPI row shows. On desktop it becomes the hero's second
+     column, which is what stops the first screen being text on black with
+     200px of dead space either side of it. Values are mono/tabular so the
+     count-up animation doesn't reflow the grid mid-tick. */
+  .hero-proof{
+    margin:22px 0 0;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    background:
+      linear-gradient(180deg, rgba(201,146,13,0.05), transparent 42%),
+      var(--surface);
+    padding:14px 15px 15px;
+  }
+  .hero-proof.is-gone{display:none;}
+  .hero-proof-head{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:10px;margin-bottom:12px;
+  }
+  .hero-proof-title{
+    display:flex;align-items:center;gap:7px;
+    font-family:var(--font-mono);font-size:0.64rem;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  .hero-proof-stamp{
+    font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.1em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  .hero-proof-grid{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px 14px;
+  }
+  .hero-stat{min-width:0;}
+  .hero-stat-val{
+    font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+    font-size:1.42rem;font-weight:700;letter-spacing:-0.02em;
+    color:var(--ink);line-height:1.1;
+  }
+  .hero-stat-val.is-mute{color:var(--ink-faint);}
+  .hero-stat-key{
+    display:block;margin-top:3px;
+    font-family:var(--font-mono);font-size:0.58rem;letter-spacing:0.11em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  /* Win/loss ribbon. Same green/red convention as every other outcome
+     surface on the page — never grey, never a single neutral bar, because
+     the losing half is the half that makes the number credible. */
+  .hero-ribbon{margin-top:13px;}
+  .hero-ribbon-bar{
+    display:flex;height:7px;border-radius:4px;overflow:hidden;
+    background:var(--surface-2);border:1px solid var(--border);
+  }
+  .hero-ribbon-seg.win{background:var(--green);}
+  .hero-ribbon-seg.loss{background:var(--red);}
+  .hero-ribbon-meta{
+    display:flex;justify-content:space-between;gap:10px;margin-top:6px;
+    font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.06em;
+    color:var(--ink-faint);
+  }
+  .hero-ribbon-meta .win{color:var(--green);}
+  .hero-ribbon-meta .loss{color:var(--red-muted);}
+  .skel-proof{height:132px;}
+
   @media (min-width:1024px){
     .app-shell{max-width:1100px;}
 
-    .topbar,
-    .hero,
     .hero-card-wrap,
     .site-foot{
       max-width:680px;
       margin-left:auto;
       margin-right:auto;
     }
+
+    /* The topbar sits directly above the hero, so it aligns to the hero's
+       left edge rather than being centred in the old 680px measure — once
+       the hero went full-width, a centred chip read as a misplaced element.
+    */
+    .topbar{max-width:none;padding:18px 40px 14px;}
+
+    /* The hero keeps its 680px reading measure for the copy, but spends the
+       rest of the widened shell on the board pulse instead of leaving it as
+       margin. Below 1024px the panel simply stacks (see .hero-proof). */
+    .hero{
+      max-width:none;
+      display:grid;
+      grid-template-columns:minmax(0,680px) minmax(260px,1fr);
+      gap:38px;
+      align-items:start;
+      padding:34px 40px 26px;
+    }
+    .hero-proof{margin-top:6px;}
+    .hero-proof-grid{gap:14px 16px;}
+    .hero-stat-val{font-size:1.6rem;}
 
     .section-head{padding:0 40px;}
     .rail{padding:2px 40px 10px;gap:16px;}
@@ -1162,6 +1249,7 @@
   </div>
 
   <header class="hero">
+   <div class="hero-copy">
     <p class="eyebrow">On-chain trading, graded honestly</p>
     <h1 class="headline">What&rsquo;s your score?</h1>
     <p class="subline">Connect a wallet to see its real Polymarket record — every resolved trade, <b>wins and losses</b>, scored against how the market actually settled.</p>
@@ -1175,6 +1263,24 @@
     </div>
     <p class="connect-err" id="connectErr" style="display:none;"></p>
     <p class="listing-note">Connecting lists you on the public leaderboard. <a href="/connect">Opt out anytime.</a></p>
+   </div>
+
+    <!-- BOARD PULSE — the same four figures /api/board-stats already puts in
+         the KPI row further down, surfaced in the first screen so the page
+         opens on evidence that the scoreboard is real and populated rather
+         than on copy alone. Deliberately NOT a new claim and NOT a new
+         request: identical numbers, identical source, rendered from the
+         response loadBoardStats already fetches. If that fetch fails the
+         panel removes itself rather than showing zeros. -->
+    <aside class="hero-proof" id="heroProof" aria-label="Live board summary">
+      <div class="hero-proof-head">
+        <span class="hero-proof-title"><span class="live-dot"></span>The board, live</span>
+        <span class="hero-proof-stamp" id="heroProofStamp"></span>
+      </div>
+      <div class="hero-proof-body" id="heroProofBody">
+        <div class="skel skel-proof"></div>
+      </div>
+    </aside>
   </header>
 
   <hr class="div" />
@@ -1396,10 +1502,25 @@ function initCardVisuals(root){
     var data = (canvas.getAttribute('data-trend') || '').split(',').map(Number);
     var colorKey = canvas.getAttribute('data-color') || 'gold';
     var color = palette[colorKey] || palette.gold;
-    if (!data.length) return;
+    // Two points is the minimum that is a line rather than a dot, and the
+    // x-step below divides by (length - 1) — a single point would place
+    // every coordinate at NaN and paint nothing but a console error.
+    if (data.length < 2) return;
+    for (var di = 0; di < data.length; di++) { if (!isFinite(data[di])) return; }
+    // Present only on an equity curve, where zero is a real reference line
+    // (broke even) rather than an arbitrary floor.
+    var baselineAttr = canvas.getAttribute('data-baseline');
+    var baseline = baselineAttr == null ? null : Number(baselineAttr);
+    if (baseline != null && !isFinite(baseline)) baseline = null;
 
     var dpr = window.devicePixelRatio || 1;
-    var cssW = 100, cssH = 34;
+    // Size comes from the stylesheet (.spark-canvas, plus any per-card
+    // override) rather than two constants here, so the hero card can carry a
+    // larger curve without a second copy of this drawing code. The fallback
+    // covers a canvas measured before layout, where the rect is 0x0.
+    var rect = canvas.getBoundingClientRect();
+    var cssW = Math.round(rect.width) || 100;
+    var cssH = Math.round(rect.height) || 34;
     canvas.style.width = cssW + 'px';
     canvas.style.height = cssH + 'px';
     canvas.width = cssW * dpr;
@@ -1409,20 +1530,42 @@ function initCardVisuals(root){
 
     var min = Math.min.apply(null, data);
     var max = Math.max.apply(null, data);
+    // Keep zero inside the plotted range on an equity curve. Without this a
+    // wallet whose curve never goes negative gets a baseline pinned off the
+    // bottom of the box, and the "are they above water" read — the whole
+    // point of the line — is lost.
+    if (baseline != null) { min = Math.min(min, baseline); max = Math.max(max, baseline); }
     var pad = (max - min) * 0.2 || 5;
     min -= pad; max += pad;
 
+    function yFor(v){ return cssH - 4 - ((v - min) / (max - min)) * (cssH - 8); }
+
     var pts = data.map(function(v, i){
       var x = (i / (data.length - 1)) * (cssW - 6) + 3;
-      var y = cssH - 4 - ((v - min) / (max - min)) * (cssH - 8);
-      return [x, y];
+      return [x, yFor(v)];
     });
+
+    // Break-even rule, under the curve so the line and its end dot stay on
+    // top. Drawn before anything else for that reason.
+    if (baseline != null) {
+      var yBase = yFor(baseline);
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([2, 3]);
+      ctx.moveTo(3, yBase);
+      ctx.lineTo(cssW - 3, yBase);
+      ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     pts.forEach(function(p){ ctx.lineTo(p[0], p[1]); });
-    ctx.lineTo(pts[pts.length - 1][0], cssH);
-    ctx.lineTo(pts[0][0], cssH);
+    var yFloor = baseline != null ? yFor(baseline) : cssH;
+    ctx.lineTo(pts[pts.length - 1][0], yFloor);
+    ctx.lineTo(pts[0][0], yFloor);
     ctx.closePath();
     var grad = ctx.createLinearGradient(0, 0, 0, cssH);
     grad.addColorStop(0, color + '33');
@@ -1610,7 +1753,25 @@ function cardArticleHtml(card, isHero, rank){
   var known = card.flex_score != null;
   var scoreDisplay = known ? String(card.flex_score) : '—';
   var roiNeg = card.raw_weighted_roi_pct != null && card.raw_weighted_roi_pct < 0;
-  var trend = (card.form && card.form.length >= 2) ? card.form.map(function(v){ return Math.round(v * 100); }).join(',') : null;
+  // The sparkline draws the equity curve (cumulative P&L, from
+  // _buildTraderCards' form_pnl) whenever the server can produce one.
+  // card.form — win/loss flags — is only the fallback: as a line it is a
+  // square wave between two fixed heights, identical in shape for every
+  // trader and silent about magnitude. Colour follows the curve's own net,
+  // not lifetime ROI, because the curve's own net is what is being drawn.
+  var pnlCurve = (card.form_pnl && card.form_pnl.length >= 2) ? card.form_pnl : null;
+  var curveNet = pnlCurve ? pnlCurve[pnlCurve.length - 1] : null;
+  var trend = pnlCurve
+    ? pnlCurve.join(',')
+    : ((card.form && card.form.length >= 2) ? card.form.map(function(v){ return Math.round(v * 100); }).join(',') : null);
+  var sparkColor = pnlCurve
+    ? (curveNet > 0 ? 'green' : curveNet < 0 ? 'red' : 'gold')
+    : (roiNeg ? 'red' : 'gold');
+  var sparkLabel = pnlCurve
+    ? 'Cumulative profit and loss across the last ' + (pnlCurve.length - 1)
+      + ' resolved trades: ' + fmtSignedUsdCompact(curveNet)
+    : 'Win and loss sequence across the last '
+      + (card.form ? card.form.length : 0) + ' resolved trades';
   var ev = card.evidence;
 
   var html = '<div class="trader-card-block"><a class="trader-card' + (isHero ? ' hero-card' : '') + '" href="' + esc(hrefOf(card)) + '" data-observe>';
@@ -1627,7 +1788,13 @@ function cardArticleHtml(card, isHero, rank){
     + '<span class="card-handle">' + esc(handle) + '</span>'
     + '</div>';
   if (trend) {
-    html += '<canvas class="spark-canvas" data-trend="' + trend + '" data-color="' + (roiNeg ? 'red' : 'gold') + '" width="200" height="68"></canvas>';
+    // role/aria-label: a canvas has no accessible text of its own, so
+    // without these the trend is available to sighted users only.
+    html += '<canvas class="spark-canvas" data-trend="' + trend + '"'
+      + ' data-color="' + sparkColor + '"'
+      + (pnlCurve ? ' data-baseline="0"' : '')
+      + ' role="img" aria-label="' + esc(sparkLabel) + '"'
+      + ' width="200" height="68"></canvas>';
   }
   html += '</div>';
 
@@ -1790,7 +1957,12 @@ function marketIconHtml(m){
   if (!m.icon) return marketTileHtml(m);
   // onerror swaps in the same tile rather than removing the image, so a dead
   // URL cannot change the card's layout.
+  // width/height match the CSS box so the row reserves its space before the
+  // bytes land (no layout shift on a slow image); decoding="async" keeps a
+  // large icon off the paint path; no-referrer means loading a market's art
+  // doesn't tell Polymarket's CDN which page the visitor is on.
   return '<img class="call-icon" src="' + esc(m.icon) + '" alt="" loading="lazy"'
+    + ' decoding="async" referrerpolicy="no-referrer" width="38" height="38"'
     + ' onerror="this.outerHTML=this.getAttribute(\'data-fb\')"'
     + ' data-fb="' + esc(marketTileHtml(m)) + '">';
 }
@@ -1921,6 +2093,13 @@ function fmtUsdCompact(n){
   return '$' + Math.round(n);
 }
 function fmtPct1(p){ return p == null ? '—' : p.toFixed(1) + '%'; }
+// Signed twin of fmtUsdCompact, for P&L specifically. Voice charter §7:
+// gains carry an explicit +, losses use U+2212 MINUS SIGN, never a hyphen.
+function fmtSignedUsdCompact(n){
+  if (n == null) return '—';
+  if (!n) return '$0';
+  return (n > 0 ? '+' : '\u2212') + fmtUsdCompact(Math.abs(n));
+}
 
 // Count-up on the KPI tiles. Purely presentational — the final value is
 // always the exact number from the API, and reduced-motion jumps straight
@@ -1938,6 +2117,61 @@ function animateCount(el, target, render){
     else el.textContent = render(target);
   }
   requestAnimationFrame(step);
+}
+
+// Board pulse in the hero. Deliberately shares renderKpis' figures and its
+// single /api/board-stats response — it issues no request of its own, so the
+// first screen can't disagree with the KPI row further down. When the board
+// has nothing to report the panel removes itself entirely: an empty
+// scoreboard in the opening screen is worse than no scoreboard.
+function renderHeroProof(t, updatedAt){
+  var panel = document.getElementById('heroProof');
+  var body = document.getElementById('heroProofBody');
+  if (!panel || !body) return;
+  if (!t || t.ranked_wallets == null) { panel.classList.add('is-gone'); return; }
+  panel.classList.remove('is-gone');
+
+  var tiles = [
+    { key: 'Ranked wallets', val: t.ranked_wallets, render: function(v){ return fmtInt(Math.round(v)); } },
+    { key: 'Trades scored',  val: t.scored_trades,  render: function(v){ return fmtInt(Math.round(v)); } },
+    { key: 'Capital graded', val: t.capital_usd,    render: fmtUsdCompact },
+    { key: 'Board win rate', val: t.win_rate_pct,   render: function(v){ return v.toFixed(1) + '%'; } }
+  ];
+
+  var html = '<div class="hero-proof-grid">' + tiles.map(function(tile){
+    return '<div class="hero-stat">'
+      + '<div class="hero-stat-val' + (tile.val == null ? ' is-mute' : '') + '">—</div>'
+      + '<span class="hero-stat-key">' + esc(tile.key) + '</span>'
+      + '</div>';
+  }).join('') + '</div>';
+
+  // The win/loss ribbon is why the win rate is believable rather than just
+  // large. Both halves always render, in the page's green/red convention.
+  var wins = t.wins, losses = t.losses;
+  if (wins != null && losses != null && (wins + losses) > 0) {
+    var winPct = (wins / (wins + losses)) * 100;
+    html += '<div class="hero-ribbon">'
+      + '<div class="hero-ribbon-bar" role="img" aria-label="'
+        + esc(fmtInt(wins) + ' trades won, ' + fmtInt(losses) + ' lost') + '">'
+        + '<div class="hero-ribbon-seg win" style="width:' + winPct.toFixed(2) + '%"></div>'
+        + '<div class="hero-ribbon-seg loss" style="width:' + (100 - winPct).toFixed(2) + '%"></div>'
+      + '</div>'
+      + '<div class="hero-ribbon-meta">'
+        + '<span class="win">' + esc(fmtInt(wins)) + ' won</span>'
+        + '<span class="loss">' + esc(fmtInt(losses)) + ' lost</span>'
+      + '</div>'
+      + '</div>';
+  }
+  body.innerHTML = html;
+
+  var vals = body.querySelectorAll('.hero-stat-val');
+  tiles.forEach(function(tile, i){ animateCount(vals[i], tile.val, tile.render); });
+
+  var stamp = document.getElementById('heroProofStamp');
+  if (stamp && updatedAt) {
+    stamp.textContent = 'UPDATED ' + new Date(updatedAt).toLocaleTimeString('en-US',
+      { hour: '2-digit', minute: '2-digit' }).toUpperCase();
+  }
 }
 
 function renderKpis(t){
@@ -2155,6 +2389,7 @@ function loadBoardStats(){
     .then(function(d){
       if (!d) throw new Error('no data');
       renderKpis(d.totals || {});
+      renderHeroProof(d.totals, d.updated_at);
       renderCapitalDonut(d.categories, d.uncategorized);
       renderWinLoss(d.categories);
       renderScoreHist(d.score_distribution || {});
@@ -2168,6 +2403,10 @@ function loadBoardStats(){
       }
     })
     .catch(function(){
+      // No figures means no pulse — the hero must not open on a row of
+      // dashes pretending to be a live board.
+      var proof = document.getElementById('heroProof');
+      if (proof) proof.classList.add('is-gone');
       ['capitalChart', 'winLossChart', 'scoreChart', 'splitChart'].forEach(function(id){
         var el = document.getElementById(id);
         if (el) el.innerHTML = '<p class="chart-empty">Could not load board figures.</p>';

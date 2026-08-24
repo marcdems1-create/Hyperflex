@@ -13321,6 +13321,36 @@ async function _buildTraderCards(roiRows) {
       streak = { type: last === 1 ? 'win' : last === 0 ? 'loss' : 'push', count };
     }
 
+    // Equity curve over the SAME last-8 durable trades, oldest->newest, as
+    // cumulative realized P&L in dollars, with a leading 0 so the first
+    // trade's move is visible rather than being the baseline.
+    //
+    // Why this exists alongside `form`: `form` is win/loss flags (1/0/0.5).
+    // Drawn as a line it is a square wave between two fixed heights — every
+    // trader gets the same violent zigzag, magnitude is invisible, and two
+    // wallets with identical win rates but different orderings look wildly
+    // different while saying nothing. Read as a trend line that is not just
+    // uninformative, it implies a P&L shape the data never carried. `form`
+    // stays because the streak above is computed from it; the card's
+    // sparkline draws THIS.
+    //
+    // Null (not an empty array) when there is nothing honest to draw, so the
+    // client falls back rather than rendering a flat line at zero as if the
+    // trader had broken even.
+    let formPnl = null;
+    if (recentTrades.length >= 2) {
+      let running = 0;
+      const curve = [0];
+      let usable = true;
+      for (const t of recentTrades) {
+        const pnl = Number(t.realized_pnl);
+        if (!Number.isFinite(pnl)) { usable = false; break; }
+        running += pnl;
+        curve.push(Math.round(running * 100) / 100);
+      }
+      if (usable) formPnl = curve;
+    }
+
     const evidence = maxTrade ? {
       question: maxTrade.question,
       side: maxTrade.side,
@@ -13342,7 +13372,7 @@ async function _buildTraderCards(roiRows) {
       n, score_pct: row.score_pct, raw_weighted_roi_pct: row.raw_weighted_roi_pct,
       flex_score: row.flex_score != null ? row.flex_score : null,
       total_capital_usd: row.total_capital_usd, trend: row.trend,
-      verdict, evidence, form, streak,
+      verdict, evidence, form, form_pnl: formPnl, streak,
       specialty: specialty ? {
         best: { category: specialty.best.category, win_rate_pct: Math.round(specialty.best.winRate * 1000) / 10, n: specialty.best.n },
         worst: { category: specialty.worst.category, win_rate_pct: Math.round(specialty.worst.winRate * 1000) / 10, n: specialty.worst.n },

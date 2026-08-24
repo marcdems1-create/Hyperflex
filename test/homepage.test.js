@@ -28,10 +28,23 @@ function mkEl(id) {
     get innerHTML() { return this._html; },
     set textContent(v) { sinks[id] = v; },
     get textContent() { return sinks[id] || ''; },
-    classList: { add() {}, remove() {}, toggle() {} },
+    classes: new Set(),
+    get classList() {
+      const set = this.classes;
+      return { add: (c) => set.add(c), remove: (c) => set.delete(c),
+               toggle: (c) => (set.has(c) ? set.delete(c) : set.add(c)),
+               contains: (c) => set.has(c) };
+    },
     addEventListener() {},
     querySelector() { return { addEventListener() {}, classList: { add() {}, remove() {} } }; },
     querySelectorAll(sel) {
+      if (id === 'heroProofBody' && sel === '.hero-stat-val') {
+        const n = (this._html.match(/class="hero-stat"/g) || []).length;
+        const out = [];
+        for (let i = 0; i < n; i++) out.push({ _t: '', classList: { add() {}, remove() {} },
+          set textContent(v) { this._t = v; }, get textContent() { return this._t; } });
+        return out;
+      }
       if (id === 'kpiRow' && sel === '.kpi-val') {
         kpiVals.length = 0;
         const n = (this._html.match(/class="kpi"/g) || []).length;
@@ -54,6 +67,9 @@ global.fetch = () => Promise.resolve({ ok: false });
 global.setInterval = () => 0;
 global.fmtPlainPct = (p) => p == null ? '—' : p.toFixed(1) + '%';
 global.fmtPct = (p) => p == null ? '—' : (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%';
+// Defined below the sliced block (it belongs to the challenge/auth code,
+// not the render code), so cardArticleHtml needs it supplied here.
+global.cardActionsHtml = () => '<div class="card-actions"></div>';
 global.esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -313,6 +329,81 @@ ok('table: escapes cell content', !t.includes('<script>'));
 ok('table: has caption', t.includes('<caption>Cap</caption>'));
 ok('table: row headers are th scope=row', t.includes('scope="row"'));
 
+
+// ===== TRADER CARD SPARKLINE ===========================================
+// The card's curve must be the equity curve (form_pnl) whenever the server
+// ships one. card.form is win/loss flags — as a line it is a square wave
+// that says nothing about magnitude, so it is a fallback, never the default.
+const CARD = (o = {}) => Object.assign({
+  user_id: 'u1', username: 'trader', display_name: 'Trader', polymarket_address: '0xabc',
+  flex_score: 72, win_rate_pct: 58.3, n: 31, raw_weighted_roi_pct: 12.5,
+  form: [1, 0, 1, 1, 0, 1, 0, 1],
+}, o);
+const trendOf = (html) => (html.match(/data-trend="([^"]*)"/) || [])[1];
+const colorOf = (html) => (html.match(/data-color="([^"]*)"/) || [])[1];
+
+let sc = cardArticleHtml(CARD({ form_pnl: [0, 120, -40, 310] }), false, 2);
+ok('spark: equity curve wins over the win/loss flags',
+  trendOf(sc) === '0,120,-40,310', trendOf(sc));
+ok('spark: a curve ending up is green', colorOf(sc) === 'green', colorOf(sc));
+ok('spark: an equity curve carries a zero baseline',
+  /data-baseline="0"/.test(sc));
+ok('spark: the canvas has an accessible name',
+  /role="img"/.test(sc) && /aria-label="Cumulative profit and loss[^"]*"/.test(sc));
+ok('spark: the accessible name carries the signed net',
+  /aria-label="[^"]*\+\$310"/.test(sc), (sc.match(/aria-label="([^"]*)"/) || [])[1]);
+
+sc = cardArticleHtml(CARD({ form_pnl: [0, -200, -90, -450] }), false, 2);
+ok('spark: a curve ending down is red', colorOf(sc) === 'red', colorOf(sc));
+ok('spark: a losing net uses U+2212, not a hyphen',
+  /aria-label="[^"]*\u2212\$450"/.test(sc), (sc.match(/aria-label="([^"]*)"/) || [])[1]);
+
+sc = cardArticleHtml(CARD({ form_pnl: [0, 0, 0] }), false, 2);
+ok('spark: a flat curve is neither green nor red', colorOf(sc) === 'gold', colorOf(sc));
+
+// Fallback path — an older payload with no form_pnl still draws something,
+// and must NOT claim a baseline it doesn't have.
+sc = cardArticleHtml(CARD(), false, 2);
+ok('spark: falls back to win/loss flags when no curve is shipped',
+  trendOf(sc) === '100,0,100,100,0,100,0,100', trendOf(sc));
+ok('spark: the fallback carries no zero baseline', !/data-baseline/.test(sc));
+ok('spark: the fallback still has an accessible name',
+  /aria-label="Win and loss sequence[^"]*"/.test(sc));
+
+sc = cardArticleHtml(CARD({ form: [], form_pnl: null }), false, 2);
+ok('spark: no series at all renders no canvas', !/spark-canvas/.test(sc));
+sc = cardArticleHtml(CARD({ form: [1], form_pnl: [0] }), false, 2);
+ok('spark: a single point is not a line, so no canvas', !/spark-canvas/.test(sc));
+
+// ===== HERO BOARD PULSE ================================================
+// Same figures as the KPI row, from the same response. It must disappear
+// rather than render an empty scoreboard in the first screen.
+const TOTALS = { ranked_wallets: 76, scored_trades: 4182, capital_usd: 2860000,
+                 win_rate_pct: 54.3, wins: 2271, losses: 1911 };
+throws('heroProof: renders without throwing', () => renderHeroProof(TOTALS, new Date().toISOString()));
+renderHeroProof(TOTALS, '2026-08-24T17:00:00Z');
+let hp = sinks['heroProofBody'] || '';
+ok('heroProof: renders four figures', (hp.match(/class="hero-stat"/g) || []).length === 4);
+ok('heroProof: shows the win/loss ribbon', /hero-ribbon-seg win/.test(hp) && /hero-ribbon-seg loss/.test(hp));
+ok('heroProof: the ribbon has an accessible name',
+  /aria-label="2,271 trades won, 1,911 lost"/.test(hp));
+ok('heroProof: losses are labelled, never folded into the win figure',
+  /1,911 lost/.test(hp));
+ok('heroProof: panel is visible when there are figures',
+  !document.getElementById('heroProof').classList.contains('is-gone'));
+
+renderHeroProof(null, null);
+ok('heroProof: hides itself when the board has nothing to report',
+  document.getElementById('heroProof').classList.contains('is-gone'));
+renderHeroProof({ ranked_wallets: null }, null);
+ok('heroProof: hides itself rather than rendering a row of dashes',
+  document.getElementById('heroProof').classList.contains('is-gone'));
+
+// A board with no decided trades yet must not draw a zero-width ribbon.
+renderHeroProof({ ranked_wallets: 3, scored_trades: 0, capital_usd: 0,
+                  win_rate_pct: 0, wins: 0, losses: 0 }, null);
+ok('heroProof: no decided trades means no ribbon',
+  !/hero-ribbon-bar/.test(sinks['heroProofBody'] || ''));
 
 // ===== PAGE-LEVEL / ACCESSIBILITY ======================================
 // Asserted against the raw file, not the render functions — these are
