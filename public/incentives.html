@@ -315,24 +315,32 @@ function renderRewardCards(list) {
     var yesPct  = pctFromYes(m.yes_price);
     var noPct   = 100 - yesPct;
     var rate    = Number(m.reward_rate || 0);
-    var spread  = Number(m.max_spread  || 0);
-    var minSize = Number(m.min_size    || 0);
+    // Polymarket does not always publish the program's spread/min-size.
+    // Coercing a missing value to 0 produced real nonsense on live cards:
+    // "post 68¢ – 68¢" (a zero-width range), "Min order $0", and a
+    // zero-width reward band. Missing stays missing and is labelled.
+    var spread  = m.max_spread == null ? null : Number(m.max_spread);
+    var minSize = m.min_size   == null ? null : Number(m.min_size);
     var liq     = Number(m.liquidity   || 0);
     var slug    = m.slug || '';
     var href    = slug ? '/market/' + encodeURIComponent(slug) : (m.url || '#');
 
-    // qualifying price ranges for each side
-    var yesLo = Math.max(0,  yesPct - spread).toFixed(0);
-    var yesHi = Math.min(99, yesPct + spread).toFixed(0);
-    var noLo  = Math.max(0,  noPct  - spread).toFixed(0);
-    var noHi  = Math.min(99, noPct  + spread).toFixed(0);
+    // qualifying price ranges for each side — only meaningful if the
+    // program actually published a spread
+    var hasSpread = spread != null && spread > 0;
+    var yesRange = hasSpread
+      ? 'post ' + Math.max(0, yesPct - spread).toFixed(0) + '¢ – ' + Math.min(99, yesPct + spread).toFixed(0) + '¢'
+      : 'range not published';
+    var noRange = hasSpread
+      ? 'post ' + Math.max(0, noPct - spread).toFixed(0) + '¢ – ' + Math.min(99, noPct + spread).toFixed(0) + '¢'
+      : 'range not published';
 
     // estimated daily earnings per min_size posted
-    var estDay = (liq > 0 && minSize > 0 && rate > 0)
+    var estDay = (liq > 0 && minSize != null && minSize > 0 && rate > 0)
       ? '$' + ((minSize / liq) * rate).toFixed(2)
       : null;
 
-    var spreadLabel = spread > 0 ? ('±' + spread.toFixed(1) + '¢') : '';
+    var spreadLabel = hasSpread ? ('±' + spread.toFixed(1) + '¢') : '';
     var token = firstTokenId(m);
 
     return '<div class="r-card" data-href="' + esc(href) + '">' +
@@ -348,13 +356,13 @@ function renderRewardCards(list) {
         '<div class="r-post-side">' +
           '<span class="r-post-side-label yes">YES</span>' +
           '<span class="r-post-price yes">' + yesPct + '¢</span>' +
-          '<span class="r-post-range">post ' + yesLo + '¢ – ' + yesHi + '¢</span>' +
+          '<span class="r-post-range">' + yesRange + '</span>' +
         '</div>' +
         '<div class="r-post-divider"></div>' +
         '<div class="r-post-side">' +
           '<span class="r-post-side-label no">NO</span>' +
           '<span class="r-post-price no">' + noPct + '¢</span>' +
-          '<span class="r-post-range">post ' + noLo + '¢ – ' + noHi + '¢</span>' +
+          '<span class="r-post-range">' + noRange + '</span>' +
         '</div>' +
         (estDay ? '<div class="r-post-est"><span class="r-est-num">' + estDay + '/day</span><span class="r-est-sub">per $' + minSize + ' posted</span></div>' : '') +
       '</div>' +
@@ -363,14 +371,14 @@ function renderRewardCards(list) {
       (token
         ? '<div class="r-book-label">Live spread &amp; book'
             + '<button type="button" class="r-book-toggle">Numbers</button></div>'
-          + '<div class="r-book" data-token="' + esc(token) + '" data-spread="' + spread + '">'
+          + '<div class="r-book" data-token="' + esc(token) + '" data-spread="' + (hasSpread ? spread : 0) + '">'
             + '<div class="r-book-empty">Loading book…</div>'
           + '</div>'
         : '') +
 
       // ── STATS ──
       '<div class="r-stats">' +
-        '<div><span class="stat-k">Min order</span><span class="stat-v">$' + minSize.toLocaleString() + '</span></div>' +
+        '<div><span class="stat-k">Min order</span><span class="stat-v">' + (minSize != null && minSize > 0 ? '$' + minSize.toLocaleString() : '—') + '</span></div>' +
         '<div><span class="stat-k">24h vol</span><span class="stat-v">' + fmtVol(m.volume_24h) + '</span></div>' +
         '<div><span class="stat-k">Liquidity</span><span class="stat-v">' + fmtVol(m.liquidity) + '</span></div>' +
         '<div class="r-cta-cell"><a class="r-cta" href="' + esc(href) + '">Trade →</a></div>' +
@@ -395,7 +403,7 @@ function firstTokenId(m){
 // at a 1¢ spread the whole book would collapse into a single pixel column.
 // The window always contains the reward band AND the plotted levels.
 function bookWindow(bestBid, bestAsk, mid, maxSpreadC){
-  var pad = Math.max(maxSpreadC * 1.6, 3);
+  var pad = Math.max((maxSpreadC > 0 ? maxSpreadC : 0) * 1.6, 3);
   var lo = Math.min(bestBid * 100, mid * 100 - maxSpreadC) - pad;
   var hi = Math.max(bestAsk * 100, mid * 100 + maxSpreadC) + pad;
   return { lo: Math.max(0, lo), hi: Math.min(100, hi) };
@@ -442,20 +450,27 @@ function renderBook(host, d, maxSpreadC){
       + ' fill="' + (cls === 'b' ? '#00c85a' : '#ff4d6a') + '" fill-opacity="0.72"></rect>';
   };
 
-  var rewardLo = Math.max(win.lo, mid * 100 - maxSpreadC);
-  var rewardHi = Math.min(win.hi, mid * 100 + maxSpreadC);
+  // A missing max_spread means Polymarket hasn't published the program's
+  // band. Drawing it as ±0 produced a zero-width "EARNS" sliver implying a
+  // single qualifying price, which is worse than drawing nothing. The book
+  // and the spread are still worth showing on their own.
+  var hasBand = maxSpreadC > 0;
+  var rewardLo = hasBand ? Math.max(win.lo, mid * 100 - maxSpreadC) : 0;
+  var rewardHi = hasBand ? Math.min(win.hi, mid * 100 + maxSpreadC) : 0;
 
   var svg = '<svg class="r-book-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"'
     + ' role="img" aria-label="Order book depth. Best bid ' + (bb * 100).toFixed(1) + ' cents, best ask '
     + (ba * 100).toFixed(1) + ' cents, spread ' + spreadC.toFixed(1) + ' cents.">'
     // reward band first, so depth draws over it
-    + '<rect x="' + X(rewardLo).toFixed(2) + '" y="0" width="' + Math.max(0, X(rewardHi) - X(rewardLo)).toFixed(2)
-      + '" height="' + H + '" fill="#c9920d" fill-opacity="0.14"></rect>'
-    + '<text x="' + ((X(rewardLo) + X(rewardHi)) / 2).toFixed(2) + '" y="9" text-anchor="middle"'
-      + ' font-family="JetBrains Mono, monospace" font-size="7" letter-spacing="0.1em"'
-      + ' fill="#c9920d" fill-opacity="0.85">EARNS</text>'
-    + '<line x1="' + X(rewardLo).toFixed(2) + '" y1="0" x2="' + X(rewardLo).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
-    + '<line x1="' + X(rewardHi).toFixed(2) + '" y1="0" x2="' + X(rewardHi).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+    + (hasBand
+        ? '<rect x="' + X(rewardLo).toFixed(2) + '" y="0" width="' + Math.max(0, X(rewardHi) - X(rewardLo)).toFixed(2)
+            + '" height="' + H + '" fill="#c9920d" fill-opacity="0.14"></rect>'
+          + '<text x="' + ((X(rewardLo) + X(rewardHi)) / 2).toFixed(2) + '" y="9" text-anchor="middle"'
+            + ' font-family="JetBrains Mono, monospace" font-size="7" letter-spacing="0.1em"'
+            + ' fill="#c9920d" fill-opacity="0.85">EARNS</text>'
+          + '<line x1="' + X(rewardLo).toFixed(2) + '" y1="0" x2="' + X(rewardLo).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+          + '<line x1="' + X(rewardHi).toFixed(2) + '" y1="0" x2="' + X(rewardHi).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+        : '')
     + vb.map(function(l){ return bar(l, 'b'); }).join('')
     + va.map(function(l){ return bar(l, 'a'); }).join('')
     // the spread itself: the gap between touch prices
@@ -466,9 +481,14 @@ function renderBook(host, d, maxSpreadC){
 
   // Is there actually room to rest inside the reward band? Stated as fact,
   // not as a recommendation.
-  var roomNote = spreadC <= 0.011 * 100
-    ? 'Spread is <b>' + spreadC.toFixed(1) + '¢</b> — the book is at touch, so a qualifying order joins the queue at ' + Math.round(bb * 100) + '¢ or ' + Math.round(ba * 100) + '¢.'
-    : 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>, and the reward band is <b>±' + maxSpreadC.toFixed(1) + '¢</b> of mid — there is room to rest inside it at ' + Math.round(rewardLo) + '¢–' + Math.round(rewardHi) + '¢.';
+  var roomNote;
+  if (!hasBand) {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>. Polymarket has not published a reward band for this program, so no earning zone is drawn.';
+  } else if (spreadC <= 1.1) {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b> — the book is at touch, so a qualifying order joins the queue at ' + Math.round(bb * 100) + '¢ or ' + Math.round(ba * 100) + '¢. Shaded band is where a maker order earns.';
+  } else {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>, and the reward band is <b>±' + maxSpreadC.toFixed(1) + '¢</b> of mid — there is room to rest inside it at ' + Math.round(rewardLo) + '¢–' + Math.round(rewardHi) + '¢.';
+  }
 
   host.innerHTML =
     '<div class="r-book-top">'
@@ -478,7 +498,7 @@ function renderBook(host, d, maxSpreadC){
     + '</div>'
     + svg
     + '<div class="r-book-axis"><span>' + win.lo.toFixed(0) + '¢</span><span>' + ((win.lo + win.hi) / 2).toFixed(0) + '¢</span><span>' + win.hi.toFixed(0) + '¢</span></div>'
-    + '<div class="r-book-note">' + roomNote + ' Shaded band is where a maker order earns.</div>'
+    + '<div class="r-book-note">' + roomNote + '</div>'
     + bookTableHtml(vb, va);
 }
 
