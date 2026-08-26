@@ -49,6 +49,46 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-24b (Challenge merge + fight-night pass)
+
+**Shipped (with hashes):**
+- (branch `claude/homepage-visual-pass`, not yet merged — no squash hash)
+
+**Two overrides Marc granted this session — do not revert as drift:**
+- Voice charter §4/§5/§6 lifted **for `/challenge` only**. Fight-night voice
+  and non-functional glyphs are deliberate there. Every other surface still
+  runs the charter. Noted inline in CLAUDE.md above §6.
+- The parked `nav.js` primaryLinks question is settled for this one link:
+  the duplicate `⚔ Challenges` More-dropdown entry is removed. The primary
+  `Challenge` link is unchanged (`/challenge`) and now opens the merged page.
+
+**Changed:**
+- `public/challenge.html` rewritten as the single Challenge surface. Sections:
+  the ring (hero + live tote board), how it works (three rounds), **pick a
+  fight** (suggested opponents), tonight's card (live matchups), title
+  holders, your corner (auth inbox), weekly title fight.
+- **Suggested opponents come from `/api/live-calls`** — the same verified
+  durable-board wallets the homepage promotes, each with one real open
+  position. Gate 1 / Gate 4 hold by construction: an unverified wallet can
+  never reach that endpoint, and score + n travel with every card. The CTA
+  offers the side the trader is *not* on, and the composer posts
+  `market_title`/`market_slug`/`condition_id` so a staked challenge can
+  actually settle (the server rejects a staked one without a market).
+- `/challenges` now 302s to `/challenge`; the old page is still served at
+  `/challenges-legacy`. `/challenges/nba` is a separate route, unaffected.
+- New `test/challenge.test.js` (30 assertions) + `npm run test:challenge`.
+
+**Active blockers:**
+- Not verified against production. Offline only: test:homepage 143/143,
+  test:challenge 30/30, headless renders at 1280px and 390px with fixtures.
+- The auth'd paths (your corner, accept/decline, weekly pick submission)
+  were NOT exercised — the sandbox has no session. Highest-risk area.
+
+**Notes for next session:**
+- Sign in on a deployed build and walk: send a challenge from a suggested
+  opponent, accept one, decline one, submit weekly picks.
+- Decide whether `/challenges-legacy` gets deleted once the merge sticks.
+
 ## 2026-08-24 (homepage visual pass — Gate 3 landing-page freeze lifted)
 
 **Shipped (with hashes):**

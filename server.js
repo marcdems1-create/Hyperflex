@@ -16876,7 +16876,17 @@ app.post('/api/admin/seed-challenges', async (req, res) => {
 });
 
 // Serve the challenges management page.
+// /challenges — merged into /challenge on 2026-08-24. Two separate
+// "challenge" surfaces (weekly contest here, head-to-head there) meant
+// neither was findable and they had drifted into looking like different
+// products. Kept as a 302 rather than deleted: the More-dropdown entry,
+// old notification emails and any external link still land somewhere.
+// NOTE: this is the exact-path route only — /challenges/nba is registered
+// separately and is unaffected.
 app.get('/challenges', (req, res) => {
+  res.redirect(302, '/challenge');
+});
+app.get('/challenges-legacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'challenges.html'));
 });
 

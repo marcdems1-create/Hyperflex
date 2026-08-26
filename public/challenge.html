@@ -3,776 +3,1304 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Weekly Challenge — HYPERFLEX</title>
-<meta name="description" content="5 markets. 7 days. One winner. Make your calls on this week's biggest prediction markets.">
+<title>Challenge — HYPERFLEX</title>
+<meta name="description" content="Take the other side of a verified trader's open call. Stake FLEX, post your thesis, let the market settle it. Plus the weekly title fight: 5 markets, 7 days, one winner.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js?v=28" defer></script>
 <style>
-:root {
-  --bg: #0e0e15;
-  --card: #141420;
-  --card-hover: #1a1a28;
-  --border: #1e1e2a;
-  --text: #f0f0f5;
-  --muted: #8888a0;
-  --soft: #b0b0c0;
-  --green: #00e68a;
-  --red: #ff4d6a;
-  --blue: #4d9fff;
-  --gold: #c9920d;
-  --purple: #a855f7;
-  --amber: #f59e0b;
-  --sans: 'Inter', -apple-system, sans-serif;
-  --mono: 'JetBrains Mono', monospace;
-}
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { background: var(--bg); scroll-behavior: smooth; }
-body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
-a { color: var(--blue); text-decoration: none; }
+/* ══════════════════════════════════════════════════════════════════════
+   CHALLENGE — the single Challenge surface.
 
-/* ── HERO ── */
-.ch-hero {
-  padding: 48px 24px 32px;
-  border-bottom: 1px solid var(--border);
-  max-width: 1000px;
-  margin: 0 auto;
-}
-.ch-hero-kicker {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: var(--green);
-  margin-bottom: 12px;
-}
-.ch-hero h1 {
-  font-size: 40px;
-  font-weight: 900;
-  letter-spacing: -.03em;
-  line-height: 1.05;
-  margin-bottom: 10px;
-}
-.ch-hero h1 em { font-style: normal; color: var(--green); }
-.ch-hero-sub {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 24px;
-}
-.ch-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.ch-meta-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ch-meta-stat .n {
-  font-family: var(--mono);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-}
-.ch-meta-stat .l {
-  font-family: var(--sans);
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .1em;
-}
-.ch-countdown {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--amber);
-  background: rgba(245,158,11,.08);
-  border: 1px solid rgba(245,158,11,.2);
-  padding: 8px 16px;
-  border-radius: 6px;
-}
+   Merged 2026-08-24 from two pages that had drifted into looking like
+   different products: /challenge (weekly contest, 5 markets/7 days) and
+   /challenges (head-to-head, "who's betting against you"). Both mechanics
+   live here now; /challenges 302s in.
 
-/* ── LAYOUT ── */
-.ch-body {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 32px 24px 80px;
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 32px;
-}
-@media (max-width: 800px) {
-  .ch-body { grid-template-columns: 1fr; }
-  .ch-hero h1 { font-size: 28px; }
-}
+   Fight-night treatment is deliberate and Marc-approved: he explicitly
+   lifted voice-charter §4 (humour confined to loading/empty/error), §5
+   (meme-cycle test) and §6 (zero decorative emoji) for this page on
+   2026-08-24. See CLAUDE.md. Do NOT "fix" the emoji or the announcer
+   voice back to charter — it is not drift, it is a signed-off exception,
+   and it stops at this page's boundary. Every other surface still runs
+   the charter.
 
-/* ── MARKETS COLUMN ── */
-.ch-section-title {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 16px;
+   Palette is the homepage's token set verbatim so the two pages read as
+   one product, plus two corner accents (red/blue) that only exist here.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg-outer:#07080a;
+  --bg:#0b0d12;
+  --surface:#12151b;
+  --surface-2:#181c25;
+  --border:#232733;
+  --border-soft:#191d27;
+  --ink:#eceef2;
+  --ink-muted:#8890a3;
+  /* Same WCAG-measured value as home-kings.html — 4.5:1 on --surface-2.
+     Do not darken without re-measuring. */
+  --ink-faint:#7d8599;
+  --gold:#c9920d;
+  --gold-bright:#e0ab2c;
+  --gold-soft:rgba(201,146,13,0.14);
+  --green:#35b075;
+  --green-soft:rgba(53,176,117,0.13);
+  --red:#e2495a;
+  --red-soft:rgba(226,73,90,0.13);
+  --red-muted:#a1616c;
+  /* Corner accents — this page only. Blue never means "good" here, it is
+     purely "the other corner", so it is never used for a value judgement. */
+  --corner-a:#e2495a;
+  --corner-b:#4d9fff;
+  --corner-b-soft:rgba(77,159,255,0.13);
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --font-mono:"JetBrains Mono","SFMono-Regular",ui-monospace,Consolas,monospace;
+  --radius:13px;
+  --radius-sm:8px;
 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{background:var(--bg-outer);scroll-behavior:smooth;}
+body{
+  background:var(--bg-outer);color:var(--ink);font-family:var(--font-sans);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;min-height:100vh;
+}
+a{color:inherit;text-decoration:none;}
+::selection{background:var(--gold-soft);color:var(--gold-bright);}
+:focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px;border-radius:4px;}
 
-.market-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px;
-  margin-bottom: 12px;
-  transition: border-color .15s;
+.shell{
+  max-width:1100px;margin:0 auto;min-height:100vh;position:relative;
+  background:var(--bg);
+  border-left:1px solid var(--border-soft);border-right:1px solid var(--border-soft);
+  overflow:hidden;
 }
-.market-card.selected-yes { border-color: rgba(0,230,138,.4); background: rgba(0,230,138,.04); }
-.market-card.selected-no  { border-color: rgba(255,77,106,.4); background: rgba(255,77,106,.04); }
+.sec{padding:0 20px;}
+@media(min-width:1024px){.sec{padding:0 40px;}}
 
-.mc-topic {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin:0 0 6px;}
+.sec-title{
+  font-family:var(--font-mono);font-size:0.72rem;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--ink);font-weight:700;
 }
-.mc-question {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--text);
-  margin-bottom: 12px;
-}
-.mc-price-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.mc-price { font-weight: 700; font-size: 16px; }
-.mc-price.pos { color: var(--green); }
-.mc-price.neg { color: var(--red); }
-.mc-change { font-size: 11px; color: var(--muted); }
-.mc-change.pos { color: var(--green); }
-.mc-change.neg { color: var(--red); }
+.sec-more{font-family:var(--font-mono);font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);}
+.sec-note{font-size:0.86rem;line-height:1.55;color:var(--ink-muted);margin:0 0 16px;max-width:62ch;}
+hr.div{border:0;border-top:1px solid var(--border-soft);margin:30px 20px;}
+@media(min-width:1024px){hr.div{margin:34px 40px;}}
 
-.mc-pick-row { display: flex; gap: 8px; margin-bottom: 10px; }
-.mc-btn {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all .15s;
-  letter-spacing: .06em;
+/* ---------- HERO: the ring ---------- */
+.ring{
+  position:relative;overflow:hidden;
+  padding:40px 20px 30px;
+  border-bottom:1px solid var(--border-soft);
 }
-.mc-btn:hover { border-color: var(--soft); color: var(--text); }
-.mc-btn.yes.active { background: rgba(0,230,138,.12); border-color: var(--green); color: var(--green); }
-.mc-btn.no.active  { background: rgba(255,77,106,.12); border-color: var(--red); color: var(--red); }
+@media(min-width:1024px){.ring{padding:52px 40px 38px;}}
+/* Canvas texture — ring ropes reading as horizontal light lines, plus the
+   overhead spotlight pooling at the centre of the mat. */
+.ring::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(720px 340px at 50% -40px, rgba(201,146,13,0.13), transparent 70%),
+    repeating-linear-gradient(to bottom, rgba(255,255,255,0.014) 0 1px, transparent 1px 4px);
+  opacity:.85;
+}
+/* Sweeping spotlight. Slow enough to read as lighting, not as a loader. */
+.ring::after{
+  content:"";position:absolute;top:-40%;left:-30%;width:60%;height:180%;
+  pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(224,171,44,0.055),transparent);
+  transform:skewX(-14deg);
+  animation:sweep 9s ease-in-out infinite;
+}
+@keyframes sweep{0%,100%{left:-35%;}50%{left:80%;}}
 
-.mc-reasoning {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 8px 12px;
-  resize: none;
-  height: 52px;
-  outline: none;
-  transition: border-color .15s;
+.ring-inner{position:relative;z-index:2;}
+.kicker{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);font-size:0.64rem;letter-spacing:0.18em;
+  text-transform:uppercase;color:var(--gold-bright);
+  border:1px solid rgba(201,146,13,.32);background:var(--gold-soft);
+  padding:6px 11px;border-radius:999px;margin-bottom:16px;
 }
-.mc-reasoning:focus { border-color: var(--blue); }
-.mc-reasoning::placeholder { color: var(--muted); }
+.dot-live{
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 0 0 rgba(53,176,117,.55);animation:pulse 2s infinite;
+}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(53,176,117,.5);}
+  70%{box-shadow:0 0 0 7px rgba(53,176,117,0);}
+  100%{box-shadow:0 0 0 0 rgba(53,176,117,0);}
+}
+h1.title{
+  font-size:2.5rem;line-height:1.02;font-weight:800;letter-spacing:-0.03em;
+  margin:0 0 14px;text-wrap:balance;
+}
+h1.title em{font-style:normal;color:var(--gold-bright);}
+@media(max-width:600px){h1.title{font-size:2.05rem;}}
+.lede{font-size:1rem;line-height:1.6;color:var(--ink-muted);max-width:56ch;margin:0 0 24px;}
+.lede b{color:var(--ink);font-weight:600;}
 
-/* Submitted state */
-.mc-your-pick {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  margin-bottom: 8px;
-  font-family: var(--mono);
-  font-size: 12px;
+.cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--font-sans);font-weight:650;font-size:0.93rem;
+  padding:13px 20px;border-radius:var(--radius-sm);cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+  transition:border-color .18s ease, transform .18s ease, background .18s ease;
 }
-.mc-your-pick.winning { background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); }
-.mc-your-pick.losing  { background: rgba(255,77,106,.08); border: 1px solid rgba(255,77,106,.2); }
-.mc-your-pick.neutral { background: rgba(255,255,255,.04); border: 1px solid var(--border); }
-.mc-pick-side { font-weight: 700; }
-.mc-pick-side.yes { color: var(--green); }
-.mc-pick-side.no  { color: var(--red); }
-.mc-pick-status { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.btn:hover{border-color:var(--ink-faint);transform:translateY(-1px);}
+.btn-primary{
+  background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+  border-color:var(--gold);color:#151109;
+}
+.btn-primary:hover{filter:brightness(1.07);}
+.btn .glove{width:17px;height:17px;flex:0 0 auto;transition:transform .18s ease;}
+.btn:hover .glove{transform:rotate(-14deg) translateX(-1px);}
+.btn[disabled]{opacity:.55;cursor:not-allowed;transform:none;}
 
-/* Submit button */
-.ch-submit {
-  width: 100%;
-  padding: 16px;
-  background: var(--green);
-  color: #000;
-  border: none;
-  border-radius: 8px;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  letter-spacing: .08em;
-  transition: opacity .15s;
-  margin-top: 8px;
+/* Tote board — live counters across the top of the ring. */
+.tote{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;
+  margin-top:26px;padding-top:20px;border-top:1px solid var(--border-soft);
 }
-.ch-submit:hover { opacity: .88; }
-.ch-submit:disabled { opacity: .4; cursor: default; }
-
-/* Score summary bar (after submit) */
-.score-bar {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
+@media(min-width:760px){.tote{grid-template-columns:repeat(4,minmax(0,1fr));}}
+.tote-val{
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:1.75rem;font-weight:700;letter-spacing:-0.02em;line-height:1.1;
 }
-.score-bar .score-num {
-  font-family: var(--mono);
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--gold);
-}
-.score-bar .score-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.score-bar .rank-chip {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: rgba(201,146,13,.12);
-  color: var(--gold);
-  border: 1px solid rgba(201,146,13,.25);
+.tote-val.is-mute{color:var(--ink-faint);}
+.tote-key{
+  display:block;margin-top:4px;font-family:var(--font-mono);font-size:0.58rem;
+  letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-faint);
 }
 
-/* ── LEADERBOARD COLUMN ── */
-.lb-wrap {
-  position: sticky;
-  top: 24px;
+/* ---------- HOW IT WORKS: three rounds ---------- */
+.rounds{display:grid;gap:12px;grid-template-columns:1fr;}
+@media(min-width:820px){.rounds{grid-template-columns:repeat(3,minmax(0,1fr));}}
+.round{
+  position:relative;border:1px solid var(--border);border-radius:var(--radius);
+  background:linear-gradient(180deg,rgba(201,146,13,.045),transparent 46%),var(--surface);
+  padding:18px 16px 16px;overflow:hidden;
 }
-.lb-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
+.round-num{
+  font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:10px;display:block;
 }
-.lb-header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.lb-title {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.lb-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-.lb-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid rgba(255,255,255,.04);
-}
-.lb-row:last-child { border-bottom: none; }
-.lb-row.top1 { background: rgba(201,146,13,.06); }
-.lb-row.top2 { background: rgba(168,85,247,.04); }
-.lb-row.top3 { background: rgba(77,159,255,.04); }
-.lb-rank {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  width: 24px;
-  flex-shrink: 0;
-  text-align: center;
-}
-.lb-rank.r1 { color: var(--gold); }
-.lb-rank.r2 { color: var(--purple); }
-.lb-rank.r3 { color: var(--blue); }
-.lb-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--card-hover);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
-  color: var(--muted);
-}
-.lb-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 600;
-}
-.lb-score {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--gold);
-  flex-shrink: 0;
-}
-.lb-empty {
-  padding: 32px 16px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
+.round-art{height:56px;margin-bottom:12px;}
+.round-art svg{width:100%;height:100%;overflow:visible;}
+.round-h{font-size:1rem;font-weight:700;letter-spacing:-0.01em;margin-bottom:6px;}
+.round-p{font-size:0.85rem;line-height:1.55;color:var(--ink-muted);}
+.round-p code{
+  font-family:var(--font-mono);font-size:0.78rem;color:var(--gold-bright);
+  background:var(--gold-soft);padding:1px 5px;border-radius:4px;
 }
 
-/* ── STATES ── */
-.ch-no-challenge {
-  max-width: 600px;
-  margin: 80px auto;
-  text-align: center;
-  padding: 0 24px;
+/* ---------- OPPONENT CARDS: pick a fight ---------- */
+.rail{
+  display:flex;gap:14px;overflow-x:auto;padding:2px 20px 14px;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
 }
-.ch-no-challenge h2 { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
-.ch-no-challenge p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+@media(min-width:1024px){.rail{padding:2px 40px 14px;gap:16px;}}
+.rail::-webkit-scrollbar{height:6px;}
+.rail::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.opp{
+  flex:0 0 300px;scroll-snap-align:start;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);padding:15px 15px 14px;
+  display:flex;flex-direction:column;
+  opacity:0;transform:translateY(12px);
+  transition:opacity .5s ease,transform .5s ease,border-color .2s ease;
+}
+.opp.in-view{opacity:1;transform:translateY(0);}
+.opp:hover{border-color:var(--ink-faint);}
+@media(min-width:1024px){.opp{flex:0 0 330px;}}
 
-/* ── RESULTS / WINNER CARD ── */
-.winner-card {
-  background: linear-gradient(135deg, rgba(201,146,13,.12), rgba(168,85,247,.08));
-  border: 1px solid rgba(201,146,13,.3);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
+.opp-top{display:flex;align-items:center;gap:10px;margin-bottom:13px;}
+/* Score plate — reads as a fighter's record board. */
+.opp-score{
+  flex:0 0 auto;width:44px;height:44px;border-radius:10px;
+  background:linear-gradient(160deg,var(--gold-bright),var(--gold));
+  color:#151109;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  line-height:1;
 }
-.winner-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: .2em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 8px;
+.opp-score-val{font-family:var(--font-mono);font-size:1.05rem;font-weight:800;}
+.opp-score-key{font-family:var(--font-mono);font-size:0.44rem;letter-spacing:0.1em;margin-top:2px;}
+.opp-id{min-width:0;flex:1;}
+.opp-handle{
+  display:block;font-weight:700;font-size:0.98rem;letter-spacing:-0.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.winner-name { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
-.winner-score {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 16px;
+.opp-rec{
+  display:block;margin-top:2px;font-family:var(--font-mono);font-size:0.63rem;
+  letter-spacing:0.05em;color:var(--ink-faint);
 }
-.share-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: var(--gold);
-  color: #000;
-  border: none;
-  border-radius: 6px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: none;
-  letter-spacing: .06em;
-  transition: opacity .12s;
+.streak{
+  display:inline-flex;align-items:center;gap:4px;margin-left:6px;
+  font-family:var(--font-mono);font-size:0.58rem;letter-spacing:0.06em;
+  padding:1px 5px;border-radius:4px;
 }
-.share-btn:hover { opacity: .88; color: #000; }
+.streak.hot{color:var(--green);background:var(--green-soft);}
+.streak.cold{color:var(--red-muted);background:var(--red-soft);}
 
-/* ── LOADING ── */
-.ch-loading {
-  text-align: center;
-  padding: 80px 24px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
+.opp-mkt{display:flex;gap:10px;align-items:flex-start;margin-bottom:11px;}
+.opp-icon{
+  flex:0 0 auto;width:38px;height:38px;border-radius:8px;object-fit:cover;
+  background:var(--surface-2);border:1px solid var(--border);
+}
+.opp-icon-fb{
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.05rem;font-weight:800;letter-spacing:-0.02em;
+}
+.opp-q{
+  font-size:0.9rem;line-height:1.4;font-weight:600;flex:1;min-width:0;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
 }
 
-/* ── AUTH GATE ── */
-.auth-gate {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 24px;
-  text-align: center;
-  margin-top: 16px;
+/* The heart of the card: their corner vs yours, with the sides named. */
+.corners{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;
+  padding:11px 10px;margin-bottom:12px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-2);
 }
-.auth-gate p { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-.auth-gate a {
-  display: inline-block;
-  padding: 10px 24px;
-  background: var(--green);
-  color: #000;
-  border-radius: 6px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  text-decoration: none;
-  letter-spacing: .06em;
+.corner{min-width:0;text-align:center;}
+.corner-key{
+  display:block;font-family:var(--font-mono);font-size:0.53rem;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;
 }
+.corner-side{
+  display:inline-block;font-family:var(--font-mono);font-size:0.86rem;font-weight:800;
+  letter-spacing:0.06em;padding:3px 10px;border-radius:5px;
+}
+.corner-side.yes{color:var(--green);background:var(--green-soft);}
+.corner-side.no{color:var(--red);background:var(--red-soft);}
+.corner-price{
+  display:block;margin-top:5px;font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-faint);
+}
+.vs{
+  font-family:var(--font-mono);font-size:0.66rem;font-weight:800;letter-spacing:0.08em;
+  color:var(--ink-faint);padding:0 2px;
+}
+.opp-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:auto;padding-top:11px;border-top:1px solid var(--border-soft);
+  font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.06em;color:var(--ink-faint);
+}
+.btn-fight{
+  width:100%;justify-content:center;margin-top:11px;padding:11px 14px;font-size:0.88rem;
+}
+
+/* ---------- TALE OF THE TAPE: live matchups ---------- */
+.bouts{display:grid;gap:12px;grid-template-columns:1fr;}
+@media(min-width:900px){.bouts{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.bout{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
+  padding:14px 15px 13px;position:relative;overflow:hidden;
+  opacity:0;transform:translateY(12px);
+  transition:opacity .5s ease,transform .5s ease,border-color .2s ease;
+}
+.bout.in-view{opacity:1;transform:translateY(0);}
+/* Corner colour bleeds in from each edge so the two sides read instantly. */
+.bout::before{
+  content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--corner-a);opacity:.75;
+}
+.bout::after{
+  content:"";position:absolute;inset:0 0 0 auto;width:3px;background:var(--corner-b);opacity:.75;
+}
+.bout-top{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;
+}
+.chip{
+  font-family:var(--font-mono);font-size:0.56rem;letter-spacing:0.12em;text-transform:uppercase;
+  padding:3px 8px;border-radius:5px;border:1px solid var(--border);color:var(--ink-faint);
+}
+.chip.pending{color:var(--gold-bright);border-color:rgba(201,146,13,.35);background:var(--gold-soft);}
+.chip.accepted{color:var(--green);border-color:rgba(53,176,117,.35);background:var(--green-soft);}
+.chip.resolved{color:var(--ink-muted);}
+.chip.stake{color:var(--gold-bright);border-color:rgba(201,146,13,.3);}
+
+/* The tape itself: name / side / name across one row, VS in the middle. */
+.tape{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin-bottom:11px;}
+.tape-f{min-width:0;}
+.tape-f.b{text-align:right;}
+.tape-name{
+  display:block;font-weight:700;font-size:0.92rem;letter-spacing:-0.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tape-f.a .tape-name{color:var(--corner-a);}
+.tape-f.b .tape-name{color:var(--corner-b);}
+.tape-side{
+  display:inline-block;margin-top:4px;font-family:var(--font-mono);font-size:0.68rem;
+  font-weight:800;letter-spacing:0.06em;padding:2px 7px;border-radius:4px;
+}
+.tape-side.yes{color:var(--green);background:var(--green-soft);}
+.tape-side.no{color:var(--red);background:var(--red-soft);}
+.tape-vs{
+  flex:0 0 auto;width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:0.6rem;font-weight:800;letter-spacing:0.04em;
+  color:var(--ink-faint);
+}
+.bout-mkt{
+  font-size:0.86rem;line-height:1.45;color:var(--ink);margin-bottom:9px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.bout-meta{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.05em;color:var(--ink-faint);
+}
+.won{color:var(--green);font-weight:700;}
+.lost{color:var(--red-muted);font-weight:700;}
+
+/* ---------- TITLE HOLDERS ---------- */
+.belts{display:grid;gap:10px;}
+.belt{
+  display:flex;align-items:center;gap:13px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);
+  transition:border-color .2s ease;
+}
+.belt:hover{border-color:var(--ink-faint);}
+.belt-rank{
+  flex:0 0 auto;width:30px;height:30px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:0.72rem;font-weight:800;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--ink-faint);
+}
+.belt.r1 .belt-rank{background:linear-gradient(140deg,var(--gold-bright),var(--gold));color:#151109;border-color:var(--gold);}
+.belt.r2 .belt-rank{background:linear-gradient(140deg,#d7dbe2,#98a0af);color:#12151b;border-color:#98a0af;}
+.belt.r3 .belt-rank{background:linear-gradient(140deg,#d99a5e,#a5652c);color:#151109;border-color:#a5652c;}
+.belt-id{flex:1;min-width:0;}
+.belt-name{display:block;font-weight:650;font-size:0.93rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.belt-sub{display:block;margin-top:2px;font-family:var(--font-mono);font-size:0.6rem;color:var(--ink-faint);letter-spacing:0.05em;}
+.belt-rec{font-family:var(--font-mono);font-size:0.82rem;font-weight:700;letter-spacing:0.04em;flex:0 0 auto;}
+
+/* ---------- YOUR CORNER (inbox) ---------- */
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.tab{
+  font-family:var(--font-mono);font-size:0.62rem;letter-spacing:0.1em;text-transform:uppercase;
+  padding:8px 13px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--ink-faint);
+  transition:all .16s ease;
+}
+.tab:hover{border-color:var(--ink-faint);color:var(--ink-muted);}
+.tab.active{background:var(--gold-soft);border-color:rgba(201,146,13,.4);color:var(--gold-bright);}
+.tab-count{
+  display:inline-block;margin-left:6px;padding:0 5px;border-radius:999px;
+  background:var(--red);color:#fff;font-size:0.58rem;font-weight:700;
+}
+.empty{
+  text-align:center;padding:38px 20px;border:1px dashed var(--border);
+  border-radius:var(--radius);background:var(--surface);
+}
+.empty-h{font-weight:700;font-size:1rem;margin-bottom:6px;}
+.empty-p{font-size:0.86rem;color:var(--ink-muted);line-height:1.55;max-width:44ch;margin:0 auto;}
+
+/* ---------- WEEKLY TITLE FIGHT ---------- */
+.mkt{
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
+  padding:15px 16px;margin-bottom:11px;transition:border-color .2s ease;
+}
+.mkt.sel-yes{border-color:rgba(53,176,117,.5);background:linear-gradient(180deg,var(--green-soft),transparent 40%),var(--surface);}
+.mkt.sel-no{border-color:rgba(226,73,90,.5);background:linear-gradient(180deg,var(--red-soft),transparent 40%),var(--surface);}
+.mkt-topic{font-family:var(--font-mono);font-size:0.56rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);margin-bottom:7px;}
+.mkt-q{font-size:0.98rem;font-weight:650;line-height:1.4;margin-bottom:9px;}
+.mkt-price{font-family:var(--font-mono);font-size:0.78rem;color:var(--ink-muted);letter-spacing:0.04em;margin-bottom:11px;}
+.mkt-price .pos{color:var(--green);}
+.mkt-price .neg{color:var(--red);}
+.mkt-btns{display:flex;gap:8px;margin-bottom:9px;}
+.mkt-btn{
+  flex:1;padding:10px;border-radius:var(--radius-sm);cursor:pointer;
+  font-family:var(--font-mono);font-size:0.7rem;font-weight:700;letter-spacing:0.06em;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink-muted);
+  transition:all .16s ease;
+}
+.mkt-btn.yes:hover,.mkt-btn.yes.on{background:var(--green-soft);border-color:rgba(53,176,117,.5);color:var(--green);}
+.mkt-btn.no:hover,.mkt-btn.no.on{background:var(--red-soft);border-color:rgba(226,73,90,.5);color:var(--red);}
+.mkt-reason{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--ink);font-family:var(--font-sans);font-size:0.84rem;padding:9px 11px;resize:vertical;min-height:44px;
+}
+.mkt-yours{
+  font-family:var(--font-mono);font-size:0.7rem;letter-spacing:0.04em;
+  padding:9px 11px;border-radius:var(--radius-sm);background:var(--surface-2);border:1px solid var(--border);
+}
+.mkt-yours.winning{border-color:rgba(53,176,117,.4);color:var(--green);}
+.mkt-yours.losing{border-color:rgba(226,73,90,.4);color:var(--red-muted);}
+
+.skel{
+  background:linear-gradient(90deg,rgba(255,255,255,.03) 25%,rgba(255,255,255,.06) 50%,rgba(255,255,255,.03) 75%);
+  background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:var(--radius);height:150px;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.foot{
+  text-align:center;padding:34px 20px 40px;
+  font-family:var(--font-mono);font-size:0.58rem;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--ink-faint);
+}
+
+/* Motion is decoration here; the page must be fully usable without it. */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto;}
+  .ring::after{animation:none;}
+  .dot-live{animation:none;}
+  .skel{animation:none;}
+  .opp,.bout{opacity:1;transform:none;transition:none;}
+  .btn:hover{transform:none;}
+  .btn .glove{transition:none;}
+  .btn:hover .glove{transform:none;}
+  *{scroll-behavior:auto !important;}
+}
+
+/* ---------- COMPOSER MODAL ---------- */
+.ov{
+  position:fixed;inset:0;background:rgba(4,5,7,.78);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;padding:20px;z-index:9999;
+}
+.ov.open{display:flex;}
+.modal{
+  width:100%;max-width:470px;max-height:88vh;overflow-y:auto;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px;
+}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:5px;}
+.modal-title{font-size:1.1rem;font-weight:750;letter-spacing:-0.015em;}
+.modal-x{
+  background:none;border:0;color:var(--ink-faint);font-size:1.5rem;line-height:1;cursor:pointer;padding:0 4px;
+}
+.modal-sub{font-size:0.84rem;line-height:1.55;color:var(--ink-muted);margin-bottom:15px;}
+.modal-mkt{
+  font-size:0.86rem;line-height:1.4;font-weight:600;padding:11px 12px;margin-bottom:14px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);
+}
+.field-key{
+  display:block;font-family:var(--font-mono);font-size:0.58rem;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px;
+}
+.side-row{display:flex;gap:8px;margin-bottom:15px;}
+.side-btn{
+  flex:1;padding:11px;border-radius:var(--radius-sm);cursor:pointer;
+  font-family:var(--font-mono);font-size:0.74rem;font-weight:800;letter-spacing:0.06em;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink-muted);
+  transition:all .16s ease;
+}
+.side-btn.yes.on{background:var(--green-soft);border-color:rgba(53,176,117,.55);color:var(--green);}
+.side-btn.no.on{background:var(--red-soft);border-color:rgba(226,73,90,.55);color:var(--red);}
+.modal textarea{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--ink);font-family:var(--font-sans);font-size:0.9rem;padding:11px;
+  resize:vertical;min-height:88px;margin-bottom:15px;
+}
+.stake-row{display:flex;align-items:center;gap:12px;margin-bottom:9px;}
+.stake-row input[type=range]{flex:1;accent-color:var(--gold);}
+.stake-val{font-family:var(--font-mono);font-size:0.82rem;color:var(--gold-bright);font-weight:700;min-width:74px;text-align:right;}
+.modal-note{font-size:0.78rem;line-height:1.5;color:var(--ink-faint);margin-bottom:15px;}
+.modal-err{
+  font-size:0.82rem;color:var(--red);margin-bottom:12px;display:none;
+  padding:9px 11px;border:1px solid rgba(226,73,90,.35);border-radius:var(--radius-sm);background:var(--red-soft);
+}
+.modal-send{width:100%;justify-content:center;}
 </style>
 </head>
 <body>
-<div id="nav-root"></div>
-<script src="/nav.js?v=28"></script>
 
-<div id="chMain">
-  <div class="ch-loading">Loading challenge…</div>
+<div id="nav-root"></div>
+
+<div class="shell">
+
+  <!-- ══ THE RING ══════════════════════════════════════════════════════ -->
+  <header class="ring">
+    <div class="ring-inner">
+      <span class="kicker"><span class="dot-live"></span>Hyperflex · Challenge</span>
+      <h1 class="title">Somebody is wrong.<br><em>Make them prove it.</em></h1>
+      <p class="lede">Every trader on the verified board has money on a live market right now. <b>Take the other side.</b> Stake FLEX, post your thesis, and let the resolution settle it — no vote, no argument, no delete button.</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#pick">
+          <svg class="glove" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 10a4 4 0 0 1 4-4h4a5 5 0 0 1 5 5v3a5 5 0 0 1-5 5H9a4 4 0 0 1-4-4z"/><path d="M18 9.5a2.5 2.5 0 0 1 0 5"/><path d="M9 6V5a2 2 0 0 1 4 0v1"/></svg>
+          Pick a fight
+        </a>
+        <a class="btn" href="#how">How it works</a>
+        <a class="btn" href="#weekly">Weekly title fight</a>
+      </div>
+
+      <!-- Tote board. Figures come from /api/challenges/public; the panel
+           shows em-dashes until they land and never invents a zero. -->
+      <div class="tote" id="tote">
+        <div><div class="tote-val is-mute" id="tOpen">—</div><span class="tote-key">Open challenges</span></div>
+        <div><div class="tote-val is-mute" id="tAcc">—</div><span class="tote-key">Accepted</span></div>
+        <div><div class="tote-val is-mute" id="tRes">—</div><span class="tote-key">Settled</span></div>
+        <div><div class="tote-val is-mute" id="tStake">—</div><span class="tote-key">FLEX in play</span></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ HOW IT WORKS ═════════════════════════════════════════════════ -->
+  <section class="sec" id="how" style="padding-top:30px;">
+    <div class="sec-head"><span class="sec-title">How it works</span><span class="sec-more">Three rounds</span></div>
+    <p class="sec-note">A challenge is not a comment. It is a position, against a named opponent, on a market that will resolve — which is why it can be scored and why it goes on both records.</p>
+
+    <div class="rounds">
+      <div class="round">
+        <span class="round-num">Round 01</span>
+        <div class="round-art" aria-hidden="true">
+          <svg viewBox="0 0 120 56" fill="none">
+            <rect x="4" y="12" width="46" height="32" rx="6" fill="#181c25" stroke="#232733"/>
+            <circle cx="17" cy="24" r="5" fill="#c9920d" opacity=".85"/>
+            <rect x="26" y="21" width="18" height="3" rx="1.5" fill="#7d8599"/>
+            <rect x="26" y="28" width="12" height="3" rx="1.5" fill="#3b4152"/>
+            <rect x="10" y="34" width="34" height="4" rx="2" fill="#35b075" opacity=".55"/>
+            <path d="M56 28h10m0 0-3-3m3 3-3 3" stroke="#7d8599" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="70" y="12" width="46" height="32" rx="6" fill="#181c25" stroke="#e2495a" stroke-opacity=".45"/>
+            <rect x="76" y="34" width="34" height="4" rx="2" fill="#e2495a" opacity=".55"/>
+            <circle cx="83" cy="24" r="5" fill="#e2495a" opacity=".8"/>
+            <rect x="92" y="21" width="18" height="3" rx="1.5" fill="#7d8599"/>
+            <rect x="92" y="28" width="12" height="3" rx="1.5" fill="#3b4152"/>
+          </svg>
+        </div>
+        <div class="round-h">Pick their call, take the other side</div>
+        <p class="round-p">Every opponent below is holding a real, still-tradeable position. Their side is already chosen — yours is whatever is left. If they are on <code>YES</code>, you are on <code>NO</code>.</p>
+      </div>
+
+      <div class="round">
+        <span class="round-num">Round 02</span>
+        <div class="round-art" aria-hidden="true">
+          <svg viewBox="0 0 120 56" fill="none">
+            <rect x="18" y="16" width="84" height="26" rx="6" fill="#181c25" stroke="#232733"/>
+            <rect x="26" y="24" width="40" height="4" rx="2" fill="#3b4152"/>
+            <rect x="26" y="32" width="24" height="3" rx="1.5" fill="#2a2f3d"/>
+            <circle cx="86" cy="29" r="9" fill="#c9920d" opacity=".2" stroke="#c9920d" stroke-opacity=".6"/>
+            <text x="86" y="33" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" font-weight="800" fill="#e0ab2c">F</text>
+          </svg>
+        </div>
+        <div class="round-h">Stake FLEX, write the thesis</div>
+        <p class="round-p">Up to <code>100 FLEX</code>, escrowed the moment you send. Declined or ignored, you get it back. A stake needs a real market attached — otherwise nothing could ever settle it.</p>
+      </div>
+
+      <div class="round">
+        <span class="round-num">Round 03</span>
+        <div class="round-art" aria-hidden="true">
+          <svg viewBox="0 0 120 56" fill="none">
+            <path d="M30 40V22M46 40V14M62 40V26M78 40V18" stroke="#3b4152" stroke-width="3" stroke-linecap="round"/>
+            <path d="M24 44h72" stroke="#232733" stroke-width="1.5"/>
+            <path d="M30 22c8-6 16 6 24-8s16 10 24 4" stroke="#35b075" stroke-width="2" stroke-linecap="round" fill="none"/>
+            <circle cx="78" cy="18" r="3.2" fill="#35b075"/>
+          </svg>
+        </div>
+        <div class="round-h">The market settles it</div>
+        <p class="round-p">No voting, no judges. When the market resolves, the winner is decided automatically and the result lands on both public records — <b>including yours if you lose.</b></p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div">
+  <!-- ══ PICK A FIGHT ═════════════════════════════════════════════════
+       Suggested opponents come from /api/live-calls — the SAME verified
+       durable-board wallets the homepage promotes, each with one real open
+       position. That endpoint's gating is the reason this list is safe to
+       put a CTA on (CLAUDE.md Gate 1 / Gate 4): an unverified wallet can
+       never reach it, and score + n travel with every row. Do not swap this
+       for a generic user list. -->
+  <section id="pick">
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-title">Pick a fight <span id="oppCount" style="color:var(--ink-faint);font-weight:400"></span></span>
+        <a class="sec-more" href="/traders">See the board &rarr;</a>
+      </div>
+      <p class="sec-note">Verified traders holding an open position right now. Their record is shown next to it — that is the point: you are not challenging a stranger, you are challenging a number.</p>
+    </div>
+    <div class="rail" id="oppRail">
+      <div class="skel" style="flex:0 0 300px;height:290px;"></div>
+      <div class="skel" style="flex:0 0 300px;height:290px;"></div>
+      <div class="skel" style="flex:0 0 300px;height:290px;"></div>
+    </div>
+    <p class="sec-note sec" style="margin-top:2px;font-size:0.78rem;color:var(--ink-faint);">Positions held by traders on the verified durable board, priced live. A challenge is a position against a person, not investment advice, and nothing here executes a trade.</p>
+  </section>
+
+  <hr class="div">
+
+  <!-- ══ TONIGHT'S CARD ══════════════════════════════════════════════ -->
+  <section class="sec" id="card">
+    <div class="sec-head">
+      <span class="sec-title">Tonight's card</span>
+      <span class="sec-more" id="boutsSub"></span>
+    </div>
+    <p class="sec-note">Challenges already thrown. Pending means the other corner has not answered yet.</p>
+    <div class="bouts" id="bouts">
+      <div class="skel" style="height:150px;"></div>
+      <div class="skel" style="height:150px;"></div>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ══ TITLE HOLDERS ═══════════════════════════════════════════════ -->
+  <section class="sec" id="holders">
+    <div class="sec-head">
+      <span class="sec-title">Title holders</span>
+      <span class="sec-more">By settled record</span>
+    </div>
+    <p class="sec-note">Ranked on challenges that actually resolved. Losses count — a record with only wins in it is not a record.</p>
+    <div class="belts" id="belts"><div class="skel" style="height:120px;"></div></div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ══ YOUR CORNER ═════════════════════════════════════════════════ -->
+  <section class="sec" id="corner">
+    <div class="sec-head">
+      <span class="sec-title">Your corner</span>
+      <span class="sec-more" id="cornerSub"></span>
+    </div>
+    <div id="cornerBody">
+      <div class="skel" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ══ WEEKLY TITLE FIGHT ══════════════════════════════════════════
+       Formerly the whole of /challenge. Same endpoints, same pick
+       submission, same scoring — it is a section now rather than a page,
+       because two separate "challenge" surfaces was the thing that made
+       neither of them findable. -->
+  <section class="sec" id="weekly">
+    <div class="sec-head">
+      <span class="sec-title">Weekly title fight</span>
+      <span class="sec-more" id="weeklySub"></span>
+    </div>
+    <p class="sec-note">Five markets, seven days, one winner. You are not fighting a person here — you are fighting the whole field.</p>
+    <div id="weeklyBody"><div class="skel" style="height:220px;"></div></div>
+  </section>
+
+  <p class="foot">Resolution decides it &middot; Losses are never hidden</p>
+</div>
+
+<!-- ══ COMPOSER ══════════════════════════════════════════════════════ -->
+<div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="ovTitle">Challenge <span id="ovWho"></span></div>
+      <button type="button" class="modal-x" id="ovX" aria-label="Close">&times;</button>
+    </div>
+    <p class="modal-sub">They are on one side of this market. Pick the other, say why, and the resolution decides it.</p>
+
+    <div class="modal-mkt" id="ovMkt"></div>
+
+    <span class="field-key">Your side</span>
+    <div class="side-row">
+      <button type="button" class="side-btn yes" id="ovYes">YES</button>
+      <button type="button" class="side-btn no" id="ovNo">NO</button>
+    </div>
+
+    <span class="field-key">Your thesis</span>
+    <textarea id="ovThesis" maxlength="280" placeholder="What do you think actually happens, and why?"></textarea>
+
+    <span class="field-key">Stake</span>
+    <div class="stake-row">
+      <input type="range" id="ovStake" min="0" max="100" step="5" value="0" aria-label="FLEX to stake">
+      <span class="stake-val"><span id="ovStakeN">0</span> FLEX</span>
+    </div>
+    <p class="modal-note">Escrowed from your FLEX wallet when you send. Refunded if they decline or never answer. Accepting matches it; the winner takes both.</p>
+
+    <p class="modal-err" id="ovErr"></p>
+    <button type="button" class="btn btn-primary modal-send" id="ovSend">Send challenge</button>
+  </div>
 </div>
 
 <script>
-var _challenge = null;
-var _userPicks = null;
-var _leaderboard = [];
-var _participantCount = 0;
-var _isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token'));
-var _token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
-var _picks = {}; // slug → {side, reasoning}
-var _countdownTimer = null;
+/* ══════════════════════════════════════════════════════════════════════
+   Wiring. Every figure on this page comes from an endpoint that already
+   existed — this merge added no new API surface:
+     /api/challenges/public  → tote board, tonight's card, title holders
+     /api/live-calls         → suggested opponents (verified board only)
+     /api/challenges         → your corner (auth)
+     /api/challenge/current  → weekly title fight
+   ══════════════════════════════════════════════════════════════════════ */
+var TOKEN = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || '';
+var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-
-function fmtCountdown(endDate) {
-  var ms = new Date(endDate) - Date.now();
-  if (ms <= 0) return 'Ended';
-  var d = Math.floor(ms / 86400000);
-  var h = Math.floor((ms % 86400000) / 3600000);
+function fmtInt(n){ return n == null ? '—' : Number(n).toLocaleString('en-US'); }
+function fmtPct1(p){ return p == null ? '—' : Number(p).toFixed(1) + '%'; }
+function centsOf(p){ return Math.round(Number(p) * 100) + '¢'; }
+function timeAgo(iso){
+  if (!iso) return '';
+  var d = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (d < 60) return d + 's ago';
+  if (d < 3600) return Math.floor(d / 60) + 'm ago';
+  if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+  return Math.floor(d / 86400) + 'd ago';
+}
+function fmtLeft(iso){
+  var ms = new Date(iso).getTime() - Date.now();
+  if (!isFinite(ms) || ms <= 0) return 'closed';
+  var d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000);
+  if (d > 0) return d + 'd ' + h + 'h left';
   var m = Math.floor((ms % 3600000) / 60000);
-  if (d > 0) return d + 'd ' + h + 'h remaining';
-  if (h > 0) return h + 'h ' + m + 'm remaining';
-  return m + 'm remaining';
+  return h > 0 ? h + 'h ' + m + 'm left' : m + 'm left';
 }
 
-function weekLabel(start, end) {
-  var opts = { month: 'short', day: 'numeric' };
-  return new Date(start).toLocaleDateString(undefined, opts) + ' – ' + new Date(end).toLocaleDateString(undefined, opts);
+// Count-up on the tote board. Presentational only — the final value is
+// always written exactly, so a dropped frame can't leave a wrong number.
+function countTo(el, target, render){
+  if (!el) return;
+  if (target == null) { el.textContent = '—'; el.classList.add('is-mute'); return; }
+  el.classList.remove('is-mute');
+  if (REDUCED) { el.textContent = render(target); return; }
+  var start = performance.now(), dur = 850;
+  function step(now){
+    var t = Math.min(1, (now - start) / dur);
+    el.textContent = render(target * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) requestAnimationFrame(step); else el.textContent = render(target);
+  }
+  requestAnimationFrame(step);
 }
 
-function pickStatus(pick, market) {
-  if (!pick) return null;
-  var current = market.current_price || market.yes_price_at_open || 50;
-  var entry = pick.yes_price_at_pick || market.yes_price_at_open || 50;
-  var diff = current - entry;
+// Entrance for cards inserted after a fetch. Falls back to showing
+// everything immediately when IntersectionObserver is unavailable, so a
+// card can never be left invisible.
+function reveal(root){
+  var els = (root || document).querySelectorAll('.opp,.bout');
+  if (REDUCED || !('IntersectionObserver' in window)) {
+    els.forEach(function(el){ el.classList.add('in-view'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  els.forEach(function(el, i){ el.style.transitionDelay = Math.min(i * 55, 330) + 'ms'; io.observe(el); });
+}
+
+/* ── Market artwork ───────────────────────────────────────────────────
+   Same contract as the homepage: Polymarket's `icon` can be null or dead,
+   so a deterministic tile (hue from the slug, first letter) stands in. The
+   fallback is the same box size, so the row never reflows. */
+function tileHtml(m){
+  var seed = String(m.slug || m.question || ''), hash = 0;
+  for (var i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  var hue = hash % 360;
+  var letter = (String(m.question || '?').trim()[0] || '?').toUpperCase();
+  return '<span class="opp-icon opp-icon-fb" aria-hidden="true" style="background:hsl(' + hue +
+    ',38%,26%);color:hsl(' + hue + ',70%,78%)">' + esc(letter) + '</span>';
+}
+function iconHtml(m){
+  if (!m.icon) return tileHtml(m);
+  return '<img class="opp-icon" src="' + esc(m.icon) + '" alt="" loading="lazy" decoding="async"' +
+    ' referrerpolicy="no-referrer" width="38" height="38"' +
+    ' onerror="this.outerHTML=this.getAttribute(\'data-fb\')" data-fb="' + esc(tileHtml(m)) + '">';
+}
+
+/* ── Suggested opponents ───────────────────────────────────────────── */
+var _opponents = [];
+
+function oppCardHtml(c, i){
+  var t = c.trader || {}, m = c.market || {};
+  var theirSide = (m.side || '').toUpperCase();
+  if (theirSide !== 'YES' && theirSide !== 'NO') return '';   // nothing honest to offer
+  var yourSide = theirSide === 'YES' ? 'NO' : 'YES';
+  var handle = t.username ? '@' + t.username : (t.display_name ||
+    (String(t.polymarket_address || '').slice(0, 6) + '…'));
+  var href = t.username ? '/@' + encodeURIComponent(t.username)
+           : (t.user_id ? '/m/' + encodeURIComponent(t.user_id) : '/traders');
+  var sk = t.streak && t.streak.count > 1
+    ? '<span class="streak ' + (t.streak.type === 'win' ? 'hot' : t.streak.type === 'loss' ? 'cold' : '') + '">' +
+      esc(t.streak.count) + (t.streak.type === 'win' ? 'W' : t.streak.type === 'loss' ? 'L' : '') + '</span>'
+    : '';
+
+  return '<article class="opp">' +
+    '<div class="opp-top">' +
+      '<span class="opp-score"><span class="opp-score-val">' + esc(t.flex_score) + '</span>' +
+        '<span class="opp-score-key">FLEX</span></span>' +
+      '<a class="opp-id" href="' + esc(href) + '">' +
+        '<span class="opp-handle">' + esc(handle) + '</span>' +
+        '<span class="opp-rec">' + esc(fmtPct1(t.win_rate_pct)) + ' won · ' + esc(t.n) + ' resolved' + sk + '</span>' +
+      '</a>' +
+    '</div>' +
+    '<div class="opp-mkt">' + iconHtml(m) + '<p class="opp-q">' + esc(m.question) + '</p></div>' +
+    '<div class="corners">' +
+      '<span class="corner"><span class="corner-key">Their corner</span>' +
+        '<span class="corner-side ' + theirSide.toLowerCase() + '">' + theirSide + '</span>' +
+        '<span class="corner-price">in at ' + esc(centsOf(c.entry_price)) + '</span></span>' +
+      '<span class="vs">VS</span>' +
+      '<span class="corner"><span class="corner-key">Yours</span>' +
+        '<span class="corner-side ' + yourSide.toLowerCase() + '">' + yourSide + '</span>' +
+        '<span class="corner-price">now ' + esc(centsOf(c.current_price)) + '</span></span>' +
+    '</div>' +
+    '<div class="opp-foot"><span>' + esc(fmtLeft(m.end_date)) + '</span>' +
+      // isFinite(null) is true — null coerces to 0 — so the null check has
+      // to come first or an unknown size renders as "they hold $—".
+      (c.trader_position_usd != null && isFinite(c.trader_position_usd)
+        ? '<span>they hold $' + fmtInt(c.trader_position_usd) + '</span>'
+        : '') + '</div>' +
+    '<button type="button" class="btn btn-primary btn-fight" data-i="' + i + '">' +
+      '<svg class="glove" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 10a4 4 0 0 1 4-4h4a5 5 0 0 1 5 5v3a5 5 0 0 1-5 5H9a4 4 0 0 1-4-4z"/><path d="M18 9.5a2.5 2.5 0 0 1 0 5"/><path d="M9 6V5a2 2 0 0 1 4 0v1"/></svg>' +
+      'Take ' + yourSide + '</button>' +
+    '</article>';
+}
+
+function loadOpponents(){
+  fetch('/api/live-calls')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var rail = document.getElementById('oppRail');
+      var calls = (d && d.calls) || [];
+      _opponents = calls.filter(function(c){
+        var s = ((c.market || {}).side || '').toUpperCase();
+        return (s === 'YES' || s === 'NO') && (c.trader || {}).user_id;
+      });
+      if (!_opponents.length) {
+        rail.innerHTML = '<div class="empty sec" style="flex:1"><div class="empty-h">Nobody has their guard up</div>' +
+          '<p class="empty-p">No verified trader is holding a still-tradeable position right now. ' +
+          'Rather than invent an opponent, the card is empty — check back, or go find one on the board.</p></div>';
+        return;
+      }
+      rail.innerHTML = _opponents.map(oppCardHtml).join('');
+      document.getElementById('oppCount').textContent = '· ' + _opponents.length;
+      rail.querySelectorAll('.btn-fight').forEach(function(b){
+        b.addEventListener('click', function(){ openComposer(_opponents[Number(b.getAttribute('data-i'))]); });
+      });
+      reveal(rail);
+    })
+    .catch(function(){
+      document.getElementById('oppRail').innerHTML =
+        '<div class="empty sec" style="flex:1"><div class="empty-h">Corner is dark</div>' +
+        '<p class="empty-p">Could not load opponents. The bell still works, the lights do not.</p></div>';
+    });
+}
+
+/* ── Composer ─────────────────────────────────────────────────────── */
+var _target = null, _side = null;
+
+function openComposer(call){
+  if (!call) return;
+  if (!TOKEN) { window.location.href = '/creator/login'; return; }
+  _target = call;
+  var t = call.trader || {}, m = call.market || {};
+  var theirSide = (m.side || '').toUpperCase();
+  _side = theirSide === 'YES' ? 'NO' : 'YES';       // default: the open corner
+
+  document.getElementById('ovWho').textContent =
+    t.username ? '@' + t.username : (t.display_name || 'this trader');
+  document.getElementById('ovMkt').textContent = m.question || '';
+  document.getElementById('ovThesis').value = '';
+  document.getElementById('ovStake').value = 0;
+  document.getElementById('ovStakeN').textContent = '0';
+  document.getElementById('ovErr').style.display = 'none';
+  paintSide();
+  document.getElementById('ov').classList.add('open');
+  document.getElementById('ovThesis').focus();
+}
+function paintSide(){
+  document.getElementById('ovYes').className = 'side-btn yes' + (_side === 'YES' ? ' on' : '');
+  document.getElementById('ovNo').className  = 'side-btn no'  + (_side === 'NO'  ? ' on' : '');
+}
+function closeComposer(){ document.getElementById('ov').classList.remove('open'); _target = null; }
+
+document.getElementById('ovX').addEventListener('click', closeComposer);
+document.getElementById('ov').addEventListener('click', function(e){ if (e.target === this) closeComposer(); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeComposer(); });
+document.getElementById('ovYes').addEventListener('click', function(){ _side = 'YES'; paintSide(); });
+document.getElementById('ovNo').addEventListener('click', function(){ _side = 'NO'; paintSide(); });
+document.getElementById('ovStake').addEventListener('input', function(){
+  document.getElementById('ovStakeN').textContent = this.value;
+});
+
+document.getElementById('ovSend').addEventListener('click', function(){
+  if (!_target) return;
+  var btn = this;
+  var err = document.getElementById('ovErr');
+  var thesis = document.getElementById('ovThesis').value.trim();
+  if (!thesis) { err.textContent = 'A challenge needs a thesis. Say what you think happens.'; err.style.display = 'block'; return; }
+  var m = _target.market || {}, t = _target.trader || {};
+  btn.disabled = true; btn.textContent = 'Sending…';
+  fetch('/api/challenges', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify({
+      challenged_id: t.user_id,
+      thesis: thesis,
+      challenger_side: _side,
+      // The market has to travel with the challenge: a staked challenge
+      // with no market can never resolve, and the server rejects it.
+      market_title: m.question,
+      market_slug: m.slug,
+      condition_id: m.condition_id,
+      stake_flex: parseInt(document.getElementById('ovStake').value, 10) || 0
+    })
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+  .then(function(res){
+    if (!res.ok) throw new Error((res.j && res.j.error) || 'Could not send that challenge.');
+    closeComposer();
+    loadPublic();
+    loadCorner();
+  })
+  .catch(function(e){ err.textContent = e.message; err.style.display = 'block'; })
+  .then(function(){ btn.disabled = false; btn.textContent = 'Send challenge'; });
+});
+
+/* ── Tote board, tonight's card, title holders ────────────────────── */
+function boutHtml(c){
+  var a = c.challenger || {}, b = c.challenged || {};
+  var st = (c.status || 'pending').toLowerCase();
+  var aSide = (c.challenger_side || '').toUpperCase();
+  var bSide = (c.challenged_side || '').toUpperCase();
+  var meta = [];
+  if (Number(c.stake_flex) > 0) meta.push('<span class="chip stake">' + esc(c.stake_flex) + ' FLEX</span>');
+  meta.push('<span>' + esc(timeAgo(c.created_at)) + '</span>');
+  if (c.winner_id) {
+    var w = c.winner_id === (a.id) ? a : b;
+    meta.push('<span class="won">' + esc(w.handle ? '@' + w.handle : (w.name || 'winner')) + ' took it</span>');
+  }
+  return '<article class="bout">' +
+    '<div class="bout-top"><span class="chip ' + st + '">' + esc(st) + '</span>' +
+      '<span class="chip">' + (Number(c.stake_flex) > 0 ? 'staked' : 'pride only') + '</span></div>' +
+    '<div class="tape">' +
+      '<span class="tape-f a"><span class="tape-name">' +
+        esc(a.handle ? '@' + a.handle : (a.name || 'Challenger')) + '</span>' +
+        (aSide ? '<span class="tape-side ' + aSide.toLowerCase() + '">' + aSide + '</span>' : '') + '</span>' +
+      '<span class="tape-vs">VS</span>' +
+      '<span class="tape-f b"><span class="tape-name">' +
+        esc(b.handle ? '@' + b.handle : (b.name || 'Opponent')) + '</span>' +
+        (bSide ? '<span class="tape-side ' + bSide.toLowerCase() + '">' + bSide + '</span>' : '') + '</span>' +
+    '</div>' +
+    (c.market_title ? '<p class="bout-mkt">' + esc(c.market_title) + '</p>' : '') +
+    '<div class="bout-meta">' + meta.join('') + '</div>' +
+    '</article>';
+}
+
+function beltHtml(r, i){
+  var rank = i + 1;
+  var handle = r.handle ? '@' + r.handle : (r.name || 'trader');
+  var total = (r.wins || 0) + (r.losses || 0);
+  return '<a class="belt r' + rank + '" href="' + (r.user_id ? '/m/' + encodeURIComponent(r.user_id) : '/traders') + '">' +
+    '<span class="belt-rank">' + rank + '</span>' +
+    '<span class="belt-id"><span class="belt-name">' + esc(handle) + '</span>' +
+      '<span class="belt-sub">' + esc(fmtPct1((r.win_rate || 0) * 100)) + ' · ' + total + ' settled</span></span>' +
+    '<span class="belt-rec"><span class="won">' + (r.wins || 0) + 'W</span>' +
+      '<span style="color:var(--ink-faint)"> · </span>' +
+      '<span class="lost">' + (r.losses || 0) + 'L</span></span>' +
+    '</a>';
+}
+
+function loadPublic(){
+  fetch('/api/challenges/public')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d) throw new Error('no data');
+      var s = d.stats || {};
+      countTo(document.getElementById('tOpen'),  s.open,     function(v){ return fmtInt(Math.round(v)); });
+      countTo(document.getElementById('tAcc'),   s.accepted, function(v){ return fmtInt(Math.round(v)); });
+      countTo(document.getElementById('tRes'),   s.resolved, function(v){ return fmtInt(Math.round(v)); });
+      countTo(document.getElementById('tStake'), s.stake_flex_in_play, function(v){ return fmtInt(Math.round(v)); });
+
+      var bouts = document.getElementById('bouts');
+      var live = d.live || [];
+      if (!live.length) {
+        bouts.innerHTML = '<div class="empty"><div class="empty-h">Card is empty</div>' +
+          '<p class="empty-p">Nobody has thrown one yet. First challenge on this board gets to say it was first.</p></div>';
+      } else {
+        bouts.innerHTML = live.map(boutHtml).join('');
+        document.getElementById('boutsSub').textContent = live.length + ' ON THE CARD';
+        reveal(bouts);
+      }
+
+      var belts = document.getElementById('belts');
+      var top = d.top_challengers || [];
+      belts.innerHTML = top.length
+        ? top.map(beltHtml).join('')
+        : '<div class="empty"><div class="empty-h">Belt is vacant</div>' +
+          '<p class="empty-p">No challenge has resolved yet, so nobody holds anything. The first settled result starts the list.</p></div>';
+    })
+    .catch(function(){
+      document.getElementById('bouts').innerHTML =
+        '<div class="empty"><div class="empty-h">Scorekeeper stepped out</div>' +
+        '<p class="empty-p">Could not load the card. Nothing is broken on your end.</p></div>';
+    });
+}
+
+/* ── Your corner (auth) ───────────────────────────────────────────── */
+var _dir = 'incoming';
+
+function cornerRowHtml(c){
+  var iAmChallenged = _dir === 'incoming';
+  var them = iAmChallenged
+    ? { id: c.challenger_id, name: c.challenger_name, handle: c.challenger_handle }
+    : { id: c.challenged_id, name: c.challenged_name, handle: c.challenged_handle };
+  var mySide   = (iAmChallenged ? c.challenged_side : c.challenger_side) || '';
+  var theirSide= (iAmChallenged ? c.challenger_side : c.challenged_side) || '';
+  var st = (c.status || 'pending').toLowerCase();
+  var canAnswer = iAmChallenged && st === 'pending';
+
+  var meta = [];
+  if (Number(c.stake_flex) > 0) meta.push('<span class="chip stake">' + esc(c.stake_flex) + ' FLEX</span>');
+  meta.push('<span>' + esc(timeAgo(c.created_at)) + '</span>');
+  if (c.winner_id) {
+    var iWon = (iAmChallenged && c.winner_id === c.challenged_id) ||
+               (!iAmChallenged && c.winner_id === c.challenger_id);
+    meta.push('<span class="' + (iWon ? 'won' : 'lost') + '">' + (iWon ? 'You won' : 'You lost') + '</span>');
+  }
+
+  return '<article class="bout">' +
+    '<div class="bout-top"><span class="chip ' + st + '">' + esc(st) + '</span>' +
+      '<span class="chip">' + (iAmChallenged ? 'they called you out' : 'you called them out') + '</span></div>' +
+    '<div class="tape">' +
+      '<span class="tape-f a"><span class="tape-name">You</span>' +
+        (mySide ? '<span class="tape-side ' + mySide.toLowerCase() + '">' + esc(mySide.toUpperCase()) + '</span>' : '') + '</span>' +
+      '<span class="tape-vs">VS</span>' +
+      '<span class="tape-f b"><span class="tape-name">' +
+        esc(them.handle ? '@' + them.handle : (them.name || 'Opponent')) + '</span>' +
+        (theirSide ? '<span class="tape-side ' + theirSide.toLowerCase() + '">' + esc(theirSide.toUpperCase()) + '</span>' : '') + '</span>' +
+    '</div>' +
+    (c.market_title ? '<p class="bout-mkt">' + esc(c.market_title) + '</p>' : '') +
+    (c.thesis ? '<p class="bout-mkt" style="color:var(--ink-muted);font-style:italic">“' + esc(c.thesis) + '”</p>' : '') +
+    '<div class="bout-meta">' + meta.join('') + '</div>' +
+    (canAnswer
+      ? '<div class="cta-row" style="margin-top:11px">' +
+          '<button type="button" class="btn btn-primary" data-act="accept" data-id="' + esc(c.id) + '">Answer the bell</button>' +
+          '<button type="button" class="btn" data-act="decline" data-id="' + esc(c.id) + '">Decline</button>' +
+        '</div>'
+      : '') +
+    '</article>';
+}
+
+function signedOutCorner(){
+  document.getElementById('cornerBody').innerHTML =
+    '<div class="empty"><div class="empty-h">You are not in the ring yet</div>' +
+    '<p class="empty-p">Challenges land on a public record, so they need an account attached. ' +
+    'Sign in and your incoming and outgoing bouts show up here.</p>' +
+    '<div class="cta-row" style="justify-content:center;margin-top:16px">' +
+    '<a class="btn btn-primary" href="/creator/login">Sign in</a></div></div>';
+}
+
+function loadCorner(){
+  if (!TOKEN) { signedOutCorner(); return; }
+  fetch('/api/challenges?direction=' + _dir + '&status=all&limit=50', {
+    headers: { Authorization: 'Bearer ' + TOKEN }
+  })
+  .then(function(r){
+    if (r.status === 401 || r.status === 403) { TOKEN = ''; signedOutCorner(); return null; }
+    return r.ok ? r.json() : null;
+  })
+  .then(function(d){
+    if (!d) return;
+    var rows = d.challenges || [];
+    var tabs = '<div class="tabs">' +
+      ['incoming','outgoing','all'].map(function(k){
+        return '<button type="button" class="tab' + (k === _dir ? ' active' : '') + '" data-dir="' + k + '">' + k + '</button>';
+      }).join('') + '</div>';
+    var body = rows.length
+      ? '<div class="bouts">' + rows.map(cornerRowHtml).join('') + '</div>'
+      : '<div class="empty"><div class="empty-h">Nothing ' + esc(_dir === 'all' ? 'on record' : _dir) + '</div>' +
+        '<p class="empty-p">Quiet corner. Pick someone off the card above and make it less quiet.</p></div>';
+    var host = document.getElementById('cornerBody');
+    host.innerHTML = tabs + body;
+    document.getElementById('cornerSub').textContent = rows.length ? rows.length + ' BOUTS' : '';
+    host.querySelectorAll('.tab').forEach(function(t){
+      t.addEventListener('click', function(){ _dir = t.getAttribute('data-dir'); loadCorner(); });
+    });
+    host.querySelectorAll('[data-act]').forEach(function(b){
+      b.addEventListener('click', function(){ respond(b.getAttribute('data-id'), b.getAttribute('data-act'), b); });
+    });
+    reveal(host);
+  })
+  .catch(function(){
+    document.getElementById('cornerBody').innerHTML =
+      '<div class="empty"><div class="empty-h">Could not reach your corner</div>' +
+      '<p class="empty-p">Network trouble. Your record is fine.</p></div>';
+  });
+}
+
+function respond(id, action, btn){
+  btn.disabled = true; btn.textContent = '…';
+  fetch('/api/challenges/' + encodeURIComponent(id) + '/respond', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify({ action: action })
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+  .then(function(res){
+    if (!res.ok) throw new Error((res.j && res.j.error) || 'Failed');
+    loadCorner(); loadPublic();
+  })
+  .catch(function(e){
+    btn.disabled = false;
+    btn.textContent = action === 'accept' ? 'Answer the bell' : 'Decline';
+    alert(e.message);
+  });
+}
+
+/* ── Weekly title fight ───────────────────────────────────────────────
+   Ported from the old /challenge page. Same endpoints and the same pick
+   payload, so a pick made here is identical to one made before the merge:
+   scoring is price movement since your entry, in your direction. */
+var _wk = null, _wkPicks = null, _wkLb = [], _wkCount = 0, _draft = {};
+
+function weekLabel(a, b){
+  var o = { month: 'short', day: 'numeric' };
+  return new Date(a).toLocaleDateString(undefined, o) + ' – ' + new Date(b).toLocaleDateString(undefined, o);
+}
+function pickState(pick, m){
+  var cur = m.current_price || m.yes_price_at_open || 50;
+  var ent = pick.yes_price_at_pick || m.yes_price_at_open || 50;
+  var diff = cur - ent;
   if (pick.side === 'YES') return diff > 2 ? 'winning' : diff < -2 ? 'losing' : 'neutral';
-  if (pick.side === 'NO') return diff < -2 ? 'winning' : diff > 2 ? 'losing' : 'neutral';
-  return 'neutral';
+  return diff < -2 ? 'winning' : diff > 2 ? 'losing' : 'neutral';
 }
 
-function renderMarkets() {
-  var ch = _challenge;
-  var markets = ch.markets || [];
-  var submitted = !!_userPicks;
+function renderWeekly(){
+  var host = document.getElementById('weeklyBody');
+  if (!_wk) {
+    host.innerHTML = '<div class="empty"><div class="empty-h">No fight scheduled</div>' +
+      '<p class="empty-p">The next card drops Monday 9am ET. Until then the head-to-head above is the only way to get hit.</p></div>';
+    document.getElementById('weeklySub').textContent = '';
+    return;
+  }
+  var submitted = !!_wkPicks;
+  var markets = _wk.markets || [];
+  document.getElementById('weeklySub').textContent =
+    (weekLabel(_wk.week_start, _wk.week_end) + ' · ' + (_wk.status === 'resolved' ? 'SETTLED' : 'LIVE')).toUpperCase();
 
-  var html = '<div class="ch-section-title">' + markets.length + ' MARKETS THIS WEEK</div>';
+  var html = '';
+  markets.forEach(function(m){
+    var mine = submitted ? (_wkPicks.picks || []).find(function(p){ return p.slug === m.slug; }) : null;
+    var draft = _draft[m.slug];
+    var isYes = submitted ? (mine && mine.side === 'YES') : (draft && draft.side === 'YES');
+    var isNo  = submitted ? (mine && mine.side === 'NO')  : (draft && draft.side === 'NO');
+    var cur = m.current_price || m.yes_price_at_open;
+    var chg = m.price_change || 0;
 
-  markets.forEach(function(m) {
-    var userPick = _userPicks ? (_userPicks.picks || []).find(function(p) { return p.slug === m.slug; }) : null;
-    var pendingPick = _picks[m.slug];
-    var isYes = (submitted ? (userPick && userPick.side === 'YES') : (pendingPick && pendingPick.side === 'YES'));
-    var isNo  = (submitted ? (userPick && userPick.side === 'NO')  : (pendingPick && pendingPick.side === 'NO'));
-    var cardCls = 'market-card' + (isYes ? ' selected-yes' : isNo ? ' selected-no' : '');
-    var priceColor = m.current_price > m.yes_price_at_open ? 'pos' : m.current_price < m.yes_price_at_open ? 'neg' : '';
-    var changeDiff = m.price_change || 0;
-    var changeStr = changeDiff === 0 ? '' : (changeDiff > 0 ? '+' : '') + changeDiff + '¢';
-    var changeCls = changeDiff > 0 ? 'pos' : changeDiff < 0 ? 'neg' : '';
-
-    html += '<div class="' + cardCls + '">';
-    html += '<div class="mc-topic">' + esc(m.topic || 'Market') + '</div>';
-    html += '<div class="mc-question">' + esc(m.question) + '</div>';
-    html += '<div class="mc-price-row">';
-    html += '<span class="mc-price ' + priceColor + '">' + (m.current_price || m.yes_price_at_open) + '¢ YES</span>';
-    if (changeStr) html += '<span class="mc-change ' + changeCls + '">' + changeStr + ' since open</span>';
-    html += '</div>';
+    html += '<div class="mkt' + (isYes ? ' sel-yes' : isNo ? ' sel-no' : '') + '">' +
+      '<div class="mkt-topic">' + esc(m.topic || 'Market') + '</div>' +
+      '<div class="mkt-q">' + esc(m.question) + '</div>' +
+      '<div class="mkt-price">' + cur + '¢ YES' +
+        (chg ? ' <span class="' + (chg > 0 ? 'pos' : 'neg') + '">' + (chg > 0 ? '+' : '') + chg + '¢ since open</span>' : '') +
+      '</div>';
 
     if (!submitted) {
-      html += '<div class="mc-pick-row">';
-      html += '<button class="mc-btn yes' + (isYes ? ' active' : '') + '" onclick="setPick(\'' + m.slug + '\',\'YES\')">YES — Going up</button>';
-      html += '<button class="mc-btn no' + (isNo ? ' active' : '') + '" onclick="setPick(\'' + m.slug + '\',\'NO\')">NO — Going down</button>';
-      html += '</div>';
-      html += '<textarea class="mc-reasoning" placeholder="Your reasoning (optional, 280 chars)" maxlength="280" id="reason_' + m.slug + '" oninput="setPick(\'' + m.slug + '\',null,this.value)">' + esc(pendingPick ? pendingPick.reasoning || '' : '') + '</textarea>';
-    } else if (userPick) {
-      var status = pickStatus(userPick, m);
-      var statusLabel = status === 'winning' ? 'WINNING' : status === 'losing' ? 'LOSING' : 'CLOSE';
-      html += '<div class="mc-your-pick ' + (status || 'neutral') + '">';
-      html += '<span class="mc-pick-side ' + userPick.side.toLowerCase() + '">' + userPick.side + '</span>';
-      html += ' at ' + (userPick.yes_price_at_pick || m.yes_price_at_open) + '¢ → now ' + m.current_price + '¢';
-      html += '<span class="mc-pick-status">' + statusLabel + '</span>';
-      html += '</div>';
-      if (userPick.reasoning) {
-        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">"' + esc(userPick.reasoning) + '"</div>';
-      }
+      html += '<div class="mkt-btns">' +
+        '<button type="button" class="mkt-btn yes' + (isYes ? ' on' : '') + '" data-slug="' + esc(m.slug) + '" data-side="YES">YES · going up</button>' +
+        '<button type="button" class="mkt-btn no' + (isNo ? ' on' : '') + '" data-slug="' + esc(m.slug) + '" data-side="NO">NO · going down</button>' +
+        '</div>' +
+        ((isYes || isNo)
+          ? '<textarea class="mkt-reason" maxlength="280" placeholder="Your reasoning (optional)" data-reason="' +
+            esc(m.slug) + '">' + esc(draft ? draft.reasoning || '' : '') + '</textarea>'
+          : '');
+    } else if (mine) {
+      var st = pickState(mine, m);
+      html += '<div class="mkt-yours ' + st + '">' + esc(mine.side) + ' at ' +
+        (mine.yes_price_at_pick || m.yes_price_at_open) + '¢ → now ' + cur + '¢ · ' +
+        (st === 'winning' ? 'AHEAD' : st === 'losing' ? 'BEHIND' : 'LEVEL') + '</div>';
     } else {
-      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px">No pick on this market</div>';
+      html += '<div class="mkt-yours">No pick on this one</div>';
     }
-
     html += '</div>';
   });
 
-  return html;
-}
+  if (!submitted) {
+    html += TOKEN
+      ? '<button type="button" class="btn btn-primary" id="wkSend" style="width:100%;justify-content:center">Lock my picks</button>'
+      : '<div class="empty"><div class="empty-h">Picks need an account</div>' +
+        '<p class="empty-p">They go on a public, timestamped record — that only works if it is attached to someone.</p>' +
+        '<div class="cta-row" style="justify-content:center;margin-top:16px"><a class="btn btn-primary" href="/creator/login">Sign in</a></div></div>';
+  }
 
-function renderLeaderboard() {
-  var rows = _leaderboard;
-  var html = '';
-  html += '<div class="lb-card">';
-  html += '<div class="lb-header"><span class="lb-title">Live Leaderboard</span><span class="lb-count">' + _participantCount + ' participants</span></div>';
+  if (_wkLb.length) {
+    html += '<div class="sec-head" style="margin-top:24px"><span class="sec-title">Field</span>' +
+      '<span class="sec-more">' + _wkCount + ' in</span></div><div class="belts">' +
+      _wkLb.slice(0, 10).map(function(r, i){
+        var who = r.username ? '@' + r.username : (r.display_name || 'trader');
+        return '<div class="belt r' + (i + 1) + '"><span class="belt-rank">' + (i + 1) + '</span>' +
+          '<span class="belt-id"><span class="belt-name">' + esc(who) + '</span></span>' +
+          '<span class="belt-rec">' + (Number(r.score) || 0).toFixed(1) + '</span></div>';
+      }).join('') + '</div>';
+  }
 
-  if (!rows.length) {
-    html += '<div class="lb-empty">No picks yet.<br>Be the first.</div>';
-  } else {
-    rows.forEach(function(r, i) {
-      var rank = i + 1;
-      var rankCls = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : '';
-      var rowCls = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : '';
-      var name = r.display_name || r.username || 'Predictor';
-      var initials = name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
-      html += '<div class="lb-row ' + rowCls + '">';
-      html += '<div class="lb-rank ' + rankCls + '">#' + rank + '</div>';
-      html += '<div class="lb-avatar">' + esc(initials) + '</div>';
-      html += '<div class="lb-name">' + esc(name) + '</div>';
-      html += '<div class="lb-score">+' + Math.round(r.score || 0) + '</div>';
-      html += '</div>';
+  host.innerHTML = html;
+
+  host.querySelectorAll('.mkt-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var slug = b.getAttribute('data-slug');
+      if (!_draft[slug]) _draft[slug] = { side: null, reasoning: '' };
+      _draft[slug].side = b.getAttribute('data-side');
+      renderWeekly();
     });
-  }
-
-  html += '</div>';
-  return html;
-}
-
-function render() {
-  var ch = _challenge;
-  if (!ch) {
-    document.getElementById('chMain').innerHTML =
-      '<div class="ch-no-challenge"><h2>No active challenge</h2><p>The next challenge drops Monday 9am ET. Check back soon.</p></div>';
-    return;
-  }
-
-  var submitted = !!_userPicks;
-  var resolved = ch.status === 'resolved';
-
-  // Score bar (if submitted)
-  var scoreBarHtml = '';
-  if (submitted) {
-    var totalScore = 0;
-    var picks = _userPicks.picks || [];
-    var ch_markets = ch.markets || [];
-    picks.forEach(function(p) {
-      var market = ch_markets.find(function(m) { return m.slug === p.slug; });
-      if (!market) return;
-      var current = market.current_price || market.yes_price_at_open || 50;
-      var entry = p.yes_price_at_pick || market.yes_price_at_open || 50;
-      var diff = current - entry;
-      if (p.side === 'YES' && diff > 0) totalScore += diff;
-      else if (p.side === 'NO' && diff < 0) totalScore += Math.abs(diff);
-    });
-    var myRank = _userPicks.rank;
-    scoreBarHtml = '<div class="score-bar">';
-    scoreBarHtml += '<div><div class="score-num">+' + Math.round(totalScore) + '</div><div class="score-label">implied score</div></div>';
-    if (myRank) scoreBarHtml += '<div class="rank-chip">Rank #' + myRank + ' of ' + _participantCount + '</div>';
-    scoreBarHtml += '</div>';
-  }
-
-  // Winner card (if resolved) — enhanced brag cards for top 3
-  var winnerHtml = '';
-  if (resolved && _leaderboard.length) {
-    var winner = _leaderboard[0];
-    var wName = winner.display_name || winner.username || 'Predictor';
-    var wHandle = winner.username || null;
-    var correct = winner.correct_count || winner.correct || 0;
-    var total = (ch && ch.markets ? ch.markets.length : 5);
-    var score = Math.round(winner.score || 0);
-    var tweetText = encodeURIComponent('#1 this week on HYPERFLEX Challenge — ' + correct + '/' + total + ' markets called correctly. +' + score + ' points.\nhyperflex.network/challenge');
-    var bragUrl = wHandle ? ('/api/brag-image/challenge?rank=1&user=' + encodeURIComponent(wHandle) + '&score=' + score + '&correct=' + correct + '&total=' + total) : null;
-    winnerHtml = '<div class="winner-card">';
-    winnerHtml += '<div class="winner-label">This Week\'s Winner</div>';
-    winnerHtml += '<div class="winner-name">' + esc(wName) + '</div>';
-    winnerHtml += '<div class="winner-score">' + correct + '/' + total + ' correct · +' + score + ' pts</div>';
-    winnerHtml += '<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">';
-    winnerHtml += '<a class="share-btn" href="https://x.com/intent/tweet?text=' + tweetText + '" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 1200 1227" fill="currentColor"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.163 519.284Z"/></svg> Post on X</a>';
-    if (wHandle) winnerHtml += '<a class="share-btn" href="/brag/' + encodeURIComponent(wHandle) + '/challenge?rank=1&score=' + score + '&correct=' + correct + '&total=' + total + '" target="_blank" style="background:rgba(201,146,13,.15);color:#c9920d;border-color:rgba(201,146,13,.3);">Share card →</a>';
-    winnerHtml += '</div></div>';
-
-    // Also show top 3 if current user is in there — find my rank
-    var myRankEntry = _leaderboard.find(function(e) { return e.is_me; });
-    if (myRankEntry && myRankEntry.rank && myRankEntry.rank <= 3 && !resolved) {
-      // Will be shown in leaderboard row — no extra card needed
-    }
-  }
-
-  // Auth gate
-  var actionHtml = '';
-  if (!submitted && !resolved) {
-    if (!_isLoggedIn) {
-      actionHtml = '<div class="auth-gate"><p>Sign in to submit your picks and join the leaderboard.</p><a href="/creator/login?return=/challenge">Sign In / Sign Up</a></div>';
-    } else {
-      actionHtml = '<button class="ch-submit" id="chSubmitBtn" onclick="submitPicks()">Submit My Picks →</button>';
-    }
-  }
-
-  var html = '';
-
-  // Hero
-  html += '<div class="ch-hero">';
-  html += '<div class="ch-hero-kicker">◎ HYPERFLEX WEEKLY CHALLENGE</div>';
-  html += '<h1>5 markets. 7 days. <em>One winner.</em></h1>';
-  html += '<div class="ch-hero-sub">' + weekLabel(ch.week_start, ch.week_end) + ' · ' + (resolved ? 'Resolved' : 'Active') + '</div>';
-  html += '<div class="ch-meta-row">';
-  html += '<div class="ch-meta-stat"><div class="n" id="chCountdown">—</div><div class="l">Remaining</div></div>';
-  html += '<div class="ch-meta-stat"><div class="n">' + _participantCount + '</div><div class="l">Participants</div></div>';
-  html += '<div class="ch-meta-stat"><div class="n">' + (ch.markets || []).length + '</div><div class="l">Markets</div></div>';
-  html += '</div></div>';
-
-  // Body
-  html += '<div class="ch-body">';
-
-  // Left column
-  html += '<div>';
-  if (winnerHtml) html += winnerHtml;
-  if (scoreBarHtml) html += scoreBarHtml;
-  html += renderMarkets();
-  html += actionHtml;
-  html += '</div>';
-
-  // Right column
-  html += '<div class="lb-wrap">';
-  html += renderLeaderboard();
-
-  // My picks summary (if submitted)
-  if (submitted) {
-    html += '<div style="margin-top:16px">';
-    html += '<div class="ch-section-title" style="margin-bottom:12px">Share Your Result</div>';
-    var picks2 = _userPicks.picks || [];
-    var myName = (localStorage.getItem('hf_display_name') || 'my');
-    var scoreSummary = scoreBarHtml ? '+' + Math.round(totalScore || 0) : '';
-    var tweet = encodeURIComponent('My picks this week on HYPERFLEX Weekly Challenge. ' + scoreSummary + '\nhyperflex.network/challenge');
-    html += '<a class="share-btn" style="width:100%;justify-content:center" href="https://x.com/intent/tweet?text=' + tweet + '" target="_blank">Share on X</a>';
-    html += '</div>';
-  }
-
-  html += '</div>';
-  html += '</div>';
-
-  document.getElementById('chMain').innerHTML = html;
-
-  // Start countdown
-  if (_countdownTimer) clearInterval(_countdownTimer);
-  _countdownTimer = setInterval(function() {
-    var el = document.getElementById('chCountdown');
-    if (el) el.textContent = fmtCountdown(ch.week_end);
-  }, 1000);
-  var el0 = document.getElementById('chCountdown');
-  if (el0) el0.textContent = fmtCountdown(ch.week_end);
-}
-
-function setPick(slug, side, reasoning) {
-  if (!_picks[slug]) _picks[slug] = { side: null, reasoning: '' };
-  if (side !== null) _picks[slug].side = side;
-  if (reasoning !== undefined) _picks[slug].reasoning = reasoning;
-  // Re-render just the card buttons (lightweight)
-  var markets = _challenge ? _challenge.markets || [] : [];
-  markets.forEach(function(m) {
-    if (m.slug !== slug) return;
-    var card = document.querySelector('[data-slug="' + slug + '"]') || null;
-    // Re-style the yes/no buttons directly
-    var yesBtn = document.querySelector('#mc_yes_' + slug);
-    var noBtn = document.querySelector('#mc_no_' + slug);
-    if (yesBtn) yesBtn.className = 'mc-btn yes' + (_picks[slug].side === 'YES' ? ' active' : '');
-    if (noBtn)  noBtn.className  = 'mc-btn no'  + (_picks[slug].side === 'NO'  ? ' active' : '');
   });
-  // Full re-render to apply card highlight
-  if (side !== null) render();
+  host.querySelectorAll('[data-reason]').forEach(function(t){
+    t.addEventListener('input', function(){
+      var slug = t.getAttribute('data-reason');
+      if (!_draft[slug]) _draft[slug] = { side: null, reasoning: '' };
+      _draft[slug].reasoning = t.value;
+    });
+  });
+  var send = document.getElementById('wkSend');
+  if (send) send.addEventListener('click', submitWeekly);
 }
 
-async function submitPicks() {
-  if (!_challenge) return;
+function submitWeekly(){
+  if (!_wk) return;
   var picks = [];
-  (_challenge.markets || []).forEach(function(m) {
-    var p = _picks[m.slug];
-    if (p && p.side) {
-      picks.push({ slug: m.slug, side: p.side, reasoning: p.reasoning || '' });
-    }
+  (_wk.markets || []).forEach(function(m){
+    var d = _draft[m.slug];
+    if (d && d.side) picks.push({ slug: m.slug, side: d.side, reasoning: d.reasoning || '' });
   });
-  if (picks.length === 0) {
-    alert('Make at least one pick before submitting.');
+  var btn = document.getElementById('wkSend');
+  if (!picks.length) {
+    if (btn) { btn.textContent = 'Pick at least one market first'; setTimeout(function(){ btn.textContent = 'Lock my picks'; }, 2200); }
     return;
   }
+  if (btn) { btn.disabled = true; btn.textContent = 'Locking…'; }
+  fetch('/api/challenge/picks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify({ challenge_id: _wk.id, picks: picks })
+  })
+  .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+  .then(function(res){
+    if (!res.ok) throw new Error((res.j && res.j.error) || 'Could not lock those picks.');
+    loadWeekly();
+  })
+  .catch(function(e){
+    if (btn) { btn.disabled = false; btn.textContent = 'Lock my picks'; }
+    alert(e.message);
+  });
+}
 
-  var btn = document.getElementById('chSubmitBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
-
-  try {
-    var resp = await fetch('/api/challenge/picks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
-      body: JSON.stringify({ challenge_id: _challenge.id, picks: picks }),
+function loadWeekly(){
+  var headers = {};
+  if (TOKEN) headers.Authorization = 'Bearer ' + TOKEN;
+  fetch('/api/challenge/current', { headers: headers })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d) throw new Error('no data');
+      _wk = d.challenge; _wkPicks = d.userPicks;
+      _wkLb = d.leaderboard || []; _wkCount = d.participantCount || 0;
+      renderWeekly();
+    })
+    .catch(function(){
+      document.getElementById('weeklyBody').innerHTML =
+        '<div class="empty"><div class="empty-h">Card unavailable</div>' +
+        '<p class="empty-p">Could not load this week’s markets.</p></div>';
     });
-    var data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Failed to submit');
-
-    // Re-load to get server-side enriched picks
-    await loadChallenge();
-  } catch (e) {
-    alert('Error: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Submit My Picks →'; }
-  }
 }
 
-async function loadChallenge() {
-  try {
-    var headers = {};
-    if (_token) headers['Authorization'] = 'Bearer ' + _token;
-    var resp = await fetch('/api/challenge/current', { headers: headers });
-    var data = await resp.json();
-    _challenge = data.challenge;
-    _userPicks = data.userPicks;
-    _leaderboard = data.leaderboard || [];
-    _participantCount = data.participantCount || 0;
-    render();
-  } catch (e) {
-    document.getElementById('chMain').innerHTML =
-      '<div class="ch-loading">Failed to load challenge. <a href="/challenge">Reload</a></div>';
-  }
-}
-
-// Boot
-loadChallenge();
-
-// Refresh every 30 seconds for live price updates
-setInterval(loadChallenge, 30000);
+/* ── Boot ─────────────────────────────────────────────────────────── */
+loadPublic();
+loadOpponents();
+loadCorner();
+loadWeekly();
+// The tote and the card move as challenges are thrown and answered; the
+// weekly section reprices as the markets do.
+setInterval(loadPublic, 60000);
+setInterval(loadWeekly, 60000);
 </script>
 </body>
 </html>

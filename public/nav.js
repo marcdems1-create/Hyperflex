@@ -457,7 +457,6 @@
   };
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
-    { href: '/challenges', label: '⚔ Challenges', gold: true },
     { href: '/brief', label: '🧠 AI Brief', gold: true },
     { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/methodology', label: '✓ Track Record', gold: true },

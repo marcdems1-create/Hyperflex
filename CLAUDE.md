@@ -239,6 +239,8 @@ If the phrase depends on a current meme, it fails. If it depends on permanent be
 
 Permanent vocabulary is welcome: units, spread, moneyline, CLV, push, cover, hedge, juice, fade, sharp, square, parlay, prop, total, ML.
 
+**⚠️ Charter exception — `/challenge` only, granted 2026-08-24 by Marc.** He was shown §4, §5 and §6 verbatim and chose to lift all three for the merged Challenge page, which now runs a fight-night treatment (announcer voice, corner metaphor, non-functional glyphs). **The exception stops at that page's boundary** — every other surface still runs the charter as written below, and a future session must not spread fight language to the feed, profiles, notifications or email on the strength of that one page. See SESSION_STATE.md 2026-08-24b. Do not "fix" `/challenge` back to charter: it is a signed-off exception, not drift.
+
 ### 6. Emoji policy
 
 Zero decorative emoji. Functional glyphs only, used for semantic meaning:
