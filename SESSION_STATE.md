@@ -127,8 +127,12 @@
 - **Whale enrichment was a silent no-op: 0 of 71 rows.** Keyed on `sm.conditionId`; `_screenerCache.data` rows have no such property — the id lives under **`market_id`** (`buildAlphaList`, server.js ~43538). Every row `continue`d. Endpoint 200'd, page rendered fine. **The local fixture has no `_screenerCache`, so this bug was structurally invisible to local verification — "verified locally" could never have caught it.** Fixed: index `market_id`/`conditionId`/`slug`.
 - **`buildEdgeSignal` shipped the literal text "pays null× if it lands"** on every sub-1% market — `Math.round(0.004*100) === 0` → `100/0` → the null guard fired and interpolated into user copy. Also said "implies 0% odds" for a 0.4% market. Fixed with the exact price + shared `_fmtChanceDisplay`.
 
+**⛔ THE REAL FINDING — the same string sort is in `buildAlphaList`, and in 20 more callsites.** Chasing the still-zero whale count past the key fix: `/api/screener` returns **9 rows, max whale_count 0**. The enrichment was pointed at an empty well. `markets/keyset?limit=500&order=volume` returns markets ordered `100, 100, 100, 100, 1000, 100, 99948…`; the $10k 24h floor then cut that near-random 100 down to 9. **`/alpha-live`, `/api/signals`, `/api/alpha/top`, edge-pick logging and brag moments have all been running on ~100 near-random low-volume markets.** Fixed to `order=volumeNum`. The in-code comment defending the old value was wrong on both counts — keyset sorts fine on `volumeNum` AND `volume24hr` (verified live), and client-side re-sorting cannot recover markets that were never fetched.
+
 **Active blockers:**
-- (none)
+- **20 more `order=volume&` callsites still carry this bug** — `grep -n "order=volume&" server.js`. Untouched. The ones where the sort selects the universe rather than ordering an already-narrow `search=`: `snapshotPolymarketPrices` (L52904, feeds `market_snapshots` → the /markets sparkline), `generateCrystalBallPredictions` (L54390), `/api/events` (L62597), `/api/high-prob` (L46918), `/api/activity` fallback (L22479). **Marc's call on scope — a codebase-wide sweep, not a markets-page task.**
+- `limit=500` on keyset is also a lie (caps at 100, returns `next_cursor`). Not fixed — paging deeper scales enrichment + whale-matching cost.
+- `/alpha-live` behaviour changes with the buildAlphaList fix (correcting, but broad). Worth eyeballing after deploy.
 
 **Open questions / unverified:**
 - `GET /markets` (server.js:1960) is a legacy JSON API for the old community-markets table sitting on a page-shaped path. Nav's "Markets" correctly points at `/finance`, but the collision blocks ever routing a real page at `/markets`. Not touched.
