@@ -367,15 +367,226 @@ a:hover { text-decoration: underline; }
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── LIVE TICKER — full-bleed strip above the fold, ongoing duels scrolling
+   by. Pure stimulant: the page reads as "in motion" before you've done
+   anything, same job a scores ticker does on a sports site. ── */
+.ticker-wrap {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,77,106,0.05), transparent);
+  overflow: hidden;
+  display: none;
+}
+.ticker-wrap.has-items { display: block; }
+.ticker-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+}
+.ticker-label {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--red);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ticker-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255,77,106,0.5); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(255,77,106,0); }
+}
+.ticker-track {
+  display: flex;
+  gap: 28px;
+  white-space: nowrap;
+  animation: ticker-scroll 38s linear infinite;
+}
+.ticker-wrap:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.ticker-item b { color: var(--text); font-weight: 700; }
+.ticker-item .t-yes { color: var(--green); font-weight: 800; }
+.ticker-item .t-no { color: var(--red); font-weight: 800; }
+.ticker-item .t-stake { color: var(--gold); font-weight: 700; }
+.ticker-sep { color: var(--text-faint); }
+
+/* ── DISCOVER — the actual "get people to challenge each other" surface.
+   Browsable, verified predictors with a one-tap Challenge button. This is
+   what was missing: without it the only path to starting a challenge was
+   "already be on someone's profile." ── */
+.discover-section { margin-bottom: 26px; }
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+.duelist-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 14px;
+  text-align: center;
+  transition: border-color .15s, transform .15s;
+}
+.duelist-card:hover { border-color: rgba(168,85,247,0.35); transform: translateY(-2px); }
+.duelist-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  margin: 0 auto 10px;
+  background: linear-gradient(135deg, #a855f7, #4d9fff);
+  padding: 2px;
+}
+.duelist-avatar-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px; color: var(--text);
+}
+.duelist-name {
+  font-weight: 700; font-size: 13px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.duelist-handle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-faint);
+  margin-top: 1px;
+}
+.duelist-stats {
+  display: flex; justify-content: center; gap: 10px;
+  margin: 8px 0 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+.duelist-stats .ds-num { color: var(--green); font-weight: 800; }
+.duelist-stats .ds-lbl { color: var(--text-faint); }
+.duelist-btn {
+  width: 100%; padding: 8px 0; border-radius: 8px;
+  background: rgba(255,77,106,0.1); color: var(--red);
+  border: 1px solid rgba(255,77,106,0.28);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; cursor: pointer;
+  transition: background .15s;
+}
+.duelist-btn:hover { background: rgba(255,77,106,0.2); }
+.discover-more {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--border); border-radius: 14px;
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700;
+  text-decoration: none;
+}
+.discover-more:hover { color: var(--text); border-color: var(--text-faint); text-decoration: none; }
+
+/* ── Duel framing on matchup cards — live (accepted, unresolved) ones get
+   a faint animated glow so the page reads as "things are happening now,"
+   not a static log. ── */
+.matchup.accepted { border-color: rgba(0,230,138,0.22); animation: glow-live 3s ease-in-out infinite; }
+@keyframes glow-live {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,230,138,0); }
+  50% { box-shadow: 0 0 14px 0 rgba(0,230,138,0.08); }
+}
+.matchup-row { position: relative; }
+.matchup-vs {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface-2);
+  font-weight: 800;
+}
+
+/* ── Always-visible stimulant rail (both signed-in and signed-out) ── */
+.stim-rail { margin-bottom: 8px; }
+
+/* ── Challenge modal (ported from member.html's profile-scoped version,
+   generalized to take any target id/name/handle so it can be opened from
+   a discovery card instead of only a profile page) ── */
+.cx-modal {
+  display: none; position: fixed; inset: 0; z-index: 9998;
+  background: rgba(0,0,0,0.72); backdrop-filter: blur(8px);
+  align-items: center; justify-content: center; padding: 16px;
+}
+.cx-modal.open { display: flex; }
+.cx-sheet {
+  background: linear-gradient(180deg,#16161f,#0e0e17);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 24px; max-width: 440px; width: 100%;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,0.6), 0 0 120px -40px rgba(255,77,106,0.3);
+}
+.cx-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.cx-title { font-size: 20px; font-weight: 900; letter-spacing: -0.01em; color: var(--text); }
+.cx-close { color: var(--text-dim); font-size: 22px; line-height: 1; padding: 4px 8px; cursor: pointer; background: none; border: 0; }
+.cx-sub { font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 16px; }
+.cx-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px; }
+.cx-textarea {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; color: var(--text);
+  font-family: 'Inter', sans-serif; font-size: 14px; resize: none; outline: none;
+  min-height: 90px; margin-bottom: 14px; transition: border-color .15s;
+}
+.cx-textarea:focus { border-color: rgba(255,77,106,0.4); }
+.cx-select {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; color: var(--text);
+  font-family: 'Inter', sans-serif; font-size: 13px; margin-bottom: 14px;
+}
+.cx-side-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.cx-side-btn {
+  flex: 1; padding: 11px; border-radius: 10px; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; letter-spacing: 0.08em;
+}
+.cx-side-btn.yes { border: 1px solid rgba(0,230,138,0.28); background: rgba(0,230,138,0.08); color: var(--green); }
+.cx-side-btn.yes.active { background: rgba(0,230,138,0.22); border-color: rgba(0,230,138,0.6); }
+.cx-side-btn.no { border: 1px solid rgba(255,77,106,0.28); background: rgba(255,77,106,0.08); color: var(--red); }
+.cx-side-btn.no.active { background: rgba(255,77,106,0.22); border-color: rgba(255,77,106,0.6); }
+.cx-stake-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cx-stake-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text); }
+.cx-range { width: 100%; margin-bottom: 4px; accent-color: var(--gold); }
+.cx-note { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-faint); margin-bottom: 16px; }
+.cx-foot { display: flex; gap: 8px; justify-content: flex-end; }
+.cx-btn-cancel { padding: 8px 16px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; }
+.cx-btn-post { padding: 8px 18px; border-radius: 8px; background: var(--red); border: 1px solid var(--red); color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; }
+.cx-btn-post:disabled { opacity: 0.5; cursor: default; }
 </style>
 </head>
 <body>
+
+<div class="ticker-wrap" id="tickerWrap">
+  <div class="ticker-inner">
+    <div class="ticker-label"><span class="ticker-dot"></span>Live duels</div>
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+</div>
 
 <div class="wrap">
   <div class="head">
     <div>
       <div class="head-eyebrow">⚔ HYPERFLEX · Challenges</div>
       <h1>Who's betting against you</h1>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-top:6px">Pick a target. Take the other side. Winner's record grows, loser's doesn't.</div>
     </div>
   </div>
 
@@ -385,12 +596,26 @@ a:hover { text-decoration: underline; }
     <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);letter-spacing:0.06em">Pick'em →</span>
   </a>
 
-  <div id="authGate" style="display:none">
+  <!-- Always visible regardless of login state — this is the fix for the
+       stimulant content (stats/live duels/leaderboard) disappearing the
+       moment a user signs in, and the fix for there being no way to start
+       a challenge from this page at all. -->
+  <div class="stim-rail">
     <div class="pub-stats" id="pubStats">
       <div class="pub-stat"><div class="pub-stat-label">Open</div><div class="pub-stat-val" id="psOpen">—</div></div>
       <div class="pub-stat green"><div class="pub-stat-label">Accepted</div><div class="pub-stat-val" id="psAccepted">—</div></div>
       <div class="pub-stat"><div class="pub-stat-label">Resolved</div><div class="pub-stat-val" id="psResolved">—</div></div>
       <div class="pub-stat gold"><div class="pub-stat-label">FLEX in play</div><div class="pub-stat-val" id="psStake">—</div></div>
+    </div>
+
+    <div class="discover-section" id="discoverSection" style="display:none">
+      <div class="section-head">
+        <div class="section-title">Pick a target</div>
+        <a href="/predictors" class="section-sub" style="color:var(--text-faint)">Full leaderboard →</a>
+      </div>
+      <div class="discover-grid" id="discoverGrid">
+        <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
+      </div>
     </div>
 
     <div id="pubLiveSection" style="display:none">
@@ -410,7 +635,9 @@ a:hover { text-decoration: underline; }
       </div>
       <div id="pubTop"></div>
     </div>
+  </div>
 
+  <div id="authGate" style="display:none">
     <div class="mech">
       <div class="mech-line"><span class="mech-num">01</span><span><b>Pick a market and a side.</b> Anyone with a posted take is a target.</span></div>
       <div class="mech-line"><span class="mech-num">02</span><span><b>Stake FLEX, write the thesis.</b> Up to 100 FLEX per challenge.</span></div>
@@ -419,7 +646,7 @@ a:hover { text-decoration: underline; }
 
     <div class="pub-cta">
       <div class="pub-cta-text"><b>Track record gated.</b> An account is required to challenge or respond.</div>
-      <a href="/creator/login" class="btn">Sign in →</a>
+      <a href="/creator/login?return=/challenges" class="btn">Sign in →</a>
     </div>
   </div>
 
@@ -437,6 +664,44 @@ a:hover { text-decoration: underline; }
       <button class="pill" data-status="resolved" onclick="setStatus('resolved', this)">Resolved</button>
     </div>
     <div id="list"></div>
+  </div>
+</div>
+
+<!-- Challenge modal — generalized from member.html's profile-scoped version
+     so it can be opened from a discovery card, a live matchup, or the
+     inbox, not only from a specific profile page. -->
+<div class="cx-modal" id="cxModal">
+  <div class="cx-sheet" onclick="event.stopPropagation()">
+    <div class="cx-head">
+      <div class="cx-title" id="cxTitle">CHALLENGE</div>
+      <button class="cx-close" onclick="closeChallenge()">×</button>
+    </div>
+    <div class="cx-sub">Publicly counter one of their calls. The winner is whoever the market resolves for.</div>
+
+    <textarea id="cxThesis" class="cx-textarea" maxlength="280" placeholder="Your counter-thesis (what do you think will actually happen?)"></textarea>
+
+    <div class="cx-label">Which call</div>
+    <select id="cxMarket" class="cx-select" onchange="onChallengeMarketChange()">
+      <option value="">Loading their recent calls…</option>
+    </select>
+
+    <div class="cx-label">Your side</div>
+    <div class="cx-side-row">
+      <button type="button" id="cxSideYes" class="cx-side-btn yes" onclick="setChallengeSide('YES')">AGREE</button>
+      <button type="button" id="cxSideNo" class="cx-side-btn no" onclick="setChallengeSide('NO')">DISAGREE</button>
+    </div>
+
+    <div class="cx-stake-row">
+      <div class="cx-label" style="margin-bottom:0">FLEX stake (optional)</div>
+      <div class="cx-stake-val"><span id="cxStakeLabel">0</span> FLEX</div>
+    </div>
+    <input type="range" id="cxStake" class="cx-range" min="0" max="100" value="0" step="5" disabled oninput="document.getElementById('cxStakeLabel').textContent=this.value">
+    <div class="cx-note" id="cxStakeNote">Pick a specific call above to stake. Debited on send, refunded if declined. Accepting matches the stake — winner takes both.</div>
+
+    <div class="cx-foot">
+      <button class="cx-btn-cancel" onclick="closeChallenge()">Cancel</button>
+      <button class="cx-btn-post" id="cxSubmitBtn" onclick="submitChallenge()">Post Challenge →</button>
+    </div>
   </div>
 </div>
 
@@ -544,6 +809,11 @@ function renderCard(c) {
     '</div>';
   } else if (status === 'pending' && iAmChallenger) {
     actions = '<div class="actions"><span style="font-family:var(--mono,monospace);font-size:10px;color:var(--text-faint);letter-spacing:0.08em;text-transform:uppercase">Awaiting response</span></div>';
+  } else if (status === 'resolved' || status === 'declined') {
+    // Rematch — a resolved or declined challenge is a dead end otherwise.
+    // Turning it into a one-tap "go again" is the loss-aversion / rematch
+    // loop this platform's North Star explicitly calls for.
+    actions = '<div class="actions"><button class="btn" onclick="startChallenge(\'' + esc(them.id) + '\',\'' + esc(them.name || 'Trader').replace(/'/g, "\\'") + '\',\'' + esc(them.handle ? '@' + them.handle : '') + '\')">Rematch →</button></div>';
   }
 
   return '<div class="card ' + status + '">' +
@@ -703,6 +973,7 @@ function _renderPublicStats(s) {
 }
 
 function _renderPublicLive(rows) {
+  _renderTicker(rows);
   if (!rows || !rows.length) {
     document.getElementById('pubLiveSection').style.display = 'none';
     return;
@@ -710,6 +981,219 @@ function _renderPublicLive(rows) {
   document.getElementById('pubLiveSection').style.display = '';
   document.getElementById('pubLiveSub').textContent = rows.length + ' showing';
   document.getElementById('pubLive').innerHTML = rows.map(_matchupCard).join('');
+}
+
+// Scrolling strip up top — same live-matchup data as the section below,
+// just compressed to one line each so the page reads as "in motion"
+// before scrolling to anything. Duplicated once so the CSS marquee loop
+// (translateX -50%) has no visible seam.
+function _renderTicker(rows) {
+  var wrap = document.getElementById('tickerWrap');
+  var track = document.getElementById('tickerTrack');
+  if (!rows || rows.length < 2) { wrap.classList.remove('has-items'); return; }
+  var items = rows.slice(0, 12).map(function(c) {
+    var a = c.challenger || {}, b = c.challenged || {};
+    var aSide = (c.challenger_side || '').toUpperCase();
+    var bSide = (c.challenged_side || '').toUpperCase();
+    var resolved = (c.status || '') === 'resolved' && c.winner_id;
+    var stake = Number(c.stake_flex) > 0 ? '<span class="t-stake">' + c.stake_flex + ' FLEX</span><span class="ticker-sep">·</span>' : '';
+    if (resolved) {
+      var winnerName = (c.winner_id === a.id ? a.name : b.name) || 'Trader';
+      return '<span class="ticker-item">' + stake + '<b>' + esc(winnerName) + '</b> won</span>';
+    }
+    return '<span class="ticker-item"><b>' + esc(a.name || 'Trader') + '</b>' +
+      (aSide ? ' <span class="t-' + aSide.toLowerCase() + '">' + aSide + '</span>' : '') +
+      '<span class="ticker-sep">vs</span><b>' + esc(b.name || 'Trader') + '</b>' +
+      (bSide ? ' <span class="t-' + bSide.toLowerCase() + '">' + bSide + '</span>' : '') +
+      '<span class="ticker-sep">·</span>' + stake +
+      '</span>';
+  });
+  var html = items.join('<span class="ticker-sep">◆</span>');
+  track.innerHTML = html + '<span class="ticker-sep">◆</span>' + html;
+  wrap.classList.add('has-items');
+}
+
+function _initialLetter(name) {
+  return ((name || '?').trim()[0] || '?').toUpperCase();
+}
+
+// Discovery grid — the actual growth lever. Pulls the same durable-verified
+// leaderboard the rest of the platform trusts (CLAUDE.md Gate 1: only
+// score-bearing, verified wallets get shown as challenge targets, never an
+// unverified/fabricated record) so "who to challenge" is never a dead end
+// and never points at a fake number.
+async function loadDiscover() {
+  var grid = document.getElementById('discoverGrid');
+  var section = document.getElementById('discoverSection');
+  try {
+    var r = await fetch('/api/predictors/leaderboard?mode=roi&window=all&limit=8');
+    if (!r.ok) { section.style.display = 'none'; return; }
+    var rows = await r.json();
+    if (!rows || !rows.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    grid.innerHTML = rows.map(_duelistCard).join('');
+  } catch (e) {
+    section.style.display = 'none';
+  }
+}
+
+function _duelistCard(r) {
+  var id = r.user_id;
+  var name = r.display_name || 'Trader';
+  var handle = r.username ? '@' + r.username : '';
+  var score = r.score_pct != null ? (r.score_pct > 0 ? '+' : '') + r.score_pct.toFixed(1) + '%' : '—';
+  var initial = esc(_initialLetter(name));
+  return '<div class="duelist-card">' +
+    '<a href="/m/' + encodeURIComponent(id) + '" style="color:inherit;text-decoration:none">' +
+      '<div class="duelist-avatar"><div class="duelist-avatar-inner">' + initial + '</div></div>' +
+      '<div class="duelist-name">' + esc(name) + '</div>' +
+      (handle ? '<div class="duelist-handle">' + esc(handle) + '</div>' : '') +
+    '</a>' +
+    '<div class="duelist-stats"><span class="ds-num">' + esc(score) + '</span><span class="ds-lbl">n=' + (r.n || 0) + '</span></div>' +
+    '<button class="duelist-btn" onclick="startChallenge(\'' + esc(id) + '\',\'' + esc(name).replace(/'/g, "\\'") + '\',\'' + esc(handle) + '\')">Challenge →</button>' +
+  '</div>';
+}
+
+function startChallenge(id, name, handle) {
+  if (!_token) { window.location.href = '/creator/login?return=/challenges'; return; }
+  openChallenge(id, name, handle);
+}
+
+// ── Challenge modal — generalized from member.html's profile-scoped
+// version. Takes an explicit target instead of reading window._profileUserId
+// off the DOM, so it can open from a discovery card or a live matchup, not
+// only a profile page. ──
+var _cxTarget = null;
+var _cxSide = null;
+
+function openChallenge(targetId, targetName, targetHandle) {
+  _cxTarget = { id: targetId, name: targetName || 'Trader', handle: targetHandle || '' };
+  _cxSide = null;
+  document.getElementById('cxTitle').textContent = 'CHALLENGE ' + (targetName || 'TRADER').toUpperCase();
+  document.getElementById('cxThesis').value = '';
+  document.getElementById('cxMarket').innerHTML = '<option value="">Loading their recent calls…</option>';
+  document.getElementById('cxStake').value = 0;
+  document.getElementById('cxStake').disabled = true;
+  document.getElementById('cxStakeLabel').textContent = '0';
+  document.getElementById('cxStakeNote').textContent = 'Pick a specific call above to stake. Debited on send, refunded if declined. Accepting matches the stake — winner takes both.';
+  _paintChallengeSide();
+  var m = document.getElementById('cxModal');
+  m.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  m.onclick = function(e) { if (e.target === m) closeChallenge(); };
+  setTimeout(function() { var t = document.getElementById('cxThesis'); if (t) t.focus(); }, 50);
+  loadChallengeMarkets();
+}
+
+function closeChallenge() {
+  var m = document.getElementById('cxModal');
+  m.classList.remove('open');
+  document.body.style.overflow = '';
+  _cxTarget = null;
+  _cxSide = null;
+}
+
+function _paintChallengeSide() {
+  var yes = document.getElementById('cxSideYes');
+  var no = document.getElementById('cxSideNo');
+  yes.classList.toggle('active', _cxSide === 'YES');
+  no.classList.toggle('active', _cxSide === 'NO');
+}
+function setChallengeSide(side) {
+  _cxSide = side;
+  _paintChallengeSide();
+}
+
+async function loadChallengeMarkets() {
+  var sel = document.getElementById('cxMarket');
+  if (!sel || !_cxTarget) return;
+  sel.disabled = true;
+  try {
+    var res = await fetch('/api/predictors/' + encodeURIComponent(_cxTarget.id) + '/resolved-trades?limit=25&durable_only=1');
+    var data = res.ok ? await res.json() : { trades: [] };
+    var trades = (data.trades || []).filter(function(t) { return t.question; });
+    var html = '<option value="">General challenge (no stake)</option>';
+    if (!trades.length) html = '<option value="">General challenge (no stake) — no durable calls to stake on yet</option>';
+    trades.forEach(function(t) {
+      var resultLabel = t.result === 'win' ? 'WIN' : t.result === 'loss' ? 'LOSS' : 'PUSH';
+      var roi = t.realized_roi_pct != null ? (t.realized_roi_pct > 0 ? '+' : '') + t.realized_roi_pct.toFixed(1) + '%' : '';
+      var label = t.question + ' — ' + (t.side || '?') + ', ' + resultLabel + (roi ? ' (' + roi + ')' : '');
+      html += '<option value="' + esc(label) + '" data-question="' + esc(t.question || '') + '">' + esc(label.length > 90 ? label.slice(0, 87) + '…' : label) + '</option>';
+    });
+    sel.innerHTML = html;
+  } catch (e) {
+    sel.innerHTML = '<option value="">General challenge (no stake)</option>';
+  }
+  sel.disabled = false;
+  onChallengeMarketChange();
+}
+
+function onChallengeMarketChange() {
+  var sel = document.getElementById('cxMarket');
+  var stake = document.getElementById('cxStake');
+  var note = document.getElementById('cxStakeNote');
+  var hasMarket = sel && sel.value;
+  if (stake) {
+    stake.disabled = !hasMarket;
+    if (!hasMarket) { stake.value = '0'; document.getElementById('cxStakeLabel').textContent = '0'; }
+  }
+  if (note) note.textContent = hasMarket
+    ? 'Debited on send, refunded if declined. Accepting matches the stake — winner takes both.'
+    : 'Pick a specific call above to stake. Debited on send, refunded if declined. Accepting matches the stake — winner takes both.';
+}
+
+async function submitChallenge() {
+  if (!_cxTarget) return;
+  var thesis = (document.getElementById('cxThesis').value || '').trim();
+  if (!thesis) { document.getElementById('cxThesis').focus(); return; }
+  if (!_cxSide) { alert('Pick Agree or Disagree — the side you\'re staking.'); return; }
+  var stake = parseInt(document.getElementById('cxStake').value || '0', 10) || 0;
+  var marketSel = document.getElementById('cxMarket');
+  var marketOpt = marketSel && marketSel.selectedIndex >= 0 ? marketSel.options[marketSel.selectedIndex] : null;
+  var marketTitle = marketOpt ? (marketOpt.dataset.question || null) : null;
+  if (stake > 0 && !marketTitle) { alert('Pick a specific call to stake on, or set stake to 0.'); return; }
+  if (!_token) { window.location.href = '/creator/login?return=/challenges'; return; }
+
+  var btn = document.getElementById('cxSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  try {
+    var res = await fetch('/api/challenges', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + _token },
+      body: JSON.stringify({
+        challenged_id: _cxTarget.id,
+        thesis: thesis,
+        challenger_side: _cxSide,
+        stake_flex: stake,
+        market_title: marketTitle,
+      }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('hf_token');
+      localStorage.removeItem('hf_member_token');
+      alert('Session expired. Sign in again.');
+      btn.disabled = false; btn.textContent = 'Post Challenge →';
+      return;
+    }
+    if (!res.ok) {
+      var msg = 'Challenge failed (HTTP ' + res.status + ')';
+      try { var err = await res.json(); if (err && err.error) msg = err.error; } catch (_) {}
+      alert(msg);
+      btn.disabled = false; btn.textContent = 'Post Challenge →';
+      return;
+    }
+    var target = _cxTarget;
+    var text = 'Challenging ' + (target.handle || target.name) + ' on @hyperflex:\n\n"' + thesis + '"\n\nWinner takes the track record.\nhyperflex.network/m/' + target.id;
+    window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+    closeChallenge();
+    btn.disabled = false; btn.textContent = 'Post Challenge →';
+    if (_token) { load(); updateCounts(); }
+    loadPublic();
+  } catch (e) {
+    alert('Network error');
+    btn.disabled = false; btn.textContent = 'Post Challenge →';
+  }
 }
 
 function _renderPublicTop(rows) {
@@ -743,9 +1227,14 @@ async function loadPublic() {
   } catch (e) {}
 }
 
+// Stats/live-matchups/leaderboard/discovery are always visible now — they're
+// the stimulant content, and hiding them the moment someone signs in was
+// the bug (see stim-rail comment above). Only the inbox vs. sign-in-CTA
+// split stays gated on auth state.
+loadPublic();
+loadDiscover();
 if (!_token) {
   document.getElementById('authGate').style.display = 'block';
-  loadPublic();
 } else {
   // Decode JWT to get our user id so we can distinguish incoming vs
   // outgoing in the "All" tab without re-querying.
@@ -756,6 +1245,10 @@ if (!_token) {
   document.getElementById('main').style.display = 'block';
   load();
 }
+// Keep the ticker/live-matchups/leaderboard fresh without a full page
+// reload — this is the "in motion" feeling that makes the page worth a
+// second look later in the day.
+setInterval(loadPublic, 45000);
 </script>
 
 </body>
