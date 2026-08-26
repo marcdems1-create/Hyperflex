@@ -218,6 +218,13 @@ async function signInWithWallet() {
       location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
       return;
     }
+    // Desktop, no injected provider — the button promised a specific
+    // wallet (from cache) but there's nothing here that can actually
+    // sign. A bare return here is a dead click with zero feedback (this
+    // is exactly what produced the "click does nothing" bug — see the
+    // cache-key note in maybeOfferWalletSignin below). Send to /connect,
+    // the one place that already knows how to handle "no signer available".
+    location.href = '/connect';
     return;
   }
   btn.disabled = true;
@@ -262,7 +269,21 @@ async function signInWithWallet() {
 async function maybeOfferWalletSignin() {
   var btn = document.getElementById('walletSigninBtn');
   var noWalletLink = document.getElementById('noWalletLink');
-  var cachedAddr = localStorage.getItem('hf_connect_address') || localStorage.getItem('hfx_wallet_address');
+  // hf_connect_address is written on EVERY /connect visit, including a
+  // plain "paste an address to preview a score" — no wallet touched at
+  // all (see connect.html's previewAddress(), which sets _hasSigner =
+  // false before saving it). hfx_wallet_address is only ever written
+  // when the connection came from a real eth_requestAccounts call
+  // (connect.html's saveConnectCache, `if (hasSigner)`), same signal as
+  // hf_connect_has_signer. Only a signer-backed address can actually
+  // complete the personal_sign below — offering a one-click button
+  // promising a pasted-only address produced a dead click (no
+  // window.ethereum to prompt) or a MetaMask popup for a different
+  // wallet than the one shown, either of which reads as "sign-in does
+  // nothing."
+  var hasSigner = localStorage.getItem('hf_connect_has_signer') === '1';
+  var cachedAddr = localStorage.getItem('hfx_wallet_address') ||
+    (hasSigner ? localStorage.getItem('hf_connect_address') : null);
   var addr = cachedAddr;
   if (!addr && window.ethereum) {
     try {
