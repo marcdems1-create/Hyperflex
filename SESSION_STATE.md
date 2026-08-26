@@ -49,6 +49,33 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26d (Feed visual pass: avatars, animated KPI strip, skeleton loading, section rhythm — PR #235 merged)
+
+**Trigger:** Marc — "front page looks great... make the rest of the site look and feel this intuitive and visually appealing. focus on the feed it looks dry, liven it up."
+
+**Scope call:** treated "the rest of the site" as too broad to attempt in one pass and scoped to the concrete, named target — `/feed` (`public/feed.html`). Said so rather than silently doing a partial job on everything.
+
+**Shipped (`ff15834`, merged to `main` via PR #235):**
+- Diffed `feed.html` against `home-kings.html` to find what actually makes the homepage read as more finished, then reused those exact already-validated patterns rather than inventing a new visual language for the feed:
+  - **Avatars on win-cards** — Polymarket profile-image proxy + initials fallback, same pattern as `messages.html`'s `avatarHtml()`. The feed had zero faces anywhere before this (100% text/numbers); this was the single biggest lever for a page that's fundamentally about people.
+  - **Animated count-up KPI strip** (live signals / capital tracked / categories live) — same `.kpi`/count-up easing as home-kings' board, computed client-side from the two feeds already being fetched (`/api/signals`, `/api/feed/category-wins`) — no new endpoint.
+  - **Skeleton shimmer placeholders on load** — the feed previously rendered nothing at all until the first fetch resolved (a blank beat that reads as broken, not loading). Same `.skel` shimmer pattern as home-kings.
+  - **Staggered card entrance** (index-based `animation-delay`) instead of every card appearing at once.
+  - **Hairline divider between category rows** instead of margin-only separation, which read as one long grey wash.
+  - All motion gated on `prefers-reduced-motion`.
+- **Verification method** (no `server.js` start, per repo rule 7): built a throwaway Node static server (`scratchpad/mockserver.js`) serving `public/` with mocked `/api/signals` + `/api/feed/category-wins` responses (realistic content — real category names, plausible trader handles/addresses), then screenshotted with headless Chromium (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, global `playwright` package — not a project dependency, found via `npm root -g`) at 1400px and 390px. Confirmed: no horizontal overflow at either width, zero console errors, and separately re-ran against an all-empty mock to confirm the honest empty state and a network-stalled mock to confirm the skeleton state — both render correctly.
+
+**Active blockers:**
+- **Not verified against live production data or a real browser session** — same standing sandbox limitation (no network path to hyperflex.network). The mock data is realistic but synthetic; worth Marc's eyes on the real page once deployed.
+- **"The rest of the site" is still open.** This entry only covers `/feed`. If Marc wants the same treatment elsewhere, that's separate scoped work per page — this pass shouldn't be read as "the whole site is done."
+
+**Queued (priority order):**
+1. Marc confirms `/feed` live looks right with real data (real avatars should actually load now via the img-proxy, not just show initials).
+2. If more pages need the same pass, get an explicit list/priority from Marc rather than guessing which pages count as "the rest of the site."
+
+**Notes for next session:**
+- The scratch-static-server + mock-data + headless-Chromium-screenshot pattern used here (and in the 2026-08-17/2026-08-20 homepage entries before it) is the reusable way to visually verify a frontend change without violating rule 7. `playwright` isn't in `package.json` — it's available globally (`npm root -g`) with the browser binary pre-installed at `/opt/pw-browsers/`. Worth remembering the binary path (`chromium-1194/chrome-linux/chrome`) since `playwright.chromium.launch()` needs `executablePath` explicitly — the default install path lookup doesn't find it.
+
 ## 2026-08-26c (Messages follow-up: real live repro from Marc — one-click wallet sign-in was a dead click for pasted-preview addresses; PR #233 merged)
 
 **Trigger:** Marc tested PR #232's fix live and hit a second bug in the same feature: auth gate showed "Sign in with 0xda98…b270 →", clicking it did nothing ("still").
