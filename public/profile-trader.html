@@ -249,6 +249,23 @@
       window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text), '_blank', 'noopener');
     };
 
+    // Same decode-JWT-payload pattern as member.html's isOwner check, so
+    // "Message" doesn't render on your own profile. Ported here because
+    // this page (the canonical /@handle profile since 2026-07-30) never
+    // got a Message entry point — messages.html's own empty state says
+    // "Message a trader from their profile" but had nowhere to send you.
+    function selfUserId(){
+      try{
+        var tok = localStorage.getItem('hf_token');
+        if(!tok) return null;
+        var payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        return payload.userId || payload.sub || payload.id || null;
+      }catch(e){ return null; }
+    }
+    window.openMessage = function(profileUserId){
+      window.location.href = '/messages?with=' + encodeURIComponent(profileUserId);
+    };
+
     // Series data for the currently-rendered chart, keyed by point index —
     // the tap handler below is global (inline onclick runs outside the
     // IIFE closure, same reason shareTraderCard lives on window) so it
@@ -427,10 +444,16 @@
       var flexNum = (d.flex_score == null) ? '—' : String(d.flex_score);
 
       // ── header + hero score
+      var isSelf = d.id != null && String(selfUserId()) === String(d.id);
+      var messageBtn = (d.id != null && !isSelf)
+        ? '<button class="btn-mini" onclick="openMessage(' + JSON.stringify(String(d.id)) + ')">Message</button>'
+        : '';
+
       var head =
         '<div class="card-head">' +
           '<div><span class="who">@' + esc(name) + '</span><span class="who-sub">· trader profile</span></div>' +
           '<div class="card-actions">' +
+            messageBtn +
             '<button class="btn-mini" onclick="shareTraderCard(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Share on X</button>' +
             '<a class="btn-mini" href="/@' + esc(name) + '/passport">Passport &#8594;</a>' +
             '<span class="brand">HYPERFLEX</span>' +
