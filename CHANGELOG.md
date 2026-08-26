@@ -51,6 +51,12 @@
 - **NOT fixed, and not a one-liner:** `limit=500` is also a lie — keyset caps a page at 100 and returns a `next_cursor`. This fetches 100, not 500. Paging deeper scales enrichment and whale-matching cost, so it is a separate decision.
 - **⚠️ 20 more `order=volume&` callsites carry the same bug** (`grep -n "order=volume&" server.js`). Untouched this pass. The ones where sort actually selects the universe, rather than just ordering an already-narrow `search=`: `snapshotPolymarketPrices` (L52904 — feeds `market_snapshots`, the price-history table the /markets sparkline reads), `generateCrystalBallPredictions` (L54390), `/api/events` (L62597), `/api/high-prob` (L46918), `/api/activity` fallback (L22479).
 
+### fix(server.js `buildEdgeSignal`): the sports branch had the same sub-1% trap — MY REGRESSION
+- The earlier `null×` fix in this entry patched only the `else` (non-sports) branch. The `sports` branch above it carries an identical `const mult = pct > 0 ? (100/pct) : null`, so production shipped **"Long shot at 0¢ — pays null× if it lands"** on six rows.
+- This one is on me: the sports category only appears on `/markets` *because this same change added it*. Adding the category made a latent bug user-visible, and my own verification missed it because I checked the aggregate count of `null` strings instead of reading the strings.
+- Fixed the same way — exact price for the multiplier, `_fmtChanceDisplay` for display, payout clause dropped entirely when the price is genuinely 0. All 11 price bands checked by hand.
+- **Lesson worth keeping: a regex count is not a read.** `nullCopy=6` held steady across 20 polls and I read it as "not deployed yet" when the new build had in fact been live for minutes — the six were a branch I never touched. Print the offending values, don't count them.
+
 ### Verify
 - `node --check server.js` passes. Cannot run the server locally (CLAUDE.md rule 7), so verification used a throwaway static server on **port 8899** serving `public/finance.html` against a fixture produced by running the patched pipeline against live gamma, with `/api/img-proxy` and `/api/market-history` proxied to the real upstreams. Checked at 1280px and 375px; chart/table toggles exercised on all three cards.
 - **Caught a real mobile defect that way:** the movers-chart value labels were absolutely positioned just outside the end of their bar and, at 375px, landed on top of the question text two columns over. They now occupy their own grid column and cannot collide at any width.

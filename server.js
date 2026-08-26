@@ -19983,14 +19983,22 @@ function buildEdgeSignal(e, category) {
   const reasons = [];
 
   if (category === 'sports') {
-    const mult = pct > 0 ? (100 / pct).toFixed(1) : null;
-    if      (pct <= 5)  reasons.push(`Long shot at ${pct}¢ — pays ${mult}× if it lands`);
-    else if (pct <= 15) reasons.push(`Heavy underdog at ${pct}¢ — ${mult}× payout`);
-    else if (pct <= 30) reasons.push(`Underdog at ${pct}¢ — ${mult}× implied return, room to move`);
-    else if (pct <= 45) reasons.push(`${pct}¢ — competitive market, pays ${mult}× on a YES`);
-    else if (pct >= 85) reasons.push(`Heavy favorite at ${pct}¢ — high-conviction consensus`);
-    else if (pct >= 65) reasons.push(`${pct}¢ favorite — market leaning one way, pays ${mult}×`);
-    else                reasons.push(`${pct}¢ — tight market, ${mult}× on YES`);
+    // Same sub-1% trap the non-sports branch below had: `Math.round(0.0005*100)`
+    // is 0, so `100/pct` divided by zero and the null guard interpolated the
+    // literal text "pays null× if it lands" into user-facing copy — live on
+    // production until 2026-08-26. Derive the multiplier from the exact price,
+    // display via the shared cents-aware formatter, and drop the payout clause
+    // entirely when there is genuinely no price to divide by.
+    const rawP = e.yes_price != null && isFinite(e.yes_price) ? Number(e.yes_price) : null;
+    const disp = _fmtChanceDisplay(rawP) || `${pct}¢`;
+    const mult = (rawP != null && rawP > 0) ? (1 / rawP).toFixed(1) : null;
+    if      (pct <= 5)  reasons.push(`Long shot at ${disp}${mult ? ` — pays ${mult}× if it lands` : ''}`);
+    else if (pct <= 15) reasons.push(`Heavy underdog at ${disp}${mult ? ` — ${mult}× payout` : ''}`);
+    else if (pct <= 30) reasons.push(`Underdog at ${disp}${mult ? ` — ${mult}× implied return, room to move` : ''}`);
+    else if (pct <= 45) reasons.push(`${disp} — competitive market${mult ? `, pays ${mult}× on a YES` : ''}`);
+    else if (pct >= 85) reasons.push(`Heavy favorite at ${disp} — high-conviction consensus`);
+    else if (pct >= 65) reasons.push(`${disp} favorite — market leaning one way${mult ? `, pays ${mult}×` : ''}`);
+    else                reasons.push(`${disp} — tight market${mult ? `, ${mult}× on YES` : ''}`);
     const vol = e.volume || 0;
     if      (vol >= 1e6)    reasons.push(`$${(vol/1e6).toFixed(1)}M traded — deep book`);
     else if (vol >= 200e3)  reasons.push(`$${Math.round(vol/1e3)}k traded — active market`);
