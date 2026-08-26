@@ -731,7 +731,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/odds', priority: '0.9', freq: 'hourly' },
       { loc: '/whales', priority: '0.8', freq: 'daily' },
       { loc: '/whale-index', priority: '0.7', freq: 'daily' },
-      /* /explore redirects to / — removed from sitemap */
+      { loc: '/explore', priority: '0.7', freq: 'daily' },
       { loc: '/data', priority: '0.6', freq: 'daily' },
       { loc: '/ecosystem', priority: '0.8', freq: 'daily' },
       { loc: '/features', priority: '0.7', freq: 'weekly' },
