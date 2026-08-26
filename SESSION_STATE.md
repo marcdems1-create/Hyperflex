@@ -49,6 +49,22 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-12b (found + fixed: canonical /@handle profile had no way to start a message — "Messages tab goes nowhere")
+
+**Trigger:** Marc reported the Messages tab "goes nowhere." Nav mechanics checked out clean (plain `<a href="/messages">`, no click interceptors, route registered correctly, token keys consistent between nav.js and messages.html). Root cause was one layer deeper.
+
+**Shipped (`79cb35e`, pushed to `claude/smart-money-comparison-5rj4d7`, not yet merged to main):**
+- `public/profile-trader.html` — added a Message button to `card-actions`. `messages.html`'s own empty state literally says "No conversations yet. Message a trader from their profile." — but `profile-trader.html`, the canonical `/@handle` profile since the 2026-07-30 swap, had zero messaging entry point (confirmed via grep: no match at all). `member.html` (now only the handle-less fallback) still has a working `openMessage()` → `/messages?with=<id>` button; this port reuses that pattern, plus member.html's decode-JWT-`hf_token`-payload `isOwner` check so the button hides on your own profile.
+- This is exactly the gap the 2026-07-30 SESSION_STATE.md entry already named ("❌ NOT ported — follow/DM/copy-trade/challenge...") — it just hadn't produced a user-visible complaint until now.
+
+**Active blockers:**
+- Not yet merged to `main` / not live. Same branch as the Bullpen comparison doc work (this session's designated branch) — unrelated content, same branch by session setup, not a deliberate bundling choice.
+- Not manually click-tested against production (sandbox has no network path to hyperflex.network, confirmed repeatedly across many prior sessions) — verified via `node --check` on the extracted inline script and a read of `.card-actions`/`.btn-mini` CSS (flex-wrap + gap, no layout fix needed for a 3rd button) and the `/api/user/profile/:handle` response shape (`u.id` confirmed present) — not via an actual browser click-through.
+
+**Queued (priority order):**
+1. Merge/deploy, then have Marc confirm the Message button appears on a real `/@handle` profile and actually opens a conversation.
+2. Same audit is worth repeating for the other features the 2026-07-30 entry flagged as unported (follow/copy-trade/challenge) — Message was the one that surfaced first because it produced a dead-end complaint; the others may have the same "documented as missing, never followed up" shape.
+
 ## 2026-08-12 (Smart-money-on-your-book vs. Bullpen Whales — comparison doc + illustrative mockup, research only, nothing built)
 
 **Shipped (with hashes):**
