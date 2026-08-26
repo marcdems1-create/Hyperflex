@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-08-25 — fix(finance): `/markets` was empty because of a string sort, not a style bug; removed a fabricated resolve-rate claim (branch `main`)
+
+### fix(server.js `fetchFinanceMarkets`): `order=volume` → `order=volumeNum`
+- **Root cause:** gamma's `volume` column is a **string**, so `order=volume&ascending=false` sorted it lexicographically — a $99 market outranked a $99,947 one. The category matchers were being fed ~100 essentially-random low-volume markets and hit almost none of them. Measured live before the fix, `/api/finance/markets` returned **8 markets, all `politics`**, top row a $999 Lienchiang County Magistrate race at 0.1¢; `fed_rates`, `crypto` and `macro` were all `[]`. The page rendered fine — there was just nothing to render.
+- **Don't break:** do NOT "simplify" `volumeNum` back to `volume`. Verified against the live API 2026-08-25; there is an inline comment at the callsite saying so.
+
+### fix(server.js): four more defects in the same function
+- `limit=500` — gamma hard-caps a page at **100** regardless of what you ask for. Now 10 pages walked via `offset`, fetched **concurrently** behind the existing 10-min cache, each page individually `.catch(() => [])` so one bad page cannot blank the whole board.
+- `sections.sports` had existed since the function was written but `PATTERNS` had no `sports` key, so the bucket could never fill — and the frontend's `catOrder` quietly omitted it to match. Both halves fixed together.
+- `whale_count: 0` was **hardcoded at the emit site**, so `buildEdgeSignal`'s whale branch was unreachable and 100% of the page's "edge" copy came from the price alone. Now enriched by `conditionId` off `_screenerCache` (`buildAlphaList` is the single source of truth per CLAUDE.md "Alpha Engine"). Enrichment is wrapped in try/catch — it is additive and must never fail the fetch.
+- A 40–60% price-band cull discarded every market the book was genuinely split on — i.e. exactly the ones where a call has value — so the "structural NO edge" copy would always have something extreme to talk about. Removed.
+
+### fix(server.js): relevance — rank by liveness, collapse multi-outcome legs
+- Ranking now uses `volume24hr` (falling back to lifetime/365 for the ~55% of rows gamma leaves it null on) instead of lifetime volume. Lifetime volume rewards dead long-dated markets: it was putting "Will LeBron James win the 2028 US Presidential Election" (0¢, $54M lifetime, untraded for months) above the September FOMC decision.
+- Multi-outcome legs capped at **2 per parent event** via `events[0].id`. One F1 championship event was otherwise consuming a whole category with 11 legs priced at 0%.
+- Volume floor $10 → $25k (the old floor was meaningless against a randomly ordered feed). At 10 pages deep the thinnest market is still ~$374k, so the floor is not binding — it is a guard, not a filter.
+- `macro` patterns widened. The old set was almost entirely single-ticker equity phrasing and matched **exactly 1 market out of the top 400**; it missed every standard macro release. Now 16.
+- **Net: 8 junk markets → 71 real ones across all 5 categories.**
+
+### ⛔ fix(server.js `buildEdgeSignal`, public/finance.html): removed fabricated statistics
+- The page banner asserted *"Markets priced under 10¢ resolve YES only 1.1% of the time. Sharp money exploits this bias."* `buildEdgeSignal` shipped *"under 0.5% of markets resolve YES"*, *"only ~1.1% historically resolve YES"*, *"~5% resolve YES"*. **Nothing in this codebase has ever measured any of those figures.** They are also circular: at N¢ the market's implied probability IS N%, so restating it as a discovered edge is a tautology dressed as analysis. CLAUDE.md Gate 3 bars publishing any grader-derived number until n≥30 / hit_rate≥58% (currently 53.0%) — and these were not even grader-derived.
+- Replaced with (a) payout arithmetic, which is a true statement about the price, and (b) **measured reprice** from gamma's own `oneDayPriceChange` / `oneWeekPriceChange`. That delta is the only signal on the page that is not a restatement of the current price.
+- `edgeStars()` in the frontend — five stars for any price under 5¢, captioned "Max edge" — is deleted outright.
+- **Don't break:** do not reintroduce any historical resolve-rate claim here, or anywhere else, without a live endpoint that computes it from `realized_trades`.
+
+### feat(public/finance.html): rebuilt on the homepage design system
+- Rewritten against `home-kings.html`'s tokens and components so `/markets` reads as the same product: KPI row, three chart cards each with a **TABLE twin** (the homepage's WCAG pattern), category pill rail, market rows with real signal chips, and a right-side detail sheet.
+- New charts: diverging bars for biggest 24h repricers (the lead — real movement, not price extremity), YES-price histogram, category-volume donut.
+- Detail sheet carries a **live price-history sparkline** from `/api/market-history/:token_id` (which accepts a CLOB token id and falls through to Polymarket's own `prices-history`). Verified pulling 743 real points, 41% → 68%. When fewer than 2 points exist it says so rather than drawing a flat line implying a stable price.
+- Old 3-column terminal layout (sidebar / list / fixed detail panel) dropped.
+- Row payload gained `conditionId`, `token_id`, `volume_24h`, `chg_1d`, `chg_7d`, `spread`, `best_bid`, `best_ask`, `end_date`, `event_slug`, `event_title`.
+- **Sub-1% prices render as cents (`0.4¢`), never `0%`** — same discipline as `_fmtChanceDisplay` elsewhere. A 0.4¢ market is not a zero.
+
+### Verify
+- `node --check server.js` passes. Cannot run the server locally (CLAUDE.md rule 7), so verification used a throwaway static server on **port 8899** serving `public/finance.html` against a fixture produced by running the patched pipeline against live gamma, with `/api/img-proxy` and `/api/market-history` proxied to the real upstreams. Checked at 1280px and 375px; chart/table toggles exercised on all three cards.
+- **Caught a real mobile defect that way:** the movers-chart value labels were absolutely positioned just outside the end of their bar and, at 375px, landed on top of the question text two columns over. They now occupy their own grid column and cannot collide at any width.
+- **Still unverified in production:** the `whale-backed` KPI reads 0 locally because the fixture has no `_screenerCache`. After deploy, hit `/api/finance/markets` and confirm non-zero `whale_count` on at least some rows.
+- See SESSION_STATE.md 2026-08-25 for the full trace.
+
+---
+
 ## 2026-08-04 — fix(trading): stop wiping the CLOB session when MetaMask is merely locked (branch `claude/hyperflex-polymarket-clob-compliance-6dxr1g`)
 
 ### fix(market.html, creator-dashboard.html): distinguish "MetaMask locked" from "wallet actually switched"

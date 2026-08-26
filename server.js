@@ -19995,11 +19995,34 @@ function buildEdgeSignal(e, category) {
     if      (vol >= 1e6)    reasons.push(`$${(vol/1e6).toFixed(1)}M traded — deep book`);
     else if (vol >= 200e3)  reasons.push(`$${Math.round(vol/1e3)}k traded — active market`);
   } else {
-    if      (pct <= 5)  reasons.push(`At ${pct}¢ YES, under 0.5% of markets resolve YES — structural NO edge`);
-    else if (pct <= 10) reasons.push(`At ${pct}¢ YES, only ~1.1% historically resolve YES — fade the YES`);
-    else if (pct <= 20) reasons.push(`At ${pct}¢ YES, ~5% resolve YES — sharp money fades this range`);
-    else if (pct >= 90) reasons.push(`${pct}¢ YES — near-certain consensus pricing`);
-    else if (pct >= 80) reasons.push(`${pct}¢ YES — high-conviction pricing`);
+    // ⛔ The three lines that used to live here asserted specific historical
+    // resolve rates ("only ~1.1% historically resolve YES", "under 0.5%",
+    // "~5%") as fact. Nothing in this codebase measures that — the numbers
+    // were never computed, sourced, or checked, and CLAUDE.md's Gate 3 bars
+    // publishing any grader-derived figure until it clears n≥30 / 58%
+    // (currently 53.0%). They were also self-referential: at N¢ the market's
+    // own implied probability IS N% — restating it as a discovered "edge" is
+    // a tautology dressed as analysis. Replaced with the payout math, which
+    // is arithmetic on the price and therefore always true.
+    const mult = pct > 0 ? (100 / pct).toFixed(1) : null;
+    if      (pct <= 10) reasons.push(`${pct}¢ YES — market implies ${pct}% odds, pays ${mult}× if it lands`);
+    else if (pct <= 30) reasons.push(`${pct}¢ YES — ${mult}× payout on a YES`);
+    else if (pct <  45) reasons.push(`${pct}¢ YES — market leaning NO, ${mult}× on a YES`);
+    else if (pct <= 55) reasons.push(`${pct}¢ YES — book is genuinely split`);
+    else if (pct <  70) reasons.push(`${pct}¢ YES — market leaning YES`);
+    else if (pct <  90) reasons.push(`${pct}¢ YES — market leaning strongly YES`);
+    else                reasons.push(`${pct}¢ YES — priced as near-certain`);
+  }
+
+  // Measured movement. This is the one signal here that is not a restatement
+  // of the current price: a market that repriced 12 points in a day is new
+  // information arriving, and it's sourced straight from gamma's own
+  // oneDayPriceChange / oneWeekPriceChange fields.
+  const d1 = e.chg_1d, d7 = e.chg_7d;
+  if (d1 != null && Math.abs(d1) >= 0.03) {
+    reasons.push(`Repriced ${d1 > 0 ? '+' : ''}${(d1 * 100).toFixed(1)}pts in 24h`);
+  } else if (d7 != null && Math.abs(d7) >= 0.06) {
+    reasons.push(`Repriced ${d7 > 0 ? '+' : ''}${(d7 * 100).toFixed(1)}pts over 7d`);
   }
 
   // enrichment signals fire for all categories when present
@@ -20024,13 +20047,39 @@ async function fetchFinanceMarkets() {
   if (_financeCache && Date.now() - _financeCacheAt < FINANCE_TTL) return _financeCache;
 
   try {
-    const r = await _nodeFetch(
-      'https://gamma-api.polymarket.com/markets?closed=false&active=true&order=volume&ascending=false&limit=500',
-      { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(10000) }
+    // ⚠️ ORDER PARAM: must be `volumeNum`, NOT `volume`.
+    // Gamma's `volume` column is a STRING, so `order=volume` sorts it
+    // lexicographically — a $99 market outranks a $99,947 one. That single
+    // wrong word is what made /finance look empty: the page was being fed
+    // ~100 essentially-random low-volume markets (Toronto weather, Serie A
+    // over/unders, Lienchiang County Magistrate) and the category patterns
+    // below matched almost none of them. `volumeNum` is the numeric twin.
+    // Verified against the live API 2026-08-25 — do not "simplify" this back.
+    //
+    // LIMIT: Gamma hard-caps a page at 100 regardless of what you ask for
+    // (`limit=500` returned exactly 100). Walk offsets instead.
+    // Depth matters more than it looks. Polymarket's top few hundred by volume
+    // are almost entirely politics, sports and crypto — measured 2026-08-25,
+    // the `macro` bucket matched exactly 1 market out of the top 400 and 50 out
+    // of the top 1000 (crude oil, gold, NVIDIA market cap, the OpenAI IPO
+    // markets). 10 pages deep the thinnest market is still ~$374k lifetime, so
+    // depth costs relevance nothing here. Pages are fetched concurrently: this
+    // runs behind a 10-minute cache, so it happens ~6 times an hour.
+    const PAGE = 100;
+    const PAGES = 10;
+    const _pages = await Promise.all(
+      Array.from({ length: PAGES }, (_, i) =>
+        _nodeFetch(
+          'https://gamma-api.polymarket.com/markets?closed=false&active=true' +
+          '&order=volumeNum&ascending=false&limit=' + PAGE + '&offset=' + (i * PAGE),
+          { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: AbortSignal.timeout(12000) }
+        )
+          .then(r => (r.ok ? r.json() : []))
+          .catch(() => [])   // one bad page must not blank the whole board
+      )
     );
-    if (!r.ok) throw new Error('Gamma fetch failed: ' + r.status);
-    const markets = await r.json();
-    if (!Array.isArray(markets)) throw new Error('Bad response');
+    const markets = [].concat(...(_pages.filter(Array.isArray)));
+    if (!markets.length) throw new Error('Gamma returned nothing');
 
     const PATTERNS = {
       fed_rates: [
@@ -20049,10 +20098,19 @@ async function fetchFinanceMarkets() {
       macro: [
         /s&p 500/i, /\bspx\b/i, /\bnasdaq\b/i, /recession/i,
         /\bnvidia\b/i, /crude oil/i, /\boil\b.*price/i, /\bwti\b/i, /\bbrent\b/i,
-        /\bgold\b.*settle/i, /\bgold\b.*price/i, /\bgold\b.*above/i,
+        /\bgold\b/i,   /* 'gold card' immigration markets are culled by the noise filter */
         /\bsilver\b/i, /stock market/i, /\bgdp\b/i, /treasury yield/i,
         /largest company/i, /\bnvidias\b/i, /settle.*\$\d/i,
-        /\bapple\b.*stock/i, /\bmicrosoft\b.*stock/i, /\btesla\b.*stock/i
+        /\bapple\b.*stock/i, /\bmicrosoft\b.*stock/i, /\btesla\b.*stock/i,
+        // Added 2026-08-25: the set above is nearly all single-ticker equity
+        // phrasing, so `macro` was matching exactly 1 market out of 400 while
+        // every standard macro release fell through to no category at all.
+        /unemployment/i, /jobs report/i, /nonfarm/i,
+        /\bppi\b/i, /\bism\b/i, /\bdow jones\b/i, /\bdxy\b/i, /dollar index/i,
+        /treasury/i, /yield curve/i, /\bopec\b/i, /natural gas/i,
+        /housing market/i, /\bmortgage\b/i, /\bipo\b/i,
+        /market cap/i, /\bearnings\b/i, /soft landing/i, /\bstagflation\b/i,
+        /\bbear market\b/i, /\bbull market\b/i, /recession/i
       ],
       politics: [
         /iranian/i, /\biran\b/i, /kharg/i, /kharg island/i,
@@ -20063,6 +20121,17 @@ async function fetchFinanceMarkets() {
         /peace deal/i, /\bsanction/i, /\bwar\b.*2026/i,
         /\bsenate\b/i, /\bcongress\b/i, /\belection\b/i,
         /win.*seat/i, /parliamentary/i, /prime minister/i
+      ],
+      // `sections.sports` has existed since this function was written but
+      // PATTERNS had no `sports` key, so the bucket could never fill and the
+      // frontend's catOrder quietly omitted it. Both halves fixed together.
+      sports: [
+        /\bnfl\b/i, /\bnba\b/i, /\bmlb\b/i, /\bnhl\b/i, /\bufc\b/i,
+        /super bowl/i, /world series/i, /stanley cup/i, /\bmvp\b/i,
+        /premier league/i, /champions league/i, /\blaliga\b/i, /serie a/i,
+        /\bfifa\b/i, /world cup/i, /\bolympic/i, /\bmarch madness\b/i,
+        /\bncaa\b/i, /win the .*championship/i, /\bf1\b/i, /grand prix/i,
+        /\bwimbledon\b/i, /\bus open\b/i, /\bmasters\b/i
       ]
     };
 
@@ -20088,34 +20157,120 @@ async function fetchFinanceMarkets() {
       if (/\bufo\b/i.test(q)) return false;
       if (/\bldpr\b/i.test(q)) return false;
       if (/liberal democratic party of russia/i.test(q)) return false;
-      if (parseFloat(m.volume || 0) < 10) return false;
-      const yesPrice = _parseGammaYes(m);
-      if (yesPrice != null && yesPrice > 0.40 && yesPrice < 0.60) return false;
+      // Real floor, now that `order=volumeNum` actually surfaces real volume.
+      // The old floor was $10, which was meaningless against a randomly
+      // ordered feed and let $999 county-magistrate markets through.
+      if (parseFloat(m.volumeNum || m.volume || 0) < 25000) return false;
+      // NOTE: a 40-60% price band cull used to live here. It threw away every
+      // market the book was genuinely split on — i.e. the ones where a called
+      // side is worth anything — purely so the "structural NO edge" copy below
+      // would always have something extreme to talk about. Removed: a coin-flip
+      // market is information, not noise.
       return true;
     });
 
+    // Real whale positioning, keyed by conditionId off the already-warm
+    // screener cache (buildAlphaList is the single source of truth for
+    // enrichment — see CLAUDE.md "Alpha Engine"). Previously every row here
+    // shipped `whale_count: 0` hardcoded, which meant buildEdgeSignal's whale
+    // branch could never fire and 100% of the "edge" copy on /finance was
+    // derived from nothing but the price itself.
+    const _whaleByCondition = new Map();
+    try {
+      const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
+      for (const sm of screener) {
+        if (!sm.conditionId) continue;
+        _whaleByCondition.set(String(sm.conditionId).toLowerCase(), {
+          whale_count:         sm.whale_count || 0,
+          total_whale_capital: sm.total_whale_capital || 0,
+          edge_score:          sm.edge_score || 0,
+          depth_ratio:         sm.depth_ratio || null,
+          depth_side:          sm.depth_side || null,
+        });
+      }
+    } catch (e) { /* enrichment is additive — never fail the fetch on it */ }
+
+    // Rank by LIVENESS, not lifetime volume. Lifetime volume rewards old
+    // long-dated markets whose trading is long over — sorting by it put
+    // "Will LeBron James win the 2028 US Presidential Election" (0¢, $54M
+    // lifetime, nothing traded in months) above the September FOMC decision.
+    // `volume24hr` is the honest "is anyone trading this right now" field;
+    // gamma only populates it on ~45% of rows, so the rest fall back to a
+    // lifetime/365 daily average, which lands them in roughly the right band
+    // without pretending to a precision we don't have.
+    const _liveness = (m) => {
+      const v24 = m.volume24hr != null ? parseFloat(m.volume24hr) : null;
+      if (v24 != null && isFinite(v24)) return v24;
+      return parseFloat(m.volumeNum || m.volume || 0) / 365;
+    };
+    filteredMarkets.sort((a, b) => _liveness(b) - _liveness(a));
+
+    // Multi-outcome legs collapse. Sorting by real volume surfaced a new
+    // problem the broken sort had been hiding: a single event ("2026 F1
+    // Drivers' Champion", "2028 Democratic nomination") lists as 20+ separate
+    // markets, most of them long-tail names sitting at 0-1¢. Unchecked, one
+    // event eats an entire category. Cap it at 2 legs per parent event, taking
+    // the liveliest ones — `filteredMarkets` was just sorted by liveness above.
+    const _perEvent = new Map();
+    const EVENT_CAP = 2;
+
+    const PER_CAT = 16;
     for (const m of filteredMarkets) {
       if (!m.question || seen.has(m.question)) continue;
       const q = m.question;
+      const evId = (Array.isArray(m.events) && m.events[0] && m.events[0].id) ? String(m.events[0].id) : null;
+      if (evId) {
+        const n = _perEvent.get(evId) || 0;
+        if (n >= EVENT_CAP) continue;
+      }
       for (const [cat, patterns] of Object.entries(PATTERNS)) {
-        if (sections[cat].length >= 8) continue;
+        if (sections[cat].length >= PER_CAT) continue;
         if (patterns.some(p => p.test(q))) {
           seen.add(q);
           const _gy = _parseGammaYes(m);
           const yp = _gy != null ? _gy : 0.5;
-          sections[cat].push({
+          const vol = parseFloat(m.volumeNum || m.volume || 0);
+          const wh = _whaleByCondition.get(String(m.conditionId || '').toLowerCase()) || {};
+          let yesTokenId = null;
+          try {
+            const tids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+            if (Array.isArray(tids) && tids[0]) yesTokenId = String(tids[0]);
+          } catch (_) {}
+          const row = {
             question:    q,
             slug:        m.slug || m.conditionId,
+            conditionId: m.conditionId || null,
+            token_id:    yesTokenId,
             image:       m.image || m.imageUrl || null,
             yes_price:   yp,
-            volume:      parseFloat(m.volume || 0),
-            whale_count: 0,
-            edge_signal: buildEdgeSignal({ yes_price: yp, volume: parseFloat(m.volume || 0), whale_count: 0 }, cat),
-          });
+            volume:      vol,
+            volume_24h:  m.volume24hr != null ? parseFloat(m.volume24hr) : null,
+            liquidity:   parseFloat(m.liquidityNum || m.liquidity || 0),
+            end_date:    m.endDateIso || m.endDate || null,
+            // Real, measured movement straight off gamma — this is the honest
+            // replacement for the price-extremity "edge stars" the frontend
+            // used to invent. A price that moved 12pp in a day is a fact; "1¢
+            // markets rarely resolve YES" is a restatement of the price.
+            chg_1d:      m.oneDayPriceChange  != null ? parseFloat(m.oneDayPriceChange)  : null,
+            chg_7d:      m.oneWeekPriceChange != null ? parseFloat(m.oneWeekPriceChange) : null,
+            spread:      m.spread != null ? parseFloat(m.spread) : null,
+            best_bid:    m.bestBid != null ? parseFloat(m.bestBid) : null,
+            best_ask:    m.bestAsk != null ? parseFloat(m.bestAsk) : null,
+            event_slug:  (Array.isArray(m.events) && m.events[0] && m.events[0].slug) ? m.events[0].slug : null,
+            event_title: (Array.isArray(m.events) && m.events[0] && m.events[0].title) ? m.events[0].title : null,
+            whale_count:         wh.whale_count || 0,
+            total_whale_capital: wh.total_whale_capital || 0,
+            edge_score:          wh.edge_score || 0,
+            depth_ratio:         wh.depth_ratio || null,
+            depth_side:          wh.depth_side || null,
+          };
+          row.edge_signal = buildEdgeSignal(row, cat);
+          sections[cat].push(row);
+          if (evId) _perEvent.set(evId, (_perEvent.get(evId) || 0) + 1);
           break;
         }
       }
-      if (Object.values(sections).every(s => s.length >= 8)) break;
+      if (Object.values(sections).every(s => s.length >= PER_CAT)) break;
     } // end filteredMarkets loop
 
     _financeCache = { sections, updated_at: new Date().toISOString() };

@@ -1,341 +1,1141 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markets Intelligence — HYPERFLEX</title>
-  <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #08080f; font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #e8e8f0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-
-.edge-banner { background: #0d0d16; border-bottom: 1px solid #1a1a28; padding: 6px 20px; font-size: 11px; color: #555; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.edge-banner b { color: #f59e0b; font-weight: 600; }
-.live-pill { flex-shrink: 0; font-size: 11px; color: #22c55e; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); border-radius: 20px; padding: 3px 10px; }
-
-.app-body { display: flex; flex: 1; overflow: hidden; }
-
-.sidebar { width: 180px; background: #0a0a12; border-right: 1px solid #141420; padding: 12px 0; overflow-y: auto; flex-shrink: 0; }
-.sg { margin-bottom: 16px; }
-.sg-label { font-size: 10px; font-weight: 700; color: #333; text-transform: uppercase; letter-spacing: 2px; padding: 0 12px; margin-bottom: 6px; }
-.si { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; cursor: pointer; border-radius: 6px; margin: 0 4px; transition: background 0.15s; }
-.si:hover { background: #111120; }
-.si.active { background: #13132a; border-left: 2px solid #6366f1; padding-left: 10px; }
-.si-left { display: flex; align-items: center; gap: 8px; }
-.si-dot { width: 7px; height: 7px; border-radius: 50%; }
-.si-name { font-size: 12px; color: #666; }
-.si.active .si-name { color: #fff; font-weight: 500; }
-.si-count { font-size: 10px; color: #333; background: #111118; border-radius: 4px; padding: 1px 5px; }
-
-.main-feed { flex: 1; overflow-y: auto; padding: 16px; }
-.feed-header { margin-bottom: 12px; }
-.feed-title { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
-.feed-sub { font-size: 11px; color: #444; margin-top: 2px; }
-
-.mrow { display: flex; align-items: center; background: #0d0d18; border: 1px solid #141420; border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; gap: 12px; transition: all 0.15s; }
-.mrow:hover, .mrow.active { border-color: #252535; background: #111120; }
-.mrow.active { border-color: #6366f1; }
-.mimg { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #1a1a28; }
-.mbody { flex: 1; min-width: 0; }
-.mcat { font-size: 10px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
-.mq { font-size: 13px; font-weight: 500; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
-.medge { font-size: 11px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mright { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
-.mprice { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-.mprice.yes { color: #22c55e; }
-.mprice.no { color: #ef4444; }
-.mprice.mid { color: #f59e0b; }
-.mlabel { font-size: 10px; color: #444; }
-.mvol { font-size: 10px; color: #333; }
-
-.detail-panel { width: 280px; background: #0a0a12; border-left: 1px solid #141420; overflow-y: auto; flex-shrink: 0; position: relative; }
-.dp-close { display: none; }
-.dp-backdrop { display: none; }
-.dp-img { width: 100%; height: 150px; object-fit: cover; object-position: center center; filter: brightness(0.5); display: block; background: #1a1a28; }
-.dp-body { padding: 14px; }
-.dp-cat { font-size: 10px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-.dp-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.45; margin-bottom: 12px; }
-.dp-price-row { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #141420; }
-.dp-yes { font-size: 36px; font-weight: 800; color: #22c55e; letter-spacing: -1px; }
-.dp-no { font-size: 14px; font-weight: 600; color: #ef4444; }
-.dp-vol { font-size: 11px; color: #333; margin-top: 2px; }
-.dp-edge-box { background: #0d0d1a; border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-.dp-edge-label { font-size: 9px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
-.dp-edge-text { font-size: 12px; color: #8890c0; line-height: 1.6; }
-.dp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-.dp-stat { background: #0d0d1a; border-radius: 6px; padding: 8px; }
-.dp-stat-label { font-size: 9px; color: #444; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
-.dp-stat-val { font-size: 14px; font-weight: 700; color: #ddd; }
-.dp-cta { display: block; width: 100%; background: #6366f1; color: #fff; font-size: 13px; font-weight: 600; text-align: center; padding: 11px; border-radius: 8px; text-decoration: none; transition: background 0.15s; }
-.dp-cta:hover { background: #7577f5; }
-
-.empty-state { text-align: center; padding: 40px 16px; color: #333; font-size: 13px; }
-
-/* ── Mobile (<=768px, matches nav.js's own breakpoint) — the 3-column
-   terminal layout (sidebar / market list / detail panel) has no room to
-   exist side by side below desktop widths. Stack it: category sidebar
-   becomes a horizontal-scroll pill row, the market list goes full-width
-   and the page itself scrolls (body/app-body switch off their desktop
-   fixed-height/overflow:hidden shell), and the detail panel becomes a
-   bottom sheet that slides up over the list instead of a permanent third
-   column — opened only on an explicit tap (see selectMarket's openPanel
-   arg), never on the page-load auto-select. ── */
-@media (max-width: 768px) {
-  body { height: auto; min-height: 100vh; overflow: visible; }
-  .app-body { flex-direction: column; overflow: visible; }
-
-  .sidebar { width: auto; flex-shrink: 0; border-right: none; border-bottom: 1px solid #141420; overflow-x: auto; overflow-y: hidden; padding: 10px 0; }
-  .sg { display: inline-flex; gap: 8px; margin-bottom: 0; padding: 0 12px; white-space: nowrap; }
-  .sg-label { display: none; }
-  .si { margin: 0; flex-shrink: 0; }
-
-  .main-feed { overflow-y: visible; }
-
-  .detail-panel {
-    position: fixed; inset: auto 0 0 0; width: 100%; z-index: 200;
-    max-height: 85vh; border-left: none; border-top: 1px solid #141420;
-    border-radius: 16px 16px 0 0; box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
-    transform: translateY(100%); transition: transform 0.25s ease;
-  }
-  .detail-panel.open { transform: translateY(0); }
-
-  .dp-close {
-    display: flex; align-items: center; justify-content: center;
-    position: absolute; top: 10px; right: 10px; z-index: 2;
-    width: 30px; height: 30px; border-radius: 50%;
-    background: rgba(20,20,32,0.9); border: 1px solid #252535; color: #aaa;
-    font-size: 18px; line-height: 1; cursor: pointer;
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Markets — HYPERFLEX</title>
+<meta name="description" content="Every liquid Polymarket market, ranked by what's actually trading right now. Real prices, real 24h movement, real whale positioning — no invented signals.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ══════════════════════════════════════════════════════════════════════
+     Tokens are lifted verbatim from home-kings.html (the live homepage) so
+     /markets reads as the same product rather than a different app. If the
+     homepage palette changes, change it here too — these are duplicated on
+     purpose (no shared stylesheet exists for page-level tokens yet), and a
+     drifted copy is more obvious than a broken import.
+     ══════════════════════════════════════════════════════════════════════ */
+  :root{
+    --bg-outer:#07080a;
+    --bg:#0b0d12;
+    --surface:#12151b;
+    --surface-2:#181c25;
+    --border:#232733;
+    --border-soft:#191d27;
+    --ink:#eceef2;
+    --ink-muted:#8890a3;
+    --ink-faint:#7d8599;      /* WCAG AA floor — see home-kings.html note */
+    --gold:#c9920d;
+    --gold-bright:#e0ab2c;
+    --gold-soft:rgba(201,146,13,0.14);
+    --green:#35b075;
+    --green-soft:rgba(53,176,117,0.13);
+    --red:#e2495a;
+    --red-soft:rgba(226,73,90,0.13);
+    --blue:#5b8dd9;
+    --purple:#9b6dd6;
+    --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:"JetBrains Mono","SFMono-Regular",ui-monospace,"SF Mono",Consolas,monospace;
+    --radius:13px;
+    --radius-sm:8px;
+    --cat-fed:#5b8dd9;
+    --cat-crypto:#c9920d;
+    --cat-macro:#35b075;
+    --cat-politics:#e2495a;
+    --cat-sports:#9b6dd6;
+    --grid-line:#1b1f29;
   }
 
-  .dp-backdrop {
-    display: block; position: fixed; inset: 0; z-index: 199;
-    background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none;
-    transition: opacity 0.25s ease;
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg-outer);
+    color:var(--ink);
+    font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
-  .dp-backdrop.open { opacity: 1; pointer-events: auto; }
-}
-  </style>
+  ::selection{background:var(--gold-soft);color:var(--gold-bright);}
+  a{color:inherit;}
+
+  .shell{
+    max-width:1180px;
+    margin:0 auto;
+    min-height:100vh;
+    background:
+      radial-gradient(760px 340px at 50% -70px, rgba(201,146,13,0.09), transparent 68%),
+      var(--bg);
+    background-repeat:no-repeat;
+    border-left:1px solid var(--border-soft);
+    border-right:1px solid var(--border-soft);
+    position:relative;
+    padding-bottom:60px;
+  }
+  .shell::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:repeating-linear-gradient(to bottom,
+      rgba(255,255,255,0.012) 0px,rgba(255,255,255,0.012) 1px,
+      transparent 1px,transparent 3px);
+    opacity:.5;mix-blend-mode:overlay;
+  }
+  .shell > *{position:relative;z-index:2;}
+
+  /* ---------- page head ---------- */
+  .page-head{padding:26px 20px 6px;}
+  .eyebrow{
+    font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.16em;
+    text-transform:uppercase;color:var(--gold);margin-bottom:9px;
+  }
+  h1{
+    font-size:2.05rem;font-weight:800;letter-spacing:-0.035em;
+    line-height:1.05;margin:0 0 10px;
+  }
+  .lede{
+    font-size:0.88rem;line-height:1.6;color:var(--ink-muted);
+    max-width:62ch;margin:0;
+  }
+  .lede b{color:var(--ink);font-weight:600;}
+  .head-meta{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;
+  }
+  .live-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:5px 10px 5px 8px;border:1px solid var(--border);border-radius:100px;
+    font-family:var(--font-mono);font-size:0.63rem;letter-spacing:0.08em;
+    color:var(--ink-muted);
+  }
+  .live-dot{
+    width:6px;height:6px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 0 3px var(--green-soft);
+  }
+  .stamp{
+    font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-faint);
+    letter-spacing:0.06em;
+  }
+
+  /* ---------- KPI row ---------- */
+  .kpi-row{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;padding:0 20px;margin:20px 0 16px;
+  }
+  .kpi{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:14px 14px 12px;
+    position:relative;overflow:hidden;
+  }
+  .kpi::after{
+    content:"";position:absolute;left:0;top:0;height:2px;width:100%;
+    background:linear-gradient(90deg,var(--gold),transparent 78%);opacity:.5;
+  }
+  .kpi-val{
+    font-size:1.7rem;font-weight:800;letter-spacing:-0.03em;line-height:1.05;
+    color:var(--ink);font-variant-numeric:tabular-nums;
+  }
+  .kpi-val.up{color:var(--green);}
+  .kpi-val.down{color:var(--red);}
+  .kpi-val.is-mute{color:var(--ink-faint);}
+  .kpi-key{
+    display:block;font-family:var(--font-mono);font-size:0.57rem;
+    letter-spacing:0.11em;text-transform:uppercase;color:var(--ink-faint);
+    margin-top:7px;
+  }
+  .kpi-sub{
+    font-size:0.7rem;line-height:1.45;color:var(--ink-muted);margin-top:5px;
+  }
+
+  /* ---------- section heads ---------- */
+  .section-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:12px;padding:0 20px;margin:26px 0 12px;
+  }
+  .section-title{
+    font-size:1.05rem;font-weight:700;letter-spacing:-0.015em;color:var(--ink);
+  }
+  .section-count{
+    font-family:var(--font-mono);font-size:0.62rem;letter-spacing:0.09em;
+    color:var(--ink-faint);text-transform:uppercase;
+  }
+
+  /* ---------- chart cards ---------- */
+  .chart-stack{display:flex;flex-direction:column;gap:12px;padding:0 20px;}
+  .chart-card{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px 16px 14px;
+  }
+  .chart-head{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    gap:10px;margin-bottom:3px;
+  }
+  .chart-title{font-size:0.95rem;font-weight:700;letter-spacing:-0.01em;color:var(--ink);}
+  .chart-note{
+    font-size:0.71rem;line-height:1.5;color:var(--ink-muted);
+    margin:0 0 14px;max-width:58ch;
+  }
+  .chart-toggle{
+    flex:0 0 auto;font-family:var(--font-mono);font-size:0.56rem;letter-spacing:0.09em;
+    color:var(--ink-faint);background:var(--surface-2);
+    border:1px solid var(--border);border-radius:5px;
+    padding:4px 8px;cursor:pointer;white-space:nowrap;
+  }
+  .chart-toggle:hover{color:var(--ink-muted);border-color:var(--ink-faint);}
+  .chart-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .chart-empty{
+    font-family:var(--font-mono);font-size:0.69rem;color:var(--ink-faint);
+    line-height:1.6;padding:10px 0;
+  }
+
+  /* ---------- diverging bars: biggest repricers ---------- */
+  .mv-list{display:flex;flex-direction:column;gap:11px;}
+  /* Three columns, not two. The value used to be absolutely positioned just
+     outside the end of its bar, which on a 375px viewport put it straight on
+     top of the question text two columns over. Giving it a real cell means it
+     cannot collide with anything at any width. */
+  .mv-row{display:grid;grid-template-columns:minmax(0,1fr) 84px 62px;gap:10px;align-items:center;}
+  .mv-q{
+    font-size:0.78rem;line-height:1.35;color:var(--ink);
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  }
+  .mv-q a{text-decoration:none;}
+  .mv-q a:hover{color:var(--gold-bright);}
+  .mv-sub{
+    font-family:var(--font-mono);font-size:0.6rem;color:var(--ink-faint);
+    margin-top:3px;letter-spacing:0.04em;
+  }
+  .mv-track{
+    position:relative;height:20px;
+    background:linear-gradient(90deg,transparent calc(50% - 1px),var(--grid-line) calc(50% - 1px),var(--grid-line) calc(50% + 1px),transparent calc(50% + 1px));
+  }
+  .mv-fill{
+    position:absolute;top:4px;height:12px;border-radius:3px;
+    transition:width .6s cubic-bezier(.16,.8,.3,1);
+  }
+  .mv-fill.up{left:50%;background:var(--green);}
+  .mv-fill.down{right:50%;background:var(--red);}
+  .mv-val{
+    font-family:var(--font-mono);font-size:0.68rem;font-weight:700;
+    font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;
+  }
+  .mv-val.up{color:var(--green);}
+  .mv-val.down{color:var(--red);}
+
+  /* ---------- histogram: where the book sits ---------- */
+  .hist{
+    display:flex;align-items:flex-end;gap:3px;height:104px;padding-top:16px;
+    border-bottom:1px solid var(--grid-line);
+  }
+  .hist-col{
+    flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+    align-items:center;height:100%;position:relative;min-width:0;
+  }
+  .hist-bar{
+    width:100%;background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+    border-radius:4px 4px 0 0;min-height:2px;
+    transition:height .7s cubic-bezier(.16,.8,.3,1);
+  }
+  .hist-bar.is-empty{background:var(--grid-line);}
+  .hist-count{
+    position:absolute;top:-15px;left:0;right:0;text-align:center;
+    font-family:var(--font-mono);font-size:0.57rem;color:var(--ink-muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .hist-axis{display:flex;gap:3px;margin-top:6px;}
+  .hist-tick{
+    flex:1;text-align:center;min-width:0;font-family:var(--font-mono);
+    font-size:0.51rem;color:var(--ink-faint);font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- donut: volume by category ---------- */
+  .donut-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+  .donut{width:148px;height:148px;flex:0 0 auto;position:relative;}
+  .donut svg{width:100%;height:100%;transform:rotate(-90deg);overflow:visible;}
+  .donut-seg{fill:none;stroke-width:15;transition:stroke-width .18s ease,opacity .18s ease;}
+  .donut-seg:hover{stroke-width:19;}
+  .donut.has-hover .donut-seg:not(:hover){opacity:.4;}
+  .donut-center{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:1px;pointer-events:none;text-align:center;
+  }
+  .donut-center-val{font-size:1.2rem;font-weight:800;letter-spacing:-0.03em;color:var(--ink);line-height:1;}
+  .donut-center-key{
+    font-family:var(--font-mono);font-size:0.51rem;letter-spacing:0.1em;
+    color:var(--ink-faint);text-transform:uppercase;
+  }
+  .legend{display:flex;flex-direction:column;gap:8px;flex:1 1 190px;min-width:170px;}
+  .legend-item{display:flex;align-items:baseline;gap:8px;font-size:0.78rem;}
+  .legend-swatch{width:9px;height:9px;border-radius:2px;flex:0 0 auto;transform:translateY(-1px);}
+  .legend-name{color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .legend-val{
+    font-family:var(--font-mono);font-size:0.75rem;font-weight:600;
+    color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+
+  /* ---------- table twins (the WCAG-clean version of every chart) ---------- */
+  .chart-table{width:100%;border-collapse:collapse;margin-top:4px;}
+  .chart-table caption{
+    text-align:left;font-family:var(--font-mono);font-size:0.57rem;
+    letter-spacing:0.09em;color:var(--ink-faint);text-transform:uppercase;padding-bottom:8px;
+  }
+  .chart-table th,.chart-table td{
+    text-align:right;padding:6px 4px;font-size:0.74rem;
+    border-bottom:1px solid var(--border-soft);font-variant-numeric:tabular-nums;
+  }
+  .chart-table th{
+    font-family:var(--font-mono);font-size:0.56rem;letter-spacing:0.08em;
+    color:var(--ink-faint);text-transform:uppercase;font-weight:400;
+  }
+  .chart-table th:first-child,.chart-table td:first-child{text-align:left;}
+  .chart-table td{color:var(--ink-muted);font-family:var(--font-mono);}
+  .chart-table td:first-child{color:var(--ink);font-family:var(--font-sans);}
+  [hidden]{display:none !important;}
+
+  /* ---------- category filter rail ---------- */
+  .cat-rail{
+    display:flex;gap:8px;padding:0 20px;overflow-x:auto;
+    scrollbar-width:none;-ms-overflow-style:none;
+  }
+  .cat-rail::-webkit-scrollbar{display:none;}
+  .cat-pill{
+    flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:100px;padding:7px 13px;cursor:pointer;
+    font-family:var(--font-sans);font-size:0.79rem;color:var(--ink-muted);
+    transition:border-color .15s ease,color .15s ease,background .15s ease;
+  }
+  .cat-pill:hover{border-color:var(--ink-faint);color:var(--ink);}
+  .cat-pill[aria-pressed="true"]{
+    background:var(--surface-2);border-color:var(--gold);color:var(--ink);font-weight:600;
+  }
+  .cat-pill:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .cat-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+  .cat-n{
+    font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-faint);
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- market rows ---------- */
+  .mkt-list{display:flex;flex-direction:column;gap:8px;padding:14px 20px 0;}
+  .mkt{
+    display:grid;
+    grid-template-columns:44px minmax(0,1fr) auto;
+    gap:13px;align-items:center;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:12px 14px;
+    cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit;
+    transition:border-color .15s ease,background .15s ease;
+  }
+  .mkt:hover{border-color:var(--ink-faint);background:var(--surface-2);}
+  .mkt[aria-current="true"]{border-color:var(--gold);}
+  .mkt:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .mkt-img{
+    width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;
+    background:var(--surface-2);flex:0 0 auto;
+  }
+  .mkt-body{min-width:0;}
+  .mkt-cat{
+    font-family:var(--font-mono);font-size:0.55rem;letter-spacing:0.12em;
+    text-transform:uppercase;margin-bottom:4px;
+  }
+  .mkt-q{
+    font-size:0.86rem;font-weight:600;line-height:1.35;color:var(--ink);
+    margin-bottom:5px;
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  }
+  .mkt-sig{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .chip{
+    display:inline-flex;align-items:center;gap:4px;
+    font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.04em;
+    border-radius:5px;padding:2px 6px;
+    border:1px solid var(--border);color:var(--ink-faint);
+    background:var(--surface-2);font-variant-numeric:tabular-nums;
+  }
+  .chip.up{color:var(--green);border-color:rgba(53,176,117,0.35);background:var(--green-soft);}
+  .chip.down{color:var(--red);border-color:rgba(226,73,90,0.35);background:var(--red-soft);}
+  .chip.whale{color:var(--gold-bright);border-color:rgba(201,146,13,0.35);background:var(--gold-soft);}
+  .mkt-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;}
+  .mkt-price{
+    font-size:1.35rem;font-weight:800;letter-spacing:-0.03em;line-height:1;
+    font-variant-numeric:tabular-nums;color:var(--ink);
+  }
+  .mkt-price.hi{color:var(--green);}
+  .mkt-price.lo{color:var(--red);}
+  .mkt-price.mid{color:var(--gold-bright);}
+  .mkt-plabel{
+    font-family:var(--font-mono);font-size:0.53rem;letter-spacing:0.12em;
+    color:var(--ink-faint);text-transform:uppercase;
+  }
+  .mkt-vol{
+    font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-faint);
+    font-variant-numeric:tabular-nums;margin-top:2px;
+  }
+
+  /* ---------- skeletons ---------- */
+  .skel{
+    background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);
+    background-size:200% 100%;animation:sh 1.4s ease-in-out infinite;
+    border-radius:var(--radius);
+  }
+  .skel-row{height:70px;margin-bottom:8px;}
+  .skel-chart{height:148px;}
+  @keyframes sh{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+  /* ---------- detail sheet ---------- */
+  .sheet-backdrop{
+    position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.62);
+    opacity:0;pointer-events:none;transition:opacity .22s ease;
+  }
+  .sheet-backdrop.open{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:fixed;z-index:9991;top:0;right:0;bottom:0;width:min(420px,92vw);
+    background:var(--bg);border-left:1px solid var(--border);
+    overflow-y:auto;transform:translateX(100%);
+    transition:transform .24s cubic-bezier(.16,.8,.3,1);
+    box-shadow:-14px 0 44px rgba(0,0,0,0.5);
+  }
+  .sheet.open{transform:translateX(0);}
+  .sheet-close{
+    position:absolute;top:12px;right:12px;z-index:3;
+    width:32px;height:32px;border-radius:50%;
+    background:rgba(12,14,19,0.9);border:1px solid var(--border);
+    color:var(--ink-muted);font-size:19px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sheet-close:hover{color:var(--ink);border-color:var(--ink-faint);}
+  .sheet-close:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .sheet-img{width:100%;height:132px;object-fit:cover;filter:brightness(0.45);display:block;background:var(--surface-2);}
+  .sheet-body{padding:16px 18px 30px;}
+  .sheet-cat{
+    font-family:var(--font-mono);font-size:0.57rem;letter-spacing:0.13em;
+    text-transform:uppercase;margin-bottom:8px;
+  }
+  .sheet-q{font-size:1rem;font-weight:700;line-height:1.4;color:var(--ink);margin-bottom:14px;}
+  .sheet-price-row{
+    display:flex;align-items:baseline;gap:14px;
+    padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--border-soft);
+  }
+  .sheet-yes{font-size:2.3rem;font-weight:800;letter-spacing:-0.04em;line-height:1;font-variant-numeric:tabular-nums;}
+  .sheet-no{font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--ink-muted);}
+  .sheet-sub{font-family:var(--font-mono);font-size:0.62rem;color:var(--ink-faint);margin-top:5px;}
+
+  .spark-wrap{margin-bottom:16px;}
+  .spark-head{
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;
+  }
+  .spark-title{
+    font-family:var(--font-mono);font-size:0.58rem;letter-spacing:0.12em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  .spark-range{font-family:var(--font-mono);font-size:0.6rem;color:var(--ink-faint);font-variant-numeric:tabular-nums;}
+  .spark{
+    width:100%;height:88px;display:block;
+    background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-sm);
+  }
+  .spark-note{font-size:0.68rem;color:var(--ink-faint);line-height:1.5;margin:7px 0 0;}
+
+  .sheet-sig{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;
+  }
+  .sheet-sig-label{
+    font-family:var(--font-mono);font-size:0.55rem;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--gold);margin-bottom:7px;
+  }
+  .sheet-sig-text{font-size:0.79rem;color:var(--ink-muted);line-height:1.6;}
+  .sheet-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:16px;}
+  .sheet-stat{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-sm);padding:9px 10px;}
+  .sheet-stat-k{
+    font-family:var(--font-mono);font-size:0.53rem;letter-spacing:0.1em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px;
+  }
+  .sheet-stat-v{
+    font-family:var(--font-mono);font-size:0.86rem;font-weight:700;
+    color:var(--ink);font-variant-numeric:tabular-nums;
+  }
+  .sheet-cta{
+    display:block;width:100%;background:var(--gold);color:#0b0d12;
+    font-size:0.86rem;font-weight:700;text-align:center;padding:12px;
+    border-radius:var(--radius-sm);text-decoration:none;
+    transition:background .15s ease;
+  }
+  .sheet-cta:hover{background:var(--gold-bright);}
+  .sheet-cta:focus-visible{outline:2px solid var(--gold-bright);outline-offset:3px;}
+  .sheet-cta.ghost{
+    background:transparent;border:1px solid var(--border);color:var(--ink-muted);
+    margin-top:8px;font-weight:600;
+  }
+  .sheet-cta.ghost:hover{border-color:var(--ink-faint);color:var(--ink);background:transparent;}
+
+  /* ---------- honesty foot ---------- */
+  .foot{
+    font-size:0.71rem;line-height:1.6;color:var(--ink-faint);
+    padding:26px 20px 0;margin:0;max-width:70ch;
+  }
+  .foot b{color:var(--ink-muted);font-weight:600;}
+
+  @media (prefers-reduced-motion: reduce){
+    .hist-bar,.mv-fill,.sheet,.sheet-backdrop,.skel{transition:none;animation:none;}
+  }
+
+  /* ---------- desktop ---------- */
+  @media (min-width:860px){
+    .page-head{padding:34px 40px 6px;}
+    h1{font-size:2.6rem;}
+    .kpi-row{grid-template-columns:repeat(4,minmax(0,1fr));padding:0 40px;gap:13px;}
+    .kpi-val{font-size:2rem;}
+    .section-head,.chart-stack,.cat-rail,.mkt-list,.foot{padding-left:40px;padding-right:40px;}
+    .chart-stack{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+    .chart-card.wide{grid-column:1 / -1;}
+    /* The movers track is the widest thing on the page and the only chart
+       whose whole job is comparing magnitudes — at the mobile 132px it reads
+       as decoration. Give it real room once there is room to give. */
+    .mv-row{grid-template-columns:minmax(0,1fr) 300px 70px;gap:16px;}
+    .mv-track{height:22px;}
+    .mv-fill{top:5px;height:12px;}
+    .mv-val{font-size:0.74rem;}
+  }
+</style>
 </head>
 <body>
 
-<div class="edge-banner">
-  <span>Polymarket markets resolve NO at <b>4×</b> the rate of YES. Markets priced under <b>10¢</b> resolve YES only <b>1.1%</b> of the time. Sharp money exploits this bias.</span>
-  <div class="live-pill" id="live-count">● 0 live</div>
-</div>
+<div class="shell">
 
-<div class="app-body">
-  <div class="sidebar" id="sidebar"><!-- rendered by JS --></div>
-  <div class="main-feed" id="main-feed">
-    <div class="feed-header">
-      <div class="feed-title">Where's the edge?</div>
-      <div class="feed-sub" id="feed-sub">Loading markets...</div>
+  <header class="page-head">
+    <div class="eyebrow">Polymarket · live</div>
+    <h1>Markets</h1>
+    <p class="lede">
+      Every liquid market, ranked by <b>what's actually trading right now</b> — not by
+      lifetime volume, which rewards dead markets. Prices, 24-hour movement and
+      whale positioning are read live. Nothing on this page is a projection.
+    </p>
+    <div class="head-meta">
+      <span class="live-pill"><span class="live-dot"></span><span id="livePill">loading</span></span>
+      <span class="stamp" id="stamp"></span>
     </div>
-    <div id="market-list"></div>
+  </header>
+
+  <section class="kpi-row" id="kpiRow" aria-label="Market summary">
+    <div class="kpi"><div class="kpi-val is-mute" id="kpiCount">—</div><span class="kpi-key">Markets tracked</span><div class="kpi-sub">Liquid, non-noise, across 5 categories</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kpiVol">—</div><span class="kpi-key">24h volume</span><div class="kpi-sub">Traded across everything listed here</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kpiMove">—</div><span class="kpi-key">Biggest 24h move</span><div class="kpi-sub" id="kpiMoveSub">Largest single reprice on the board</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kpiWhale">—</div><span class="kpi-key">Whale-backed</span><div class="kpi-sub">Markets with tracked whales positioned</div></div>
+  </section>
+
+  <div class="section-head">
+    <h2 class="section-title">The read</h2>
+    <span class="section-count">Live · 10-min cache</span>
   </div>
-  <div class="detail-panel" id="detail-panel">
-    <div class="empty-state">Select a market to see the edge breakdown.</div>
+
+  <div class="chart-stack">
+
+    <div class="chart-card wide">
+      <div class="chart-head">
+        <div class="chart-title">Biggest repricers — last 24 hours</div>
+        <button type="button" class="chart-toggle" data-table="tblMovers" aria-expanded="false">TABLE</button>
+      </div>
+      <p class="chart-note">
+        The only signal here that isn't a restatement of the current price. A market that
+        moved 12 points in a day is new information arriving — that's where a call is worth
+        making. Movement is Polymarket's own 24-hour price delta.
+      </p>
+      <div id="moversChart"><div class="skel skel-chart"></div></div>
+      <div id="tblMovers" hidden></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="chart-title">Where the book sits</div>
+        <button type="button" class="chart-toggle" data-table="tblDist" aria-expanded="false">TABLE</button>
+      </div>
+      <p class="chart-note">
+        YES price distribution across every listed market. Most of Polymarket lives in the
+        tails — genuine coin-flips are rare, and they're the ones worth arguing about.
+      </p>
+      <div id="distChart"><div class="skel skel-chart"></div></div>
+      <div id="tblDist" hidden></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="chart-title">Volume by category</div>
+        <button type="button" class="chart-toggle" data-table="tblCat" aria-expanded="false">TABLE</button>
+      </div>
+      <p class="chart-note">
+        Share of lifetime traded volume across the categories on this page. Where the money
+        actually is, which is rarely where the attention is.
+      </p>
+      <div id="catChart"><div class="skel skel-chart"></div></div>
+      <div id="tblCat" hidden></div>
+    </div>
+
   </div>
+
+  <div class="section-head">
+    <h2 class="section-title">All markets</h2>
+    <span class="section-count" id="listCount"></span>
+  </div>
+
+  <div class="cat-rail" id="catRail" role="group" aria-label="Filter by category"></div>
+
+  <div class="mkt-list" id="mktList">
+    <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>
+  </div>
+
+  <p class="foot">
+    <b>What this page does not claim.</b> A price is the market's own implied probability,
+    not an edge — Hyperflex does not publish a historical resolve-rate for any price band,
+    because it has not measured one. Whale counts come from tracked wallet positions;
+    absence of whales means we saw none, not that none exist. Movement and volume are read
+    from Polymarket directly. Nothing here is investment advice.
+  </p>
+
 </div>
 
-<div class="dp-backdrop" id="dpBackdrop"></div>
-</div>
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<aside class="sheet" id="sheet" aria-hidden="true" aria-label="Market detail"></aside>
 
 <script>
-// State
-let allMarkets = [];
-let activeCategory = 'all';
-let activeMarketSlug = null;
+/* ══════════════════════════════════════════════════════════════════════════
+   /markets (served at /finance) — rebuilt 2026-08-25.
 
-// Fetch markets
-async function loadMarkets() {
-  try {
-    const res = await fetch('/api/finance/markets?_v=' + Date.now());
-    const data = await res.json();
-    const sections = data.sections || {};
+   Two things were wrong with the previous build:
 
-    // Flatten all markets with category
-    allMarkets = [];
-    const catOrder = ['fed_rates', 'crypto', 'macro', 'politics'];
-    for (const cat of catOrder) {
-      const markets = sections[cat] || [];
-      markets.forEach(m => { m._cat = cat; allMarkets.push(m); });
-    }
+   1. It looked blank because it WAS blank. `/api/finance/markets` asked gamma
+      for `order=volume`, but gamma's `volume` column is a string, so the sort
+      was lexicographic — a $99 market outranked a $99,947 one. The page was
+      being fed ~100 random low-volume markets and the category matchers hit
+      almost none of them. Live measurement before the fix: 8 markets total,
+      all politics, top row a $999 Lienchiang County magistrate race at 0.1¢.
+      Fixed server-side (`order=volumeNum` + offset paging + liveness sort).
 
-    // Update live count
-    const liveCount = allMarkets.filter(m => m.yes_price > 0).length;
-    document.getElementById('live-count').textContent = '● ' + liveCount + ' live';
-    document.getElementById('feed-sub').textContent = liveCount + ' directional markets · Updated just now';
+   2. Its "edge" was invented. `edgeStars()` awarded five stars to any price
+      under 5¢ and captioned it "Structural NO — <1% resolve YES", and the page
+      banner asserted "markets under 10¢ resolve YES only 1.1% of the time."
+      Nothing in this codebase measures that. It was also circular: at 4¢ the
+      market's implied probability IS 4% — restating it as a discovered edge is
+      a tautology. Both are gone. What's left (price, 24h reprice, volume,
+      whale positioning) is measured or arithmetic.
 
-    renderSidebar(sections);
-    renderMarkets(allMarkets);
+   Design tokens mirror home-kings.html so this reads as the same product.
+   ══════════════════════════════════════════════════════════════════════════ */
 
-    // Auto-select first market
-    if (allMarkets.length > 0) selectMarket(allMarkets[0]);
+var CATS = {
+  fed_rates: { label: 'Fed & rates', color: 'var(--cat-fed)' },
+  crypto:    { label: 'Crypto',      color: 'var(--cat-crypto)' },
+  macro:     { label: 'Macro',       color: 'var(--cat-macro)' },
+  politics:  { label: 'Politics',    color: 'var(--cat-politics)' },
+  sports:    { label: 'Sports',      color: 'var(--cat-sports)' }
+};
+var CAT_ORDER = ['fed_rates', 'crypto', 'macro', 'politics', 'sports'];
 
-  } catch(e) {
-    document.getElementById('feed-sub').textContent = 'Failed to load markets';
-  }
-}
+var allMarkets = [];
+var activeCat = 'all';
+var activeSlug = null;
+var lastFocus = null;
 
-// Sidebar
-const CAT_LABELS = { all: 'All', fed_rates: 'Fed & rates', crypto: 'Crypto', macro: 'Macro', politics: 'Politics' };
-const CAT_COLORS = { all: '#6366f1', fed_rates: '#60a5fa', crypto: '#f59e0b', macro: '#22c55e', politics: '#ef4444' };
-
-function renderSidebar(sections) {
-  const counts = { all: allMarkets.length };
-  for (const [cat, markets] of Object.entries(sections)) counts[cat] = markets.length;
-
-  const cats = ['all', 'fed_rates', 'crypto', 'macro', 'politics'];
-  let html = '<div class="sg"><div class="sg-label">Categories</div>';
-  for (const cat of cats) {
-    if (cat !== 'all' && !counts[cat]) continue;
-    html += `<div class="si ${cat === activeCategory ? 'active' : ''}" data-cat="${cat}">
-      <div class="si-left"><div class="si-dot" style="background:${CAT_COLORS[cat]}"></div><div class="si-name">${CAT_LABELS[cat]}</div></div>
-      <div class="si-count">${counts[cat] || 0}</div>
-    </div>`;
-  }
-  html += '</div>';
-
-  document.getElementById('sidebar').innerHTML = html;
-  document.querySelectorAll('.si[data-cat]').forEach(el => {
-    el.addEventListener('click', () => {
-      activeCategory = el.dataset.cat;
-      document.querySelectorAll('.si[data-cat]').forEach(s => s.classList.remove('active'));
-      el.classList.add('active');
-      const filtered = activeCategory === 'all' ? allMarkets : allMarkets.filter(m => m._cat === activeCategory);
-      renderMarkets(filtered);
-      if (filtered.length > 0) selectMarket(filtered[0]);
-    });
+/* ---------- formatting (CLAUDE.md voice charter: numbers over words) ---------- */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
   });
 }
-
-// Market list
-function edgeStars(yes_price) {
-  const pct = Math.round(yes_price * 100);
-  if (pct <= 5 || pct >= 95) return { stars: 5, label: 'Max edge', color: '#22c55e' };
-  if (pct <= 10 || pct >= 90) return { stars: 4, label: 'Strong edge', color: '#22c55e' };
-  if (pct <= 20 || pct >= 80) return { stars: 3, label: 'Moderate edge', color: '#f59e0b' };
-  if (pct <= 30 || pct >= 70) return { stars: 2, label: 'Lean edge', color: '#f59e0b' };
-  return { stars: 1, label: 'Weak edge', color: '#555' };
+function fmtUsd(v) {
+  if (v == null || !isFinite(v) || v <= 0) return '—';
+  if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'k';
+  return '$' + Math.round(v);
 }
-
-function renderStars(yes_price) {
-  const { stars, color } = edgeStars(yes_price);
-  const filled = '★'.repeat(stars);
-  const empty = '☆'.repeat(5 - stars);
-  return `<span style="color:${color};font-size:12px;letter-spacing:1px">${filled}<span style="color:#252535">${empty}</span></span>`;
+/* Sub-1% prices render as cents, never as "0%" — a 0.4¢ market is not a zero. */
+function fmtPct(p) {
+  if (p == null || !isFinite(p)) return '—';
+  var pct = p * 100;
+  if (pct > 0 && pct < 1) return pct.toFixed(1) + '¢';
+  return Math.round(pct) + '%';
 }
-
-function shortEdge(m) {
-  const pct = Math.round((m.yes_price || 0) * 100);
-  if (pct <= 5) return 'Structural NO — <1% resolve YES at this price';
-  if (pct <= 10) return 'Strong NO bias — 1.1% resolve YES historically';
-  if (pct <= 20) return 'Lean NO — ~5% resolve YES. Sharp money fades.';
-  if (pct >= 90) return 'Near-certain YES — consensus pricing';
-  if (pct >= 80) return 'High conviction YES — sharp money loaded';
-  if (pct >= 70) return 'Moderate YES — watch whale confirmation';
-  return 'No clear edge — check /signals for positioning';
+function fmtPts(d) {
+  if (d == null || !isFinite(d)) return null;
+  var pts = d * 100;
+  return (pts > 0 ? '+' : '') + pts.toFixed(1) + 'pts';
 }
-
-function priceClass(pct) {
-  if (pct >= 70) return 'yes';
-  if (pct <= 30) return 'no';
+function priceClass(p) {
+  if (p == null) return '';
+  if (p >= 0.70) return 'hi';
+  if (p <= 0.30) return 'lo';
   return 'mid';
 }
 
-function fmtVol(v) {
-  if (!v) return '';
-  if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
-  if (v >= 1000) return '$' + Math.round(v/1000) + 'K';
-  return '$' + Math.round(v);
+/* ---------- load ---------- */
+function loadMarkets() {
+  fetch('/api/finance/markets?_v=' + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var sections = (data && data.sections) || {};
+      allMarkets = [];
+      CAT_ORDER.forEach(function (cat) {
+        (sections[cat] || []).forEach(function (m) { m._cat = cat; allMarkets.push(m); });
+      });
+
+      if (!allMarkets.length) {
+        document.getElementById('livePill').textContent = 'no markets';
+        document.getElementById('mktList').innerHTML =
+          '<div class="chart-empty">No markets came back from the upstream feed. ' +
+          'This is a data problem, not an empty market — try again shortly.</div>';
+        ['moversChart','distChart','catChart'].forEach(function (id) {
+          document.getElementById(id).innerHTML = '<div class="chart-empty">No data.</div>';
+        });
+        return;
+      }
+
+      renderKpis(data);
+      renderMovers();
+      renderDist();
+      renderCatChart();
+      renderRail();
+      renderList();
+    })
+    .catch(function () {
+      document.getElementById('livePill').textContent = 'feed down';
+      document.getElementById('mktList').innerHTML =
+        '<div class="chart-empty">Could not reach the market feed. Reload to retry.</div>';
+    });
 }
 
-function renderMarkets(markets) {
-  const list = document.getElementById('market-list');
-  if (!markets.length) { list.innerHTML = '<div class="empty-state">No markets found in this category.</div>'; return; }
+/* ---------- KPIs ---------- */
+function renderKpis(data) {
+  var n = allMarkets.length;
+  var vol24 = allMarkets.reduce(function (s, m) {
+    return s + (m.volume_24h != null && isFinite(m.volume_24h) ? m.volume_24h : 0);
+  }, 0);
+  var whaled = allMarkets.filter(function (m) { return (m.whale_count || 0) > 0; }).length;
 
-  list.innerHTML = markets.map((m, i) => {
-    const pct = Math.round((m.yes_price || 0) * 100);
-    const img = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
-    return `<div class="mrow ${m.slug === activeMarketSlug ? 'active' : ''}" data-idx="${allMarkets.indexOf(m)}">
-      ${img ? `<img class="mimg" src="${img}" onerror="this.style.display='none'" alt="">` : '<div class="mimg"></div>'}
-      <div class="mbody">
-        <div class="mcat">${CAT_LABELS[m._cat] || m._cat}</div>
-        <div class="mq">${m.question || ''}</div>
-        <div class="medge">${renderStars(m.yes_price)} <span style="color:#555;font-size:11px">${edgeStars(m.yes_price).label} — ${shortEdge(m)}</span></div>
-      </div>
-      <div class="mright">
-        <div class="mprice ${priceClass(pct)}">${pct}%</div>
-        <div class="mlabel">YES</div>
-        <div class="mvol">${fmtVol(m.volume)}</div>
-      </div>
-    </div>`;
+  var movers = allMarkets.filter(function (m) { return m.chg_1d != null && isFinite(m.chg_1d); });
+  movers.sort(function (a, b) { return Math.abs(b.chg_1d) - Math.abs(a.chg_1d); });
+  var top = movers[0];
+
+  document.getElementById('livePill').textContent = n + ' markets live';
+  document.getElementById('stamp').textContent =
+    data.updated_at ? 'Updated ' + new Date(data.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+  set('kpiCount', String(n), '');
+  set('kpiVol', vol24 > 0 ? fmtUsd(vol24) : '—', '');
+  if (top) {
+    set('kpiMove', fmtPts(top.chg_1d), top.chg_1d > 0 ? 'up' : 'down');
+    document.getElementById('kpiMoveSub').textContent = top.question.length > 58
+      ? top.question.slice(0, 58) + '…' : top.question;
+  } else {
+    set('kpiMove', '—', '');
+  }
+  set('kpiWhale', whaled > 0 ? String(whaled) : '0', '');
+
+  function set(id, val, cls) {
+    var el = document.getElementById(id);
+    el.textContent = val;
+    el.className = 'kpi-val' + (cls ? ' ' + cls : (val === '—' || val === '0' ? ' is-mute' : ''));
+  }
+}
+
+/* ---------- chart 1: diverging repricers ---------- */
+function renderMovers() {
+  var movers = allMarkets.filter(function (m) {
+    return m.chg_1d != null && isFinite(m.chg_1d) && Math.abs(m.chg_1d) >= 0.005;
+  });
+  movers.sort(function (a, b) { return Math.abs(b.chg_1d) - Math.abs(a.chg_1d); });
+  movers = movers.slice(0, 8);
+
+  var host = document.getElementById('moversChart');
+  if (!movers.length) {
+    host.innerHTML = '<div class="chart-empty">Nothing repriced meaningfully in the last 24 hours. ' +
+      'That is itself a reading — a quiet book.</div>';
+    document.getElementById('tblMovers').innerHTML = '';
+    return;
+  }
+
+  var max = Math.max.apply(null, movers.map(function (m) { return Math.abs(m.chg_1d); }));
+
+  host.innerHTML = '<div class="mv-list">' + movers.map(function (m) {
+    var d = m.chg_1d;
+    var up = d > 0;
+    var w = max > 0 ? (Math.abs(d) / max) * 50 : 0; /* 50% = the full half-track */
+    return '<div class="mv-row">' +
+      '<div>' +
+        '<div class="mv-q"><a href="/market/' + esc(m.slug) + '">' + esc(m.question) + '</a></div>' +
+        '<div class="mv-sub">' + esc(CATS[m._cat] ? CATS[m._cat].label : m._cat) +
+          ' · now ' + fmtPct(m.yes_price) + ' YES · ' + fmtUsd(m.volume) + ' lifetime</div>' +
+      '</div>' +
+      '<div class="mv-track">' +
+        '<div class="mv-fill ' + (up ? 'up' : 'down') + '" style="width:' + w + '%"></div>' +
+      '</div>' +
+      '<span class="mv-val ' + (up ? 'up' : 'down') + '">' + fmtPts(d) + '</span>' +
+    '</div>';
+  }).join('') + '</div>';
+
+  document.getElementById('tblMovers').innerHTML =
+    '<table class="chart-table"><caption>Biggest 24-hour repricers</caption>' +
+    '<thead><tr><th scope="col">Market</th><th scope="col">24h</th><th scope="col">YES now</th><th scope="col">Volume</th></tr></thead><tbody>' +
+    movers.map(function (m) {
+      return '<tr><td>' + esc(m.question) + '</td><td>' + fmtPts(m.chg_1d) + '</td><td>' +
+        fmtPct(m.yes_price) + '</td><td>' + fmtUsd(m.volume) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+/* ---------- chart 2: price histogram ---------- */
+function renderDist() {
+  var bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  allMarkets.forEach(function (m) {
+    var p = m.yes_price;
+    if (p == null || !isFinite(p)) return;
+    var i = Math.min(9, Math.max(0, Math.floor(p * 10)));
+    bins[i]++;
+  });
+  var max = Math.max.apply(null, bins) || 1;
+  var ticks = ['0','10','20','30','40','50','60','70','80','90'];
+
+  document.getElementById('distChart').innerHTML =
+    '<div class="hist" role="img" aria-label="YES price distribution across ' + allMarkets.length + ' markets">' +
+      bins.map(function (c) {
+        var h = c === 0 ? 2 : Math.max(4, (c / max) * 100);
+        return '<div class="hist-col">' +
+          (c > 0 ? '<span class="hist-count">' + c + '</span>' : '') +
+          '<div class="hist-bar' + (c === 0 ? ' is-empty' : '') + '" style="height:' + h + '%"></div>' +
+        '</div>';
+      }).join('') +
+    '</div>' +
+    '<div class="hist-axis">' + ticks.map(function (t) {
+      return '<span class="hist-tick">' + t + '¢</span>';
+    }).join('') + '</div>';
+
+  document.getElementById('tblDist').innerHTML =
+    '<table class="chart-table"><caption>YES price distribution</caption>' +
+    '<thead><tr><th scope="col">Band</th><th scope="col">Markets</th></tr></thead><tbody>' +
+    bins.map(function (c, i) {
+      return '<tr><td>' + (i * 10) + '–' + (i * 10 + 10) + '¢</td><td>' + c + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+/* ---------- chart 3: category donut ---------- */
+function renderCatChart() {
+  var totals = {};
+  var grand = 0;
+  CAT_ORDER.forEach(function (c) { totals[c] = 0; });
+  allMarkets.forEach(function (m) {
+    var v = m.volume || 0;
+    totals[m._cat] = (totals[m._cat] || 0) + v;
+    grand += v;
+  });
+
+  var rows = CAT_ORDER.map(function (c) {
+    return { cat: c, label: CATS[c].label, color: CATS[c].color, v: totals[c] };
+  }).filter(function (r) { return r.v > 0; })
+    .sort(function (a, b) { return b.v - a.v; });
+
+  var host = document.getElementById('catChart');
+  if (!rows.length || grand <= 0) {
+    host.innerHTML = '<div class="chart-empty">No volume data.</div>';
+    return;
+  }
+
+  var R = 42, C = 2 * Math.PI * R, off = 0;
+  var segs = rows.map(function (r) {
+    var frac = r.v / grand;
+    var len = frac * C;
+    var s = '<circle class="donut-seg" cx="50" cy="50" r="' + R + '" stroke="' + r.color +
+      '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) +
+      '" stroke-dashoffset="' + (-off).toFixed(2) + '"><title>' + esc(r.label) + ' — ' +
+      fmtUsd(r.v) + ' (' + Math.round(frac * 100) + '%)</title></circle>';
+    off += len;
+    return s;
   }).join('');
 
-  document.querySelectorAll('.mrow').forEach(row => {
-    row.addEventListener('click', () => {
-      const m = allMarkets[parseInt(row.dataset.idx)];
-      if (m) selectMarket(m, true);
+  host.innerHTML =
+    '<div class="donut-row">' +
+      '<div class="donut" id="donut"><svg viewBox="0 0 100 100" role="img" aria-label="Volume share by category">' +
+        segs + '</svg>' +
+        '<div class="donut-center"><span class="donut-center-val">' + fmtUsd(grand) +
+        '</span><span class="donut-center-key">total</span></div>' +
+      '</div>' +
+      '<div class="legend">' + rows.map(function (r) {
+        return '<div class="legend-item">' +
+          '<span class="legend-swatch" style="background:' + r.color + '"></span>' +
+          '<span class="legend-name">' + esc(r.label) + '</span>' +
+          '<span class="legend-val">' + Math.round((r.v / grand) * 100) + '%</span>' +
+        '</div>';
+      }).join('') + '</div>' +
+    '</div>';
+
+  var d = document.getElementById('donut');
+  d.addEventListener('mouseover', function () { d.classList.add('has-hover'); });
+  d.addEventListener('mouseout', function () { d.classList.remove('has-hover'); });
+
+  document.getElementById('tblCat').innerHTML =
+    '<table class="chart-table"><caption>Lifetime volume by category</caption>' +
+    '<thead><tr><th scope="col">Category</th><th scope="col">Volume</th><th scope="col">Share</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr><td>' + esc(r.label) + '</td><td>' + fmtUsd(r.v) + '</td><td>' +
+        Math.round((r.v / grand) * 100) + '%</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+/* ---------- category rail ---------- */
+function renderRail() {
+  var counts = { all: allMarkets.length };
+  CAT_ORDER.forEach(function (c) {
+    counts[c] = allMarkets.filter(function (m) { return m._cat === c; }).length;
+  });
+
+  var items = [{ key: 'all', label: 'All', color: 'var(--gold)' }].concat(
+    CAT_ORDER.filter(function (c) { return counts[c] > 0; })
+      .map(function (c) { return { key: c, label: CATS[c].label, color: CATS[c].color }; })
+  );
+
+  document.getElementById('catRail').innerHTML = items.map(function (it) {
+    return '<button type="button" class="cat-pill" data-cat="' + it.key + '" aria-pressed="' +
+      (it.key === activeCat) + '">' +
+      '<span class="cat-dot" style="background:' + it.color + '"></span>' +
+      '<span>' + esc(it.label) + '</span>' +
+      '<span class="cat-n">' + counts[it.key] + '</span></button>';
+  }).join('');
+
+  Array.prototype.forEach.call(document.querySelectorAll('.cat-pill'), function (el) {
+    el.addEventListener('click', function () {
+      activeCat = el.dataset.cat;
+      Array.prototype.forEach.call(document.querySelectorAll('.cat-pill'), function (p) {
+        p.setAttribute('aria-pressed', String(p === el));
+      });
+      renderList();
     });
   });
 }
 
-// Detail panel — on mobile this is a bottom sheet (see the <=768px media
-// query); openPanel gates whether it slides up. Explicit market taps pass
-// true; the page-load/category-switch auto-selects don't, so the sheet
-// never yanks itself open before the user has asked for it.
-function openDetailPanel() {
-  document.getElementById('detail-panel').classList.add('open');
-  document.getElementById('dpBackdrop').classList.add('open');
+/* ---------- market list ---------- */
+function visible() {
+  return activeCat === 'all'
+    ? allMarkets
+    : allMarkets.filter(function (m) { return m._cat === activeCat; });
 }
-function closeDetailPanel() {
-  document.getElementById('detail-panel').classList.remove('open');
-  document.getElementById('dpBackdrop').classList.remove('open');
+
+function renderList() {
+  var rows = visible();
+  document.getElementById('listCount').textContent =
+    rows.length + (rows.length === 1 ? ' market' : ' markets');
+
+  var host = document.getElementById('mktList');
+  if (!rows.length) {
+    host.innerHTML = '<div class="chart-empty">Nothing in this category right now.</div>';
+    return;
+  }
+
+  host.innerHTML = rows.map(function (m) {
+    var cat = CATS[m._cat] || { label: m._cat, color: 'var(--ink-faint)' };
+    var img = m.image ? '/api/img-proxy?url=' + encodeURIComponent(m.image) : '';
+    var chips = [];
+
+    var d = m.chg_1d != null && isFinite(m.chg_1d) && Math.abs(m.chg_1d) >= 0.005 ? m.chg_1d : null;
+    if (d != null) chips.push('<span class="chip ' + (d > 0 ? 'up' : 'down') + '">' + fmtPts(d) + ' 24h</span>');
+
+    if ((m.whale_count || 0) > 0) {
+      chips.push('<span class="chip whale">' + m.whale_count + ' whale' +
+        (m.whale_count === 1 ? '' : 's') +
+        ((m.total_whale_capital || 0) > 0 ? ' · ' + fmtUsd(m.total_whale_capital) : '') + '</span>');
+    }
+    if (m.volume_24h != null && m.volume_24h > 0) {
+      chips.push('<span class="chip">' + fmtUsd(m.volume_24h) + ' 24h</span>');
+    }
+    if (!chips.length) chips.push('<span class="chip">quiet · no 24h move</span>');
+
+    return '<button type="button" class="mkt" data-slug="' + esc(m.slug) + '"' +
+      (m.slug === activeSlug ? ' aria-current="true"' : '') + '>' +
+      (img
+        ? '<img class="mkt-img" src="' + esc(img) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">'
+        : '<span class="mkt-img"></span>') +
+      '<span class="mkt-body">' +
+        '<span class="mkt-cat" style="color:' + cat.color + '">' + esc(cat.label) + '</span>' +
+        '<span class="mkt-q">' + esc(m.question) + '</span>' +
+        '<span class="mkt-sig">' + chips.join('') + '</span>' +
+      '</span>' +
+      '<span class="mkt-right">' +
+        '<span class="mkt-price ' + priceClass(m.yes_price) + '">' + fmtPct(m.yes_price) + '</span>' +
+        '<span class="mkt-plabel">YES</span>' +
+        '<span class="mkt-vol">' + fmtUsd(m.volume) + '</span>' +
+      '</span>' +
+    '</button>';
+  }).join('');
+
+  Array.prototype.forEach.call(host.querySelectorAll('.mkt'), function (el) {
+    el.addEventListener('click', function () {
+      var m = allMarkets.filter(function (x) { return String(x.slug) === el.dataset.slug; })[0];
+      if (m) openSheet(m, el);
+    });
+  });
 }
-document.getElementById('dpBackdrop').addEventListener('click', closeDetailPanel);
 
-function selectMarket(m, openPanel) {
-  activeMarketSlug = m.slug;
-  document.querySelectorAll('.mrow').forEach(r => r.classList.remove('active'));
-  const idx = allMarkets.indexOf(m);
-  const rows = document.querySelectorAll('.mrow');
-  if (rows[idx]) rows[idx].classList.add('active'); // Note: index may differ if filtered
+/* ---------- detail sheet + sparkline ---------- */
+var sheetEl = document.getElementById('sheet');
+var backdropEl = document.getElementById('sheetBackdrop');
 
-  const pct = Math.round((m.yes_price || 0) * 100);
-  const img = m.image ? `/api/img-proxy?url=${encodeURIComponent(m.image)}` : '';
-  const slug = m.slug || m.conditionId || '';
-  const edgeColor = pct >= 70 ? '#22c55e' : pct <= 20 ? '#ef4444' : '#f59e0b';
-  const { stars, label, color } = edgeStars(m.yes_price);
-  const starsHtml = '★'.repeat(stars) + '<span style="color:#252535">☆</span>'.repeat(5 - stars);
-
-  document.getElementById('detail-panel').innerHTML = `
-    <button type="button" class="dp-close" id="dpClose" aria-label="Close">&times;</button>
-    ${img ? `<img class="dp-img" src="${img}" onerror="this.style.display='none'" alt="">` : ''}
-    <div class="dp-body">
-      <div class="dp-cat">${CAT_LABELS[m._cat] || m._cat} · ${label}</div>
-      <div class="dp-title">${m.question || ''}</div>
-      <div class="dp-price-row">
-        <div>
-          <div class="dp-yes" style="color:${edgeColor}">${pct}%</div>
-          <div class="dp-vol">YES · ${fmtVol(m.volume)} volume</div>
-        </div>
-        <div class="dp-no">NO ${100-pct}%</div>
-      </div>
-      <div class="dp-edge-box">
-        <div class="dp-edge-label">Why this has edge</div>
-        <div class="dp-edge-text">${m.edge_signal || shortEdge(m)}</div>
-      </div>
-      <div class="dp-stats">
-        <div class="dp-stat"><div class="dp-stat-label">Volume</div><div class="dp-stat-val">${fmtVol(m.volume)}</div></div>
-        <div class="dp-stat"><div class="dp-stat-label">YES price</div><div class="dp-stat-val" style="color:${edgeColor}">${pct}¢</div></div>
-        <div class="dp-stat"><div class="dp-stat-label">Edge type</div><div class="dp-stat-val" style="color:${color}">${starsHtml}</div></div>
-        <div class="dp-stat"><div class="dp-stat-label">Category</div><div class="dp-stat-val">${CAT_LABELS[m._cat] || m._cat}</div></div>
-      </div>
-      <a class="dp-cta" href="/market/${slug}">View full analysis →</a>
-    </div>
-  `;
-  document.getElementById('dpClose').addEventListener('click', closeDetailPanel);
-  if (openPanel) openDetailPanel();
+function closeSheet() {
+  sheetEl.classList.remove('open');
+  backdropEl.classList.remove('open');
+  sheetEl.setAttribute('aria-hidden', 'true');
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
 }
+backdropEl.addEventListener('click', closeSheet);
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && sheetEl.classList.contains('open')) closeSheet();
+});
+
+function openSheet(m, srcEl) {
+  lastFocus = srcEl || null;
+  activeSlug = m.slug;
+  Array.prototype.forEach.call(document.querySelectorAll('.mkt'), function (el) {
+    el.setAttribute('aria-current', String(el.dataset.slug === String(m.slug)));
+  });
+
+  var cat = CATS[m._cat] || { label: m._cat, color: 'var(--ink-faint)' };
+  var img = m.image ? '/api/img-proxy?url=' + encodeURIComponent(m.image) : '';
+  var pct = m.yes_price;
+  var col = pct >= 0.70 ? 'var(--green)' : pct <= 0.30 ? 'var(--red)' : 'var(--gold-bright)';
+  var d1 = fmtPts(m.chg_1d), d7 = fmtPts(m.chg_7d);
+  var ends = m.end_date ? new Date(m.end_date) : null;
+
+  sheetEl.innerHTML =
+    '<button type="button" class="sheet-close" id="sheetClose" aria-label="Close">&times;</button>' +
+    (img ? '<img class="sheet-img" src="' + esc(img) + '" alt="" onerror="this.remove()">' : '') +
+    '<div class="sheet-body">' +
+      '<div class="sheet-cat" style="color:' + cat.color + '">' + esc(cat.label) + '</div>' +
+      '<div class="sheet-q">' + esc(m.question) + '</div>' +
+      '<div class="sheet-price-row">' +
+        '<div><div class="sheet-yes" style="color:' + col + '">' + fmtPct(pct) + '</div>' +
+        '<div class="sheet-sub">YES · ' + fmtUsd(m.volume) + ' lifetime volume</div></div>' +
+        '<div class="sheet-no">NO ' + fmtPct(1 - pct) + '</div>' +
+      '</div>' +
+
+      '<div class="spark-wrap">' +
+        '<div class="spark-head"><span class="spark-title">Price history</span>' +
+        '<span class="spark-range" id="sparkRange"></span></div>' +
+        '<div id="sparkHost"><div class="skel" style="height:88px"></div></div>' +
+        '<p class="spark-note" id="sparkNote"></p>' +
+      '</div>' +
+
+      '<div class="sheet-sig">' +
+        '<div class="sheet-sig-label">What is measurable here</div>' +
+        '<div class="sheet-sig-text">' + esc(m.edge_signal || '—') + '</div>' +
+      '</div>' +
+
+      '<div class="sheet-stats">' +
+        stat('24h move', d1 || 'flat') +
+        stat('7d move', d7 || 'flat') +
+        stat('Lifetime vol', fmtUsd(m.volume)) +
+        stat('24h vol', m.volume_24h != null && m.volume_24h > 0 ? fmtUsd(m.volume_24h) : '—') +
+        stat('Whales', (m.whale_count || 0) > 0 ? String(m.whale_count) : 'none seen') +
+        stat('Resolves', ends && !isNaN(ends.getTime())
+          ? ends.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—') +
+      '</div>' +
+
+      '<a class="sheet-cta" href="/market/' + esc(m.slug) + '">Open market →</a>' +
+      (m.event_slug
+        ? '<a class="sheet-cta ghost" href="https://polymarket.com/event/' + esc(m.event_slug) +
+          '" target="_blank" rel="noopener">View on Polymarket ↗</a>'
+        : '') +
+    '</div>';
+
+  document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  sheetEl.classList.add('open');
+  backdropEl.classList.add('open');
+  sheetEl.setAttribute('aria-hidden', 'false');
+  document.getElementById('sheetClose').focus();
+
+  loadSpark(m);
+
+  function stat(k, v) {
+    return '<div class="sheet-stat"><div class="sheet-stat-k">' + esc(k) +
+      '</div><div class="sheet-stat-v">' + esc(v) + '</div></div>';
+  }
+}
+
+/* Real series, not a decoration. /api/market-history accepts a CLOB token_id
+   and falls through to Polymarket's own prices-history when we have no local
+   snapshots. If neither has anything, the chart says so rather than drawing a
+   flat line that implies a stable price. */
+function loadSpark(m) {
+  var host = document.getElementById('sparkHost');
+  var noteEl = document.getElementById('sparkNote');
+  var rangeEl = document.getElementById('sparkRange');
+  var key = m.token_id || m.conditionId;
+
+  if (!key) {
+    host.innerHTML = '<div class="chart-empty">No price series available for this market.</div>';
+    return;
+  }
+
+  fetch('/api/market-history/' + encodeURIComponent(key))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (activeSlug !== m.slug) return; /* user moved on mid-flight */
+      var pts = ((data && data.history) || [])
+        .filter(function (h) { return h.yes_price != null && isFinite(h.yes_price); });
+
+      if (pts.length < 2) {
+        host.innerHTML = '<div class="chart-empty">No price history on record for this market yet.</div>';
+        noteEl.textContent = '';
+        return;
+      }
+
+      var vals = pts.map(function (h) { return h.yes_price; });
+      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+      var pad = (hi - lo) * 0.12 || 0.02;
+      var y0 = Math.max(0, lo - pad), y1 = Math.min(1, hi + pad);
+      var span = (y1 - y0) || 1;
+
+      var W = 100, H = 40;
+      var coords = vals.map(function (v, i) {
+        var x = (i / (vals.length - 1)) * W;
+        var y = H - ((v - y0) / span) * H;
+        return x.toFixed(2) + ',' + y.toFixed(2);
+      });
+
+      var rising = vals[vals.length - 1] >= vals[0];
+      var stroke = rising ? 'var(--green)' : 'var(--red)';
+      var area = 'M0,' + H + ' L' + coords.join(' L') + ' L' + W + ',' + H + ' Z';
+
+      host.innerHTML =
+        '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+        'role="img" aria-label="Price history: ' + esc(fmtPct(vals[0])) + ' to ' + esc(fmtPct(vals[vals.length - 1])) + '">' +
+          '<defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="' + (rising ? '#35b075' : '#e2495a') + '" stop-opacity="0.22"/>' +
+            '<stop offset="100%" stop-color="' + (rising ? '#35b075' : '#e2495a') + '" stop-opacity="0"/>' +
+          '</linearGradient></defs>' +
+          '<path d="' + area + '" fill="url(#sparkFill)"/>' +
+          '<polyline points="' + coords.join(' ') + '" fill="none" stroke="' + stroke +
+            '" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>' +
+        '</svg>';
+
+      rangeEl.textContent = fmtPct(lo) + ' – ' + fmtPct(hi);
+
+      var first = pts[0].snapshot_at ? new Date(pts[0].snapshot_at) : null;
+      noteEl.textContent = pts.length + ' points' +
+        (first && !isNaN(first.getTime())
+          ? ' since ' + first.toLocaleDateString([], { month: 'short', day: 'numeric' })
+          : '') +
+        ' · ' + fmtPct(vals[0]) + ' → ' + fmtPct(vals[vals.length - 1]);
+    })
+    .catch(function () {
+      if (activeSlug !== m.slug) return;
+      host.innerHTML = '<div class="chart-empty">Price history unavailable right now.</div>';
+    });
+}
+
+/* ---------- chart/table toggles ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('.chart-toggle'), function (btn) {
+  btn.addEventListener('click', function () {
+    var tbl = document.getElementById(btn.dataset.table);
+    var card = btn.closest('.chart-card');
+    var chart = card.querySelector('.chart-note').nextElementSibling;
+    var showing = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!showing));
+    btn.textContent = showing ? 'TABLE' : 'CHART';
+    tbl.hidden = showing;
+    chart.hidden = !showing;
+  });
+});
 
 loadMarkets();
 </script>
