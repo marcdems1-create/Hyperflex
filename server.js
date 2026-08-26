@@ -731,7 +731,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/odds', priority: '0.9', freq: 'hourly' },
       { loc: '/whales', priority: '0.8', freq: 'daily' },
       { loc: '/whale-index', priority: '0.7', freq: 'daily' },
-      /* /explore redirects to / — removed from sitemap */
+      { loc: '/explore', priority: '0.7', freq: 'daily' },
       { loc: '/data', priority: '0.6', freq: 'daily' },
       { loc: '/ecosystem', priority: '0.8', freq: 'daily' },
       { loc: '/features', priority: '0.7', freq: 'weekly' },
@@ -938,7 +938,12 @@ dataEngine.init({ pool, fetch: _nodeFetch, supabase: null });
 
 // Mount /api/v1/ routes
 require('./lib/data-api-routes')(app, dataEngine, {
-  getWhaleCache: () => _whaleWatchCache
+  getWhaleCache: () => _whaleWatchCache,
+  // buildAlphaList/dbQuery are declared later in this file as hoisted function
+  // declarations, so referencing them here (before their textual definition)
+  // is safe — they're only actually invoked later, at request time.
+  getAlphaList: (opts) => buildAlphaList(opts),
+  dbQuery: (text, params) => dbQuery(text, params)
 });
 
 // ── ANOMALY ENGINE (Phase 2) — Statistical anomaly detection ─────────────
@@ -13585,6 +13590,398 @@ app.get('/api/kings', async (req, res) => {
     res.json({ overall: overall || [], categories });
   } catch (e) {
     console.error('[kings]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/board-stats ─────────────────────────────────────────────────
+// Public, no auth — the homepage's chart data. Every figure here is an
+// aggregate of the SAME durable-trade population the leaderboard scores on,
+// computed from the same helpers (_computeRoiLeaderboard,
+// _computeCategoryRoiLeaderboards, classifyCardCategory). No new grading
+// math, no estimates, no sampling. A chart on the front page is a public
+// claim about the record, so it must be derivable from the same rows a
+// trader's own profile is derivable from — anything that can't be is simply
+// omitted (null) rather than approximated.
+//
+// Deliberately includes losses in every breakdown. The wins/losses split IS
+// the chart — a scoreboard that only plots wins is the thing this product
+// exists to replace.
+let _boardStatsCache = null;
+const BOARD_STATS_TTL_MS = 5 * 60 * 1000; // matches the homepage's own 3-min poll comfortably
+
+app.get('/api/board-stats', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    if (_boardStatsCache && Date.now() - _boardStatsCache.ts < BOARD_STATS_TTL_MS) {
+      return res.json(_boardStatsCache.data);
+    }
+
+    const [board, byCategory, durableRows, totalsRows] = await Promise.all([
+      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
+      _computeCategoryRoiLeaderboards().catch(() => null),
+      dbQuery(`
+        SELECT market_question, entry_cost_usd, realized_pnl, closed_at
+        FROM realized_trades
+        WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL
+          AND closed_at IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+      `).catch(e => { console.warn('[board-stats] durable fetch:', e.message); return null; }),
+      dbQuery(`
+        SELECT COUNT(*)::int AS graded_trades,
+               COUNT(DISTINCT user_id)::int AS wallets_tracked,
+               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable_trades
+        FROM realized_trades WHERE closed_at IS NOT NULL
+      `).catch(() => null),
+    ]);
+    if (durableRows == null) return res.status(500).json({ error: 'durable trade query failed' });
+
+    // ── per-category rollup over every durable trade (not just ranked
+    // wallets') so a category's real depth isn't understated by a thin
+    // qualifying set — same choice /api/feed/category-wins makes for its
+    // liquidity figure, and the same documented caveat: this is capital
+    // OUR tracked wallets deployed, not Polymarket's own category volume.
+    const catAgg = new Map();
+    let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
+    let uncategorizedCapital = 0, uncategorizedTrades = 0;
+    let firstClose = null, lastClose = null;
+
+    for (const t of durableRows) {
+      const pnl = Number(t.realized_pnl);
+      const cost = Number(t.entry_cost_usd);
+      capitalUsd += cost;
+      if (pnl > 0) wins++; else if (pnl < 0) losses++; else pushes++;
+
+      const ms = new Date(t.closed_at).getTime();
+      if (!Number.isNaN(ms)) {
+        if (firstClose == null || ms < firstClose) firstClose = ms;
+        if (lastClose == null || ms > lastClose) lastClose = ms;
+      }
+
+      const category = classifyCardCategory(t.market_question);
+      if (category === 'other') {
+        // The classifier's residual bucket. It is NOT a category (same
+        // exclusion /api/kings makes), so it never gets a leaderboard or a
+        // win-rate row — but its capital is real and must be reported, or a
+        // share-of-capital chart silently drops it. Measured 2026-08-20:
+        // $25.1M of $163M, 15% of the board. A donut summing to 85% of the
+        // headline "capital graded" figure is a number that contradicts the
+        // tile directly above it.
+        uncategorizedCapital += cost;
+        uncategorizedTrades++;
+        continue;
+      }
+      if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
+      const c = catAgg.get(category);
+      c.trades++; c.capital += cost;
+      if (pnl > 0) c.wins++; else if (pnl < 0) c.losses++;
+    }
+
+    const categories = [...catAgg.entries()]
+      .map(([category, c]) => ({
+        category,
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+        trades: c.trades,
+        wins: c.wins,
+        losses: c.losses,
+        // Win rate is over decided trades only (wins+losses); a push is not
+        // a graded outcome and must not dilute the denominator.
+        win_rate_pct: (c.wins + c.losses) > 0 ? Math.round((c.wins / (c.wins + c.losses)) * 1000) / 10 : null,
+        capital_usd: Math.round(c.capital),
+        ranked_wallets: (byCategory && byCategory[category]) ? byCategory[category].qualifying_count : null,
+      }))
+      .sort((a, b) => b.capital_usd - a.capital_usd);
+
+    // ── Flex Score distribution across the ranked board, in tens. A wallet
+    // on the board with no flex_score yet is counted separately rather than
+    // bucketed at zero, which would invent a rating it doesn't have.
+    const rankedRows = board ? board.rows : [];
+    const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
+      label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
+    }));
+    let unscored = 0, profitableWallets = 0, losingWallets = 0;
+    for (const r of rankedRows) {
+      if (r.flex_score == null) unscored++;
+      else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
+      if (r.raw_weighted_roi_pct != null) {
+        if (r.raw_weighted_roi_pct > 0) profitableWallets++;
+        else if (r.raw_weighted_roi_pct < 0) losingWallets++;
+      }
+    }
+
+    const totals = totalsRows && totalsRows[0] ? totalsRows[0] : {};
+    const data = {
+      totals: {
+        ranked_wallets: board ? rankedRows.length : null,
+        minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+        wallets_tracked: totals.wallets_tracked ?? null,
+        graded_trades: totals.graded_trades ?? null,
+        durable_trades: totals.durable_trades ?? null,
+        scored_trades: durableRows.length,
+        wins, losses, pushes,
+        win_rate_pct: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 1000) / 10 : null,
+        capital_usd: Math.round(capitalUsd),
+        first_resolution_at: firstClose ? new Date(firstClose).toISOString() : null,
+        last_resolution_at: lastClose ? new Date(lastClose).toISOString() : null,
+      },
+      categories,
+      // Reported so the capital-share chart can account for 100% of the
+      // graded capital rather than silently dropping the residual.
+      uncategorized: { capital_usd: Math.round(uncategorizedCapital), trades: uncategorizedTrades },
+      score_distribution: { buckets: scoreBuckets, unscored },
+      wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
+      scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',
+      updated_at: new Date().toISOString(),
+    };
+
+    _boardStatsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (e) {
+    console.error('[board-stats]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/live-calls ──────────────────────────────────────────────────
+// Public, no auth — OPEN positions currently held by traders who are on the
+// verified durable board, for the homepage's "take this trade" surface.
+//
+// ⛔ Gate 4 (CLAUDE.md) governs this endpoint. Read it before changing:
+//   · The trader set is taken from _computeRoiLeaderboard — the SAME
+//     verified durable board every other score-bearing surface uses. A
+//     wallet that is not on that board can never appear here, and
+//     eligibility is computed server-side, never inferred by the client.
+//     A copy affordance on an unverified record is precisely the failure
+//     Gate 1 exists to prevent.
+//   · Score AND n travel with every call (rule 3 — a call never appears
+//     naked). If a trader has no flex_score, the call is dropped rather
+//     than shown with a missing number.
+//   · This endpoint returns no size recommendation. The user's stake is
+//     set by the user on the market page; the trader's own position size
+//     is shown as disclosure, never as a suggested amount.
+//   · Nothing here executes anything. It is a link to the existing manual,
+//     user-signed trade flow.
+//
+// A position is only a "live call" if it is genuinely still open and still
+// tradeable: not settled, priced strictly between 0 and 1, and with a
+// resolution date in the future. Anything else is history, not a call.
+let _liveCallsCache = null;
+const LIVE_CALLS_TTL_MS = 3 * 60 * 1000;
+const LIVE_CALLS_MIN_POSITION_USD = 50;   // dust isn't a call
+const LIVE_CALLS_TRADERS = 40;            // widened to keep supply under the filters below
+const LIVE_CALLS_BATCH = 10;              // traders fetched at a time (2 upstream calls each)
+const LIVE_CALLS_MAX = 9;                 // enough for a rail, not a market list
+
+// Tradeable price band. Found against live data 2026-08-20: a position at
+// curPrice 0.9996 cleared a naive `< 1` check and rendered as "Trade at
+// 100¢" for a +0.1% return — a dead card that pushes someone into a trade
+// with no upside. Below 3¢ is lottery noise. Neither belongs on a surface
+// whose whole job is "this is worth taking".
+const LIVE_CALLS_MIN_PRICE = 0.03;
+const LIVE_CALLS_MAX_PRICE = 0.95;
+
+// Minimum runway. Two reasons, both found on live data:
+//   1. A countdown that expires while someone is reading the card is worse
+//      than no card.
+//   2. Same-day sports/esports markets are the EPHEMERAL bucket this
+//      product explicitly refuses to score (CLAUDE.md, Gate 1). Selling an
+//      ephemeral trade on the credibility of a durable-market score is a
+//      mismatch — the record being cited wasn't earned on markets like
+//      that. Live output was surfacing a LoL match resolving the next day
+//      underneath a durable-board score.
+const LIVE_CALLS_MIN_HORIZON_MS = 24 * 60 * 60 * 1000;
+
+// Upper bound on runway. A "countdown" of 809 days (2028 nomination
+// markets were coming through) is not a countdown — it's a date. Anything
+// past a year reads as dead air on a surface built around a ticking clock.
+const LIVE_CALLS_MAX_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
+
+// "Around current prices." Live output was promoting positions the price
+// had already run 118% past — the entry being cited is long gone, so the
+// card implicitly sells an opportunity that no longer exists — and, worse,
+// positions down 87%, where the trader is being crushed and the card still
+// advertised a +3,074% "potential return". Both directions are excluded:
+// the point is that you can still get in near where a good trader got in.
+const LIVE_CALLS_MAX_MOVE_PCT = 25;
+
+// The record has to actually be good to be worth citing next to a trade
+// button. This selects what gets PROMOTED; it hides nothing — losing
+// traders keep their board placement, their profile, and their full record
+// with every loss intact. It only means a weak record doesn't get a CTA
+// attached to it, which is the same discipline Gate 4 applies to
+// unverified wallets. Live output was pairing a 30% win rate with a
+// "Trade this" button.
+const LIVE_CALLS_MIN_WIN_RATE = 55;
+
+app.get('/api/live-calls', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'unavailable' });
+    if (_liveCallsCache && Date.now() - _liveCallsCache.ts < LIVE_CALLS_TTL_MS) {
+      return res.json(_liveCallsCache.data);
+    }
+
+    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
+    if (!computed.rows.length) return res.json({ calls: [], updated_at: new Date().toISOString() });
+
+    const cards = await _buildTraderCards(computed.rows);
+    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+
+    // Highest-rated verified wallets that actually have an address to read
+    // positions from. flex_score is required — see the rule-3 note above.
+    const shortlist = cards
+      .filter(c => c.polymarket_address && c.flex_score != null
+        && c.win_rate_pct != null && c.win_rate_pct >= LIVE_CALLS_MIN_WIN_RATE)
+      .sort((a, b) => b.flex_score - a.flex_score)
+      .slice(0, LIVE_CALLS_TRADERS);
+
+    const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+    const now = Date.now();
+
+    const fetchTraderCall = async (card) => {
+      const base = 'https://data-api.polymarket.com/positions?user=' + card.polymarket_address + '&limit=100&sortBy=CURRENT';
+      const [a, b] = await Promise.all([
+        fetch(base + '&winning=false', H).catch(() => null),
+        fetch(base + '&winning=true', H).catch(() => null),
+      ]);
+      const parse = async (r) => (r && r.ok) ? (await r.json().catch(() => [])) : [];
+      const raw = [...await parse(a), ...await parse(b)];
+
+      const byKey = new Map();
+      for (const p of raw) {
+        if (!p || !p.conditionId) continue;
+        byKey.set(p.conditionId + ':' + (p.outcome || ''), p);
+      }
+
+      const calls = [];
+      for (const p of byKey.values()) {
+        const price = parseFloat(p.curPrice);
+        const cost = parseFloat(p.initialValue) || 0;
+        const shares = parseFloat(p.size) || 0;
+        if (!(price >= LIVE_CALLS_MIN_PRICE && price <= LIVE_CALLS_MAX_PRICE)) continue;
+        if (p.redeemed || p.redeemable) continue;          // already settled
+        if (cost < LIVE_CALLS_MIN_POSITION_USD) continue;  // dust
+        if (shares <= 0) continue;
+
+        // Only plain YES/NO binaries. Multi-outcome markets carry a named
+        // outcome ("ELENA RYBAKINA", "CUPID ESPORTS") which the prefilled
+        // /market/:slug trade widget cannot consume — the CTA would render
+        // "Trade ELENA RYBAKINA at 19¢" and land on a broken side param.
+        // This is the same yes/no-only rule the existing homepage trade
+        // slot already applies (loadTradeSlots in home-kings.html); a
+        // named-outcome call is dropped rather than shipped broken.
+        const side = String(p.outcome || '').trim().toUpperCase();
+        if (side !== 'YES' && side !== 'NO') continue;
+
+        const endMs = p.endDateIso || p.endDate ? new Date(p.endDateIso || p.endDate).getTime() : null;
+        if (endMs == null || Number.isNaN(endMs)) continue;
+        const runway = endMs - now;
+        if (runway < LIVE_CALLS_MIN_HORIZON_MS || runway > LIVE_CALLS_MAX_HORIZON_MS) continue;
+
+        const entry = cost / shares;
+        if (!(entry > 0 && entry < 1)) continue;
+
+        // Still gettable at roughly their price — see LIVE_CALLS_MAX_MOVE_PCT.
+        const movePct = ((price - entry) / entry) * 100;
+        if (Math.abs(movePct) > LIVE_CALLS_MAX_MOVE_PCT) continue;
+
+        // `slug` (the individual market), NOT `eventSlug` (its parent
+        // event). Nearly every position is one leg of a multi-outcome
+        // event: the position, the title, and curPrice all describe the
+        // LEG, so linking to the parent lands the user on a different
+        // market at a different price than the card just quoted.
+        // Verified against production 2026-08-20 — for a real card quoting
+        // "Trade NO at 90¢":
+        //   leg   slug -> "YES 11¢ · NO 89¢ · Volume $9K"   (matches)
+        //   event slug -> "YES  4¢ · NO 96¢ · Volume $0K"   (wrong market)
+        // Sending someone to buy at a price we did not quote is the single
+        // worst thing this surface could do, so the leg slug is required
+        // and a position without one is dropped.
+        const slug = p.slug || null;
+        if (!slug) continue; // without a market slug there is no honest trade page to send anyone to
+
+        // Publish the ROUNDED price and derive everything shown from it, so
+        // the payload reconciles against itself. Deriving the return from
+        // the raw price while publishing a rounded one made the card fail
+        // its own arithmetic: a position at 0.0625 shipped current_price
+        // 0.063 next to "+1500%", but (1-0.063)/0.063 is 1487%. Anyone
+        // checking our maths would have found it wrong — on the one product
+        // whose entire claim is that its numbers reconcile. Rounding first
+        // also means the figure is never overstated.
+        const shownPrice = Math.round(price * 1000) / 1000;
+
+        calls.push({
+          market: {
+            question: p.title || p.question || 'Unknown market',
+            slug,
+            condition_id: p.conditionId,
+            token_id: p.asset || null,
+            icon: p.icon || null,
+            side,
+            end_date: new Date(endMs).toISOString(),
+          },
+          entry_price: Math.round(entry * 1000) / 1000,
+          current_price: shownPrice,
+          // How far the price has moved since they got in, as a share of
+          // their entry — this is the trade's unrealized move, not a forecast.
+          price_move_pct: Math.round(movePct * 10) / 10,
+          // Payout math, nothing more: a share resolving in-the-money pays
+          // $1, so buying now at `price` returns (1 - price) / price. This
+          // is arithmetic on the current price, NOT a probability estimate
+          // and NOT a prediction that it will resolve that way.
+          potential_roi_pct: Math.round(((1 - shownPrice) / shownPrice) * 1000) / 10,
+          trader_position_usd: Math.round(cost),
+        });
+      }
+
+      // One call per trader — their largest live position. Showing a
+      // trader's whole book here would turn this into a market list, which
+      // is the surface the product definition rules out.
+      calls.sort((x, y) => y.trader_position_usd - x.trader_position_usd);
+      if (!calls.length) return null;
+
+      return Object.assign(calls[0], {
+        trader: {
+          user_id: card.user_id,
+          username: card.username,
+          display_name: card.display_name,
+          polymarket_address: card.polymarket_address,
+          flex_score: card.flex_score,
+          win_rate_pct: card.win_rate_pct,
+          n: card.n,
+          scope_label: card.scope_label,
+          streak: card.streak || null,
+          durable_verified: true, // server-computed: membership in the board above IS the verification
+        },
+      });
+    };
+
+    // Batched rather than one 80-request burst: the shortlist is now up to
+    // 40 wallets and each costs 2 upstream calls, which is enough to look
+    // like abuse to Polymarket's data API. Batches run in parallel
+    // internally, sequentially between — and the whole result is cached for
+    // LIVE_CALLS_TTL_MS, so this cost is paid once every few minutes, not
+    // per visitor. Stops early once there are enough calls to fill the rail.
+    const perTrader = [];
+    for (let i = 0; i < shortlist.length; i += LIVE_CALLS_BATCH) {
+      const batch = shortlist.slice(i, i + LIVE_CALLS_BATCH);
+      const settled = await Promise.all(batch.map(c => fetchTraderCall(c).catch(() => null)));
+      perTrader.push(...settled);
+      if (perTrader.filter(Boolean).length >= LIVE_CALLS_MAX) break;
+    }
+
+    const calls = perTrader.filter(Boolean)
+      .sort((x, y) => y.trader.flex_score - x.trader.flex_score)
+      .slice(0, LIVE_CALLS_MAX);
+
+    const data = {
+      calls,
+      disclosure: 'Open positions held by traders on the verified board. Potential return is the payout if the market resolves in that outcome’s favour — it is arithmetic on the current price, not a forecast. Nothing here is advice.',
+      updated_at: new Date().toISOString(),
+    };
+    _liveCallsCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (e) {
+    console.error('[live-calls]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -35762,6 +36159,15 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       pnl: parseFloat(p.cashPnl) || 0,
       pnl_pct: (parseFloat(p.initialValue) || 0) > 0 ? ((parseFloat(p.cashPnl) || 0) / parseFloat(p.initialValue)) * 100 : 0,
       market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+      // The INDIVIDUAL market's slug, additive alongside market_url. Nearly
+      // every position is one leg of a multi-outcome event, and market_url
+      // deliberately points at the parent event (correct for "view this on
+      // Polymarket"). But an internal /market/:slug trade link must target
+      // the leg the position is actually in — the parent event page quotes
+      // a different market at a different price (verified on production
+      // 2026-08-20: leg "NO 89¢" vs parent "NO 96¢" for the same position).
+      // Existing consumers of market_url are unaffected.
+      market_slug: p.slug || null,
       icon: p.icon || null,
       end_date: p.endDateIso || p.endDate || null,
       // Settlement state — lets the client compute correct open/settled/total
@@ -36649,25 +37055,47 @@ app.get('/api/admin/tx-trace/:hash', async (req, res) => {
 
 // GET /api/admin/v2-trades?days=7&status=rejected
 // Reads polymarket_v2_trades (from migration #48). Empty until migration runs.
+// ⚠️ 2026-08-12: prod's real schema uses different column names than this
+// route originally assumed (signer_address not eoa_address, order_hash not
+// clob_order_id, builder not builder_code, clob_response_body jsonb +
+// clob_error_message not clob_response_code/clob_error, side is TEXT
+// 'BUY'/'SELL' not a 0/1 SMALLINT) — see the _logV2Attempt/_logV2Outcome
+// comment above for the full story. Aliased back to the OLD field names
+// below via SQL so public/admin.html's rendering (loadV2Trades(), which
+// reads r.eoa_address/r.clob_order_id/r.clob_response_code/r.clob_error/
+// r.side === 0/1) needs zero changes.
 app.get('/api/admin/v2-trades', async (req, res) => {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const days = Math.max(1, Math.min(30, parseInt(req.query.days, 10) || 7));
   const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   try {
-    let q = supabase.from('polymarket_v2_trades').select('id, eoa_address, proxy_address, token_id, side, maker_amount, taker_amount, clob_status, clob_order_id, clob_response_code, clob_error, builder_code, created_at, updated_at').gte('created_at', sinceIso).order('created_at', { ascending: false }).limit(500);
-    if (req.query.status) q = q.eq('clob_status', String(req.query.status));
-    const { data, error } = await q;
-    if (error) {
-      // Most likely cause: migration #48 hasn't run yet
-      return res.json({ rows: [], summary: {}, error: error.message, hint: 'If error mentions "relation polymarket_v2_trades does not exist", run supabase_migration_polymarket_v2_trades.sql in Railway Postgres.' });
-    }
-    const rows = data || [];
+    const params = [sinceIso];
+    let statusFilter = '';
+    if (req.query.status) { params.push(String(req.query.status)); statusFilter = ' AND clob_status = $2'; }
+    const rows = await dbQuery(`
+      SELECT id, signer_address AS eoa_address, proxy_address, token_id,
+             CASE side WHEN 'BUY' THEN 0 WHEN 'SELL' THEN 1 ELSE NULL END AS side,
+             maker_amount, taker_amount, clob_status,
+             order_hash AS clob_order_id,
+             (clob_response_body ->> 'status')::int AS clob_response_code,
+             clob_error_message AS clob_error,
+             builder AS builder_code,
+             created_at, updated_at
+      FROM polymarket_v2_trades
+      WHERE created_at >= $1${statusFilter}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `, params);
     const summary = { total: rows.length, by_status: {}, unique_proxies: new Set(rows.map(r => r.proxy_address)).size };
     for (const r of rows) summary.by_status[r.clob_status] = (summary.by_status[r.clob_status] || 0) + 1;
     res.json({ rows, summary, since: sinceIso, days });
   } catch (e) {
     console.error('[admin/v2-trades]', e.message);
-    res.status(500).json({ error: e.message });
+    // 200, not 500 — admin.html's loadV2Trades() checks `!r.ok` BEFORE
+    // `j.error`, so a non-2xx status here would swallow this hint entirely.
+    // Matches the original soft-fail shape (rows: [], summary: {}) this
+    // route always used for DB errors.
+    res.json({ rows: [], summary: {}, error: e.message, hint: 'If error mentions "relation polymarket_v2_trades does not exist", run supabase_migration_polymarket_v2_trades.sql in Railway Postgres.' });
   }
 });
 
@@ -42587,6 +43015,48 @@ No markdown, no preamble, just the JSON.`
   }
 }
 
+// Historical liquidity — record a depth snapshot per market on each real
+// buildAlphaList refresh (called from _buildAlphaListInner just before it
+// returns, so it only fires on an actual pipeline run, not on 90s-cache
+// hits). Throttled per market_id in-memory so a market doesn't get a row
+// every 90s forever — that's needless growth for a "history" feature meant
+// to show trend, not a tick-by-tick tape. 5 min is enough resolution to see
+// a depth squeeze forming without the table growing unbounded.
+const _lastLiquiditySnapshotAt = new Map();
+const LIQUIDITY_SNAPSHOT_MIN_INTERVAL_MS = 5 * 60 * 1000;
+async function recordLiquiditySnapshots(markets) {
+  if (!pool) return;
+  const now = Date.now();
+  const due = markets.filter(m => {
+    if (m.depth_ratio == null || !m.market_id) return false;
+    const last = _lastLiquiditySnapshotAt.get(m.market_id);
+    return !last || (now - last) >= LIQUIDITY_SNAPSHOT_MIN_INTERVAL_MS;
+  });
+  if (due.length === 0) return;
+  await Promise.all(due.map(async (m) => {
+    try {
+      await dbQuery(
+        `INSERT INTO market_liquidity_snapshots
+         (market_id, slug, question, volume, yes_price, depth_ratio, depth_side, depth_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [m.market_id, m.slug || null, m.question || null, m.volume || 0, m.yes_price,
+         m.depth_ratio, m.depth_side || null, m.depth_total || 0]
+      );
+      _lastLiquiditySnapshotAt.set(m.market_id, now);
+    } catch (e) {
+      console.warn('[liquidity-snapshot] failed for', m.market_id, e.message);
+    }
+  }));
+  // Occasional prune (roughly every ~200th write batch) instead of a dedicated
+  // cron — keeps this self-contained without adding another setInterval to
+  // track. 30 days of 5-min-resolution depth history is plenty for trend
+  // analysis and caps table growth.
+  if (Math.random() < 0.005) {
+    dbQuery(`DELETE FROM market_liquidity_snapshots WHERE snapshot_at < NOW() - INTERVAL '30 days'`, [])
+      .catch(() => {});
+  }
+}
+
 // In-flight promise lock — coalesces concurrent buildAlphaList() calls so the
 // boot pre-warm doesn't fire 3 parallel pipelines wasting Polymarket API quota.
 let _buildAlphaListPromise = null;
@@ -43671,6 +44141,9 @@ async function _buildAlphaListInner(opts = {}) {
 
     // Auto-create arenas for top-edge markets (fire-and-forget, non-blocking)
     autoCreateArenas().catch(() => {});
+
+    // Persist depth snapshots for /api/v1/liquidity/:marketId/history (fire-and-forget)
+    recordLiquiditySnapshots(markets).catch(() => {});
 
     return markets;
 }
@@ -50882,6 +51355,114 @@ app.post('/api/predictors/hfx-score-batch', async (req, res) => {
   }
 });
 
+// GET /api/member/:userId/suggested-markets — personalized market discovery.
+// Blends explicit topic_preferences (flat +30/category) with recency-
+// weighted trade history from user_market_interest (10 * 0.5^(daysAgo/14)
+// per category — a trade from 14 days ago counts for half a fresh one),
+// capping the trade-history contribution at 70% of the combined score mass
+// so a single recent binge on one category can't fully crowd out the
+// user's stated preferences. Top 3 categories by combined score drive an
+// active/untraded pull from buildAlphaList() (never a separate gamma call —
+// per CLAUDE.md, buildAlphaList is the single source of truth for enriched
+// market data). Cold-start users (no prefs, no trade history, or nothing
+// matched) fall back to sitewide-trending markets rather than an empty list.
+app.get('/api/member/:userId/suggested-markets', async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+    const { userId } = req.params;
+
+    const userRows = await dbQuery('SELECT id, topic_preferences FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (!userRows.length) return res.status(404).json({ error: 'User not found' });
+    const topicPrefs = userRows[0].topic_preferences || [];
+
+    const interestRows = await dbQuery(
+      'SELECT token_id, category, last_traded_at FROM user_market_interest WHERE user_id = $1',
+      [userId]
+    ).catch(() => []);
+
+    // buildAlphaList()'s category taxonomy (crypto/politics/sports/
+    // entertainment/tech/other) is narrower than topic_preferences' saved
+    // whitelist (which also allows finance/science/world — see POST
+    // /api/user/topics). 'world' maps cleanly onto 'politics' (detectCategory
+    // itself folds geopolitical content into politics); 'finance'/'science'
+    // have no alpha-market equivalent today, so they're dropped from
+    // category scoring rather than producing a category that can never
+    // match a market.
+    const ALPHA_CATEGORIES = new Set(['crypto', 'politics', 'sports', 'entertainment', 'tech', 'other']);
+    const scores = {};
+    for (const pref of topicPrefs) {
+      const mapped = pref === 'world' ? 'politics' : pref;
+      if (!ALPHA_CATEGORIES.has(mapped)) continue;
+      scores[mapped] = (scores[mapped] || 0) + 30;
+    }
+
+    const now = Date.now();
+    const tradedTokenIds = new Set();
+    const recencyScores = {};
+    for (const r of interestRows) {
+      tradedTokenIds.add(r.token_id);
+      const daysAgo = (now - new Date(r.last_traded_at).getTime()) / 86400000;
+      const weight = 10 * Math.pow(0.5, daysAgo / 14);
+      recencyScores[r.category] = (recencyScores[r.category] || 0) + weight;
+    }
+
+    // Cap recency-derived score mass at 70% of the COMBINED (post-scaling)
+    // total. Solving scaledRecency <= 0.7*(prefTotal + scaledRecency) for
+    // scaledRecency gives scaledRecency <= (0.7/0.3) * prefTotal — capping
+    // against the unscaled (recencyTotal + prefTotal) sum instead (as a
+    // prior version of this code did) under-caps: it lets recency's actual
+    // share of the final total exceed 70% whenever recencyTotal is large.
+    // When prefTotal is 0 there's nothing for recency to crowd out, so no
+    // cap applies.
+    const recencyTotal = Object.values(recencyScores).reduce((a, b) => a + b, 0);
+    const prefTotal = Object.values(scores).reduce((a, b) => a + b, 0);
+    let scale = 1;
+    if (prefTotal > 0 && recencyTotal > 0) {
+      const maxScaledRecency = (0.7 / 0.3) * prefTotal;
+      scale = Math.min(1, maxScaledRecency / recencyTotal);
+    }
+    for (const [cat, v] of Object.entries(recencyScores)) {
+      scores[cat] = (scores[cat] || 0) + v * scale;
+    }
+
+    const topCategories = Object.entries(scores)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat]) => cat);
+
+    const alphaList = await buildAlphaList().catch(() => []);
+    let markets = [];
+    let coldStart = false;
+
+    if (topCategories.length) {
+      markets = (alphaList || [])
+        .filter(m => {
+          if (!topCategories.includes(m.category)) return false;
+          // clobTokenIds comes through from raw gamma as either a JSON
+          // string or an array depending on the source endpoint — same
+          // defensive parse used at server.js:42282/42363/etc.
+          let tids = m.clobTokenIds;
+          try { if (typeof tids === 'string') tids = JSON.parse(tids); } catch { tids = null; }
+          if (!Array.isArray(tids)) return true;
+          return !tids.some(tid => tradedTokenIds.has(String(tid)));
+        })
+        .slice(0, 20);
+    }
+    if (!markets.length) {
+      coldStart = true;
+      markets = (alphaList || [])
+        .slice()
+        .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+        .slice(0, 10);
+    }
+
+    res.json({ categories: topCategories, cold_start: coldStart, markets });
+  } catch (err) {
+    console.error('[suggested-markets]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════
 // POLYMARKET ECOSYSTEM — stats, rewards, tools
 // ══════════════════════════════════════════════════════════════════════════
@@ -56044,29 +56625,46 @@ app.get('/api/polymarket/geocheck', async (req, res) => {
 // Detects V2 orders by presence of `order.builder` (not in V1 struct) and
 // logs every attempt/accept/reject row. DB errors are swallowed so the trade
 // flow is never blocked by observability. Non-V2 orders are not logged.
+//
+// ⚠️ 2026-08-12: discovered (while building the user_market_interest
+// backfill, see supabase_migration_user_market_interest.sql) that prod's
+// ACTUAL polymarket_v2_trades schema has never matched what this file
+// assumed — real columns are signer_address (not eoa_address), order_hash
+// (not salt/clob_order_id), builder (not builder_code), clob_response_body
+// jsonb + clob_error_message (not clob_response_code/clob_error), side is
+// TEXT ('BUY'/'SELL', not a 0/1 SMALLINT), and there's no client_ip column
+// at all. Every insert/update against the old column names has been
+// silently failing (caught, console.warn'd, trade flow unaffected — these
+// calls are pure observability) since whatever point the live table
+// diverged from this code. Rewritten below to match the real schema, using
+// dbQuery directly instead of the supabase proxy for explicit jsonb casting.
 function _isV2Order(orderObj) {
   return !!(orderObj && typeof orderObj.builder === 'string' && orderObj.builder.startsWith('0x'));
 }
-async function _logV2Attempt(orderObj, clientIp) {
+async function _logV2Attempt(orderObj) {
   try {
     if (!_isV2Order(orderObj)) return null;
-    const row = {
-      eoa_address:   (orderObj.signer || '').toLowerCase() || null,
-      proxy_address: (orderObj.maker  || '').toLowerCase() || null,
-      token_id:      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
-      side:          orderObj.side != null ? Number(orderObj.side) : null,
-      maker_amount:  orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
-      taker_amount:  orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
-      salt:          orderObj.salt != null ? String(orderObj.salt) : null,
-      builder_code:  orderObj.builder || null,
-      clob_status:   'attempted',
-      client_ip:     clientIp || null,
-    };
-    const { data, error } = await supabase.from('polymarket_v2_trades').insert(row).select('id').maybeSingle();
-    if (error) { console.warn('[v2-trades] insert failed:', error.message); return null; }
-    return data && data.id ? data.id : null;
+    const rows = await dbQuery(`
+      INSERT INTO polymarket_v2_trades
+        (signer_address, proxy_address, token_id, side, maker_amount, taker_amount,
+         timestamp_ms, metadata, builder, signature_type, clob_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'attempted')
+      RETURNING id
+    `, [
+      (orderObj.signer || '').toLowerCase() || null,
+      (orderObj.maker || '').toLowerCase() || null,
+      orderObj.tokenId != null ? String(orderObj.tokenId) : null,
+      orderObj.side != null ? String(orderObj.side) : null,
+      orderObj.makerAmount != null ? String(orderObj.makerAmount) : null,
+      orderObj.takerAmount != null ? String(orderObj.takerAmount) : null,
+      orderObj.timestamp != null ? Number(orderObj.timestamp) : null,
+      orderObj.metadata != null ? String(orderObj.metadata) : null,
+      orderObj.builder || null,
+      orderObj.signatureType != null ? Number(orderObj.signatureType) : null,
+    ]);
+    return rows[0] && rows[0].id ? rows[0].id : null;
   } catch (e) {
-    console.warn('[v2-trades] insert threw:', e.message);
+    console.warn('[v2-trades] insert failed:', e.message);
     return null;
   }
 }
@@ -56074,25 +56672,291 @@ async function _logV2Outcome(rowId, httpStatus, responseText, parsedData) {
   try {
     if (!rowId) return;
     const ok = httpStatus >= 200 && httpStatus < 300;
-    const update = {
-      clob_status: ok ? 'accepted' : 'rejected',
-      clob_response_code: httpStatus,
-      clob_order_id: ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null,
-      clob_error:   ok ? null : (responseText || '').slice(0, 500),
-      updated_at:   new Date().toISOString(),
-    };
-    const { error } = await supabase.from('polymarket_v2_trades').update(update).eq('id', rowId);
-    if (error) console.warn('[v2-trades] update failed:', error.message);
+    const orderHash = ok && parsedData && parsedData.orderID ? String(parsedData.orderID) : null;
+    const responseBody = JSON.stringify(
+      ok ? { status: httpStatus, data: parsedData } : { status: httpStatus, raw: (responseText || '').slice(0, 500) }
+    );
+    await dbQuery(`
+      UPDATE polymarket_v2_trades
+      SET clob_status = $1,
+          order_hash = COALESCE($2, order_hash),
+          clob_response_body = $3::jsonb,
+          clob_error_message = $4,
+          updated_at = NOW()
+      WHERE id = $5
+    `, [ok ? 'accepted' : 'rejected', orderHash, responseBody, ok ? null : (responseText || '').slice(0, 500), rowId]);
   } catch (e) {
     console.warn('[v2-trades] update threw:', e.message);
   }
 }
 
+// user_market_interest — see supabase_migration_63_user_market_interest.sql.
+// Tracks which markets/categories a user has actually traded, feeding
+// GET /api/member/:userId/suggested-markets. Fire-and-forget: every call
+// site swallows its own errors and is never awaited by a response path.
+//
+// Category taxonomy mirrors buildAlphaList()'s own detectCategory() (the
+// function that tags every market's `.category` field) rather than the
+// simpler catKeywords set used elsewhere for position breakdowns — the
+// suggested-markets route matches this classification directly against
+// alpha markets' `.category`, so the two must agree on labels/order.
+function _classifyMarketCategory(question) {
+  const t = (question || '').toLowerCase();
+  if (/\b(bitcoin|btc|eth|ethereum|crypto|solana|xrp|dogecoin|doge|token|defi|nft|stablecoin|blockchain)\b/i.test(t)) return 'crypto';
+  if (/\b(trump|biden|harris|obama|kamala|president|prime minister|parliament|parliamentary|congress|senate|elections?|democrat|republican|politic|politics|governor|primary|gop|dnc|rnc|impeach|cabinet|supreme court|tariff|treaty|sanction|regime|coup|invasion|invade|ceasefire|nato|united nations|geopolitic)\b/i.test(t)) return 'politics';
+  if (/\b(nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|mma|sport|sports|game|match|playoff|super bowl|world cup|championship|tournament|league|team|player|coach|season|finals|mvp|golf|tennis|pga|lpga|masters|olympic|olympics|wimbledon|formula 1|f1|nascar)\b/i.test(t)) return 'sports';
+  if (/\b(iran|iranian|israel|israeli|russia|russian|ukraine|china|chinese|korea|korean|syria|yemen|afghanistan|palestine|palestinian|gaza|lebanon|taiwan|hungary|hungarian|germany|german|france|french|italy|italian|spain|spanish|uk|britain|british|canada|canadian|brazil|brazilian|mexico|mexican|argentina|turkey|turkish|india|indian|pakistan|venezuela|venezuelan|putin|netanyahu|khamenei|orban|orbán|macron|merkel|scholz|sunak|starmer|trudeau|hamas|hezbollah|taliban|war|conflict|middle east)\b/i.test(t)) return 'politics';
+  if (/\b(movie|film|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|tv show|concert|tour|streaming|actor|singer|rapper|kardashian|taylor swift)\b/i.test(t)) return 'entertainment';
+  if (/\b(ai|openai|chatgpt|apple|google|microsoft|meta|tesla|nvidia|amazon|startup|tech|iphone|android|spacex|bezos|musk|zuckerberg)\b/i.test(t)) return 'tech';
+  return 'other';
+}
+
+// Gamma lookup by CLOB token id — no existing helper covers this param
+// (condition_id/slug lookups exist but token_id doesn't map to either).
+// Cached: question/conditionId for a given token_id are effectively static,
+// and this fires on every accepted order (unlike the backfill script, which
+// only runs once) — an uncached call here would hit Gamma once per trade on
+// popular markets.
+const _marketByTokenIdCache = new Map(); // tokenId -> { ts, meta }
+const _MARKET_BY_TOKEN_ID_TTL_MS = 15 * 60 * 1000;
+async function _fetchMarketByTokenId(tokenId) {
+  if (!tokenId) return null;
+  const cached = _marketByTokenIdCache.get(tokenId);
+  if (cached && (Date.now() - cached.ts < _MARKET_BY_TOKEN_ID_TTL_MS)) return cached.meta;
+  const body = await _gammaFetchJson(`https://gamma-api.polymarket.com/markets?clob_token_ids=${encodeURIComponent(tokenId)}`);
+  const arr = _gammaUnwrap(body);
+  const m = arr[0];
+  const meta = m ? {
+    question: m.question || null,
+    conditionId: m.conditionId || m.condition_id || null,
+  } : null;
+  _marketByTokenIdCache.set(tokenId, { ts: Date.now(), meta });
+  return meta;
+}
+
+// `side` is stored as-is ("BUY"/"SELL", per the CLOB V2 wire body — see
+// CLAUDE.md's "POST /order JSON body" spec). NOT numeric — Number("BUY")
+// is NaN, which a SMALLINT column would reject outright.
+async function _trackMarketInterest(userId, tokenId, conditionId, question, category, side) {
+  if (!userId || !tokenId) return;
+  try {
+    await dbQuery(`
+      INSERT INTO user_market_interest (user_id, token_id, condition_id, question, category, side, trade_count, first_traded_at, last_traded_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+      ON CONFLICT (user_id, token_id) DO UPDATE SET
+        trade_count = user_market_interest.trade_count + 1,
+        last_traded_at = NOW(),
+        side = EXCLUDED.side,
+        condition_id = COALESCE(user_market_interest.condition_id, EXCLUDED.condition_id),
+        question = COALESCE(user_market_interest.question, EXCLUDED.question)
+    `, [userId, String(tokenId), conditionId || null, question || null, category || 'other', side != null ? String(side) : null]);
+  } catch (e) {
+    console.warn('[market-interest] track failed:', e.message);
+  }
+}
+
+// Called fire-and-forget from POST /api/polymarket/order on accepted V2
+// orders. The order route is unauthenticated (proxy-only), so there's no
+// session user in scope — resolve one from the signer/maker wallet address,
+// same join the backfill script uses. Silently no-ops for wallets with no
+// HYPERFLEX account (guest trades via the proxy aren't attributable).
+async function _trackMarketInterestFromOrder(orderObj) {
+  try {
+    if (!orderObj) return;
+    const signerAddr = (orderObj.signer || orderObj.maker || '').toLowerCase();
+    const tokenId = orderObj.tokenId != null ? String(orderObj.tokenId) : null;
+    if (!signerAddr || !tokenId) return;
+    const userRows = await dbQuery(`SELECT id FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1`, [signerAddr]);
+    const userId = userRows[0] && userRows[0].id;
+    if (!userId) return;
+    const meta = await _fetchMarketByTokenId(tokenId);
+    const category = _classifyMarketCategory(meta && meta.question);
+    await _trackMarketInterest(userId, tokenId, meta && meta.conditionId, meta && meta.question, category, orderObj.side);
+  } catch (e) {
+    console.warn('[market-interest] from-order failed:', e.message);
+  }
+}
+
+// One-shot diagnostic for migration #63 — confirms the table actually
+// exists with the right column types (side must be TEXT, not the original
+// SMALLINT — see the post-merge review fix) without digging through
+// Railway boot logs. GET /api/admin/market-interest-status?secret=$ADMIN_SECRET
+app.get('/api/admin/market-interest-status', requireAdminSecret, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: 'no_pool' });
+
+    const cols = await dbQuery(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_name = 'user_market_interest'
+      ORDER BY ordinal_position
+    `).catch(() => []);
+
+    if (!cols.length) {
+      return res.json({
+        table_exists: false,
+        note: 'user_market_interest has no columns per information_schema — either the boot bootstrap has not run yet (check for a "[boot] user_market_interest create:" warning in Railway logs) or this DB predates migration #63.',
+      });
+    }
+
+    const sideCol = cols.find(c => c.column_name === 'side');
+    // The backfill's first live run hit `column "eoa_address" does not
+    // exist` against polymarket_v2_trades — that name matches both the
+    // migration file AND server.js's own boot-time CREATE TABLE IF NOT
+    // EXISTS for that table, so this isn't a typo in the backfill query,
+    // it's real drift between what the code assumes and what's actually
+    // deployed. Introspect it here rather than guessing at a fix.
+    const [counts, sample, v2TradesCols, v2TradesCounts] = await Promise.all([
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(DISTINCT user_id)::int AS users,
+               COUNT(*) FILTER (WHERE side IS NOT NULL)::int AS with_side,
+               MAX(last_traded_at) AS most_recent_trade
+        FROM user_market_interest
+      `).catch(() => []),
+      dbQuery(`SELECT user_id, token_id, category, side, trade_count, last_traded_at FROM user_market_interest ORDER BY last_traded_at DESC LIMIT 5`).catch(() => []),
+      dbQuery(`
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'polymarket_v2_trades'
+        ORDER BY ordinal_position
+      `).catch(() => []),
+      // Row count on the real live schema — tells us up front whether this
+      // is a stale table with old rows from before the code drifted (worth
+      // backfilling) or genuinely empty (nothing to do either way). Every
+      // write path in the current codebase (_logV2Attempt et al.) targets
+      // eoa_address/salt/clob_order_id, none of which exist here, so no NEW
+      // rows have been landing via that path — whatever is in this table
+      // predates that drift.
+      dbQuery(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE clob_status = 'accepted')::int AS accepted,
+               COUNT(DISTINCT signer_address)::int AS distinct_signers,
+               COUNT(DISTINCT user_id)::int AS distinct_user_ids,
+               MAX(created_at) AS most_recent_trade
+        FROM polymarket_v2_trades
+      `).catch(e => ([{ error: e.message }])),
+    ]);
+
+    res.json({
+      table_exists: true,
+      columns: cols,
+      side_column_type_ok: !!sideCol && sideCol.data_type === 'text',
+      counts: counts[0] || null,
+      most_recent_rows: sample,
+      polymarket_v2_trades_columns: v2TradesCols,
+      polymarket_v2_trades_counts: v2TradesCounts[0] || null,
+      // Distinguishes "backfill is still working through trade history" from
+      // "it already ran and finished (possibly finding nothing to do)" —
+      // without this, counts.total staying at 0 right after triggering the
+      // backfill is ambiguous from the outside.
+      backfill: {
+        running: _backfillMarketInterestRunning,
+        last_run: _lastMarketInterestBackfillResult,
+      },
+      note: 'side_column_type_ok must be true — a "smallint" here means this DB still has the pre-fix schema and every live _trackMarketInterestFromOrder() write will fail silently (caught + console.warn only). counts.total will be 0 until either the backfill script runs or a live order gets tracked. backfill.last_run.totalTrades === 0 means no accepted V2 trades exist yet to backfill from — not a bug. backfill.last_run.skippedNoUser === totalTrades means the trades exist but none of their eoa_address values match a users.polymarket_address.',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Server-side counterpart to scripts/backfill-user-market-interest.js —
+// runs against the live pool directly instead of requiring someone to get
+// DATABASE_URL onto a laptop and run psql/node by hand (see CLAUDE.md's
+// "don't ask Marc to run diagnostics from the terminal" operating rule).
+// Read-only against polymarket_v2_trades/users; only writes to
+// user_market_interest, and idempotently (safe to trigger more than once).
+//
+// Deliberately does NOT reuse _trackMarketInterest() — that helper stamps
+// first/last_traded_at as NOW(), which is correct for a trade that just
+// happened live but wrong here: backfilled rows need to keep each trade's
+// real created_at so the recency-weighted scoring in suggested-markets
+// doesn't treat months-old trades as if they happened today.
+let _backfillMarketInterestRunning = false;
+let _lastMarketInterestBackfillResult = null; // { ranAt, tracked, skippedNoUser, skippedNoMeta, totalTrades, error }
+async function _runMarketInterestBackfill() {
+  console.log('[market-interest-backfill] starting...');
+  // Live schema uses signer_address, not eoa_address (see the 2026-08-12
+  // market-interest-status investigation — every write path in this file,
+  // including this backfill originally, assumed a schema that doesn't
+  // match what's actually deployed). signer_address is the EOA half of
+  // maker=proxy/signer=EOA, same value _logV2Attempt intended for
+  // eoa_address.
+  const trades = await dbQuery(`
+    SELECT signer_address, token_id, side, created_at
+    FROM polymarket_v2_trades
+    WHERE clob_status = 'accepted' AND signer_address IS NOT NULL AND token_id IS NOT NULL
+    ORDER BY created_at ASC
+  `);
+  console.log(`[market-interest-backfill] found ${trades.length} accepted trades`);
+
+  const userRows = await dbQuery(`SELECT id, LOWER(polymarket_address) AS addr FROM users WHERE polymarket_address IS NOT NULL`);
+  const addrToUserId = {};
+  for (const r of userRows) addrToUserId[r.addr] = r.id;
+  console.log(`[market-interest-backfill] mapped ${userRows.length} wallet addresses to users`);
+
+  let tracked = 0, skippedNoUser = 0, skippedNoMeta = 0;
+  for (const t of trades) {
+    const userId = addrToUserId[(t.signer_address || '').toLowerCase()];
+    if (!userId) { skippedNoUser++; continue; }
+
+    const wasCached = _marketByTokenIdCache.has(t.token_id);
+    const meta = await _fetchMarketByTokenId(t.token_id);
+    if (!wasCached) await new Promise(r => setTimeout(r, 150)); // gentle rate limit on fresh Gamma calls only
+    if (!meta) { skippedNoMeta++; continue; }
+
+    const category = _classifyMarketCategory(meta.question);
+    try {
+      await dbQuery(`
+        INSERT INTO user_market_interest (user_id, token_id, condition_id, question, category, side, trade_count, first_traded_at, last_traded_at)
+        VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $7)
+        ON CONFLICT (user_id, token_id) DO UPDATE SET
+          trade_count = user_market_interest.trade_count + 1,
+          last_traded_at = GREATEST(user_market_interest.last_traded_at, EXCLUDED.last_traded_at),
+          side = EXCLUDED.side,
+          condition_id = COALESCE(user_market_interest.condition_id, EXCLUDED.condition_id),
+          question = COALESCE(user_market_interest.question, EXCLUDED.question)
+      `, [userId, t.token_id, meta.conditionId, meta.question, category, t.side != null ? String(t.side) : null, t.created_at]);
+      tracked++;
+      if (tracked % 100 === 0) console.log(`[market-interest-backfill] progress: ${tracked} tracked so far`);
+    } catch (e) {
+      console.warn('[market-interest-backfill] upsert failed:', e.message);
+    }
+  }
+  console.log(`[market-interest-backfill] done — ${tracked} tracked, ${skippedNoUser} skipped (no matching user), ${skippedNoMeta} skipped (gamma lookup failed)`);
+  return { tracked, skippedNoUser, skippedNoMeta, totalTrades: trades.length };
+}
+
+// POST /api/admin/backfill-market-interest?secret=$ADMIN_SECRET — kicks off
+// the backfill in the background and returns immediately (trade volume is
+// unknown up front and each new token_id costs a real Gamma round-trip, so
+// this can run long). Poll GET /api/admin/market-interest-status or the
+// Railway logs (grep "[market-interest-backfill]") to watch progress.
+app.post('/api/admin/backfill-market-interest', requireAdminSecret, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'no_pool' });
+  if (_backfillMarketInterestRunning) return res.status(409).json({ error: 'already_running' });
+  _backfillMarketInterestRunning = true;
+  res.json({
+    started: true,
+    note: 'Running in the background. Poll GET /api/admin/market-interest-status to watch counts.total grow, or check Railway logs for "[market-interest-backfill]" lines.',
+  });
+  try {
+    const result = await _runMarketInterestBackfill();
+    _lastMarketInterestBackfillResult = { ranAt: new Date().toISOString(), ...result };
+  } catch (e) {
+    console.error('[market-interest-backfill] fatal:', e.message);
+    _lastMarketInterestBackfillResult = { ranAt: new Date().toISOString(), error: e.message };
+  } finally {
+    _backfillMarketInterestRunning = false;
+  }
+});
+
 app.post('/api/polymarket/order', async (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
   // Insert attempt row BEFORE forwarding — gives us a record even if CLOB
   // never responds or we throw before the outcome log fires.
-  const v2RowId = await _logV2Attempt(req.body && req.body.order, clientIp);
+  const v2RowId = await _logV2Attempt(req.body && req.body.order);
   try {
     // Use raw body (byte-exact as the client sent it) so the builder HMAC
     // signs the identical string the CLOB receives. JSON.stringify(req.body)
@@ -56163,6 +57027,7 @@ app.post('/api/polymarket/order', async (req, res) => {
     }
 
     _logV2Outcome(v2RowId, r.status, text, data);
+    if (r.ok) _trackMarketInterestFromOrder(req.body && req.body.order);
 
     res.status(r.status).json(data);
   } catch (err) {
@@ -62304,30 +63169,45 @@ if (pool) {
       `).catch(() => {});
 
       // Migration #48 — polymarket_v2_trades (V2 trade observability)
+      // ⚠️ 2026-08-12: rewritten to match prod's REAL live schema, discovered
+      // via information_schema introspection (see GET
+      // /api/admin/market-interest-status's polymarket_v2_trades_columns).
+      // The table already exists in production with this shape — this
+      // CREATE TABLE IF NOT EXISTS is a no-op there and only matters for a
+      // genuinely fresh DB, but it must match reality so a fresh install
+      // stays compatible with _logV2Attempt/_logV2Outcome/the admin viewer,
+      // all of which were rewritten the same day to target these columns.
       await dbQuery(`CREATE TABLE IF NOT EXISTS polymarket_v2_trades (
-        id             BIGSERIAL PRIMARY KEY,
-        user_id        UUID,
-        eoa_address    TEXT NOT NULL,
-        proxy_address  TEXT NOT NULL,
-        token_id       TEXT,
-        side           SMALLINT,
-        maker_amount   TEXT,
-        taker_amount   TEXT,
-        salt           TEXT,
-        builder_code   TEXT,
-        clob_status         TEXT NOT NULL DEFAULT 'attempted',
-        clob_order_id       TEXT,
-        clob_response_code  SMALLINT,
-        clob_error          TEXT,
-        fill_tx_hash   TEXT,
-        fill_price     NUMERIC,
-        filled_at      TIMESTAMPTZ,
-        client_ip      TEXT,
-        created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+        id                   BIGSERIAL PRIMARY KEY,
+        user_id              TEXT,
+        proxy_address        TEXT,
+        signer_address       TEXT,
+        order_hash           TEXT,
+        market_id            TEXT,
+        condition_id         TEXT,
+        token_id             TEXT,
+        side                 TEXT,
+        is_neg_risk          BOOLEAN,
+        maker_amount         TEXT,
+        taker_amount         TEXT,
+        price                NUMERIC,
+        size                 NUMERIC,
+        timestamp_ms         BIGINT,
+        metadata             TEXT,
+        builder              TEXT,
+        signature_type       SMALLINT,
+        clob_status          TEXT NOT NULL DEFAULT 'attempted',
+        clob_response_body   JSONB,
+        clob_error_message   TEXT,
+        fill_confirmed_at    TIMESTAMPTZ,
+        fill_tx_hash         TEXT,
+        fill_size            NUMERIC,
+        fill_price           NUMERIC,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
       )`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_status_created ON polymarket_v2_trades(clob_status, created_at DESC)`).catch(() => {});
-      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_eoa ON polymarket_v2_trades(eoa_address)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_signer ON polymarket_v2_trades(signer_address)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_pm_v2_trades_created ON polymarket_v2_trades(created_at DESC)`).catch(() => {});
 
       // Influencer feed tables (migration #45 + #46)
@@ -62822,6 +63702,23 @@ if (pool) {
       )`).catch(e => console.warn('[boot] prediction_thesis_leg create:', e.message));
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_thesis ON prediction_thesis_leg(thesis_id)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_thesis_leg_condition ON prediction_thesis_leg(condition_id) WHERE resolution IS NULL`).catch(() => {});
+
+      // Migration #63 — user_market_interest. See supabase_migration_63_user_market_interest.sql.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS user_market_interest (
+        id               BIGSERIAL PRIMARY KEY,
+        user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_id         TEXT NOT NULL,
+        condition_id     TEXT,
+        question         TEXT,
+        category         TEXT NOT NULL DEFAULT 'other',
+        side             TEXT,
+        trade_count      INT NOT NULL DEFAULT 1,
+        first_traded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_traded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, token_id)
+      )`).catch(e => console.warn('[boot] user_market_interest create:', e.message));
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_user_market_interest_user ON user_market_interest(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_user_market_interest_category ON user_market_interest(user_id, category)`).catch(() => {});
 
       // Messaging v1 — see supabase_migration_messaging.sql for the
       // standalone migration file + scope notes. 1:1 plain-text DMs.
@@ -70957,10 +71854,25 @@ app.listen(PORT, () => {
       );
       CREATE INDEX IF NOT EXISTS idx_api_keys_prefix  ON api_keys (key_prefix) WHERE is_active = true;
       CREATE INDEX IF NOT EXISTS idx_api_keys_user    ON api_keys (user_id);
+
+      CREATE TABLE IF NOT EXISTS market_liquidity_snapshots (
+        id           BIGSERIAL PRIMARY KEY,
+        market_id    TEXT NOT NULL,
+        slug         TEXT,
+        question     TEXT,
+        volume       NUMERIC(18,2),
+        yes_price    NUMERIC(6,4),
+        depth_ratio  NUMERIC(8,3),
+        depth_side   TEXT,
+        depth_total  NUMERIC(18,2),
+        snapshot_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_mls_market_ts    ON market_liquidity_snapshots (market_id, snapshot_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_mls_snapshot_at  ON market_liquidity_snapshots (snapshot_at DESC);
     `;
     try {
       await pool.query(dataEngineSchema);
-      console.log('[boot] ✓ normalized_snapshots + cross_market_refs + api_keys schema ensured');
+      console.log('[boot] ✓ normalized_snapshots + cross_market_refs + api_keys + market_liquidity_snapshots schema ensured');
     } catch (err) {
       console.error('[boot] ✗ failed to ensure data-engine schema:', err.message);
     }

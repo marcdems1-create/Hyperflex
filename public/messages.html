@@ -115,7 +115,15 @@ nav{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:cente
 <div id="authGate" class="msg-auth-gate" style="display:none">
   <div style="font-size:28px;font-weight:800">Messages</div>
   <div style="font-size:14px;color:var(--muted)">Sign in to send and receive messages.</div>
-  <a href="/creator/login" class="nav-btn nav-btn-primary" style="margin-top:8px">Sign in →</a>
+  <!-- Connecting a wallet (via /connect or the nav pill) is address-only,
+       no signature, by design — the frictionless "see my score" flow.
+       Messages needs a real authenticated session, which is a separate,
+       stronger step. This reuses the SAME connected wallet for that
+       upgrade (one signature). No email/Google option here — identity on
+       this product IS the wallet's on-chain record, an email-only account
+       has no address and nothing to message about. -->
+  <button type="button" id="walletSigninBtn" class="nav-btn nav-btn-primary" style="margin-top:8px;display:none"></button>
+  <a href="/connect" id="noWalletLink" class="nav-btn nav-btn-primary" style="margin-top:8px;display:none">Connect your wallet →</a>
 </div>
 
 <div id="appShell" style="display:none">
@@ -200,9 +208,85 @@ function avatarHtml(user, size) {
   return '<div class="'+cls+'" style="width:'+s+'px;height:'+s+'px">'+seed+'</div>';
 }
 
+// Reuses the exact eth_requestAccounts -> personal_sign -> POST /auth/wallet
+// sequence home-kings.html's hfxConnectWallet() already uses, so a wallet
+// connected elsewhere on the site mints the same kind of session here.
+async function signInWithWallet() {
+  var btn = document.getElementById('walletSigninBtn');
+  if (!window.ethereum) {
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      location.href = 'https://metamask.app.link/dapp/' + location.host + location.pathname + location.search;
+      return;
+    }
+    return;
+  }
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = 'Signing in…';
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    var address = accounts && accounts[0];
+    if (!address) throw new Error('No account selected');
+    var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
+    var signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+    var res = await fetch('/auth/wallet', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: address, message: message, signature: signature })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Sign-in failed');
+    localStorage.setItem('hf_token', data.token);
+    _token = data.token;
+    document.getElementById('authGate').style.display = 'none';
+    init();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = origLabel;
+    if (e && e.message !== 'User rejected the request.') alert(e.message || 'Sign-in failed. Try again.');
+  }
+}
+
+// HYPERFLEX identity IS the wallet's on-chain record — an email-only
+// account has no Polymarket address, no score, nothing to message about.
+// So the fallback here is never email, it's always "connect your wallet"
+// in one form or another:
+//   - a cached address, or MetaMask silently confirming a prior grant ->
+//     one-click sign-in with that exact wallet (one signature, no
+//     account-picker prompt since permission already exists)
+//   - window.ethereum present but never granted here -> a wallet button
+//     that runs the full eth_requestAccounts + personal_sign in one go
+//   - on mobile with no injected provider -> deep-link into the app
+//   - genuinely nothing to work with (desktop, no extension, never
+//     connected) -> send to /connect, the actual front door, instead of
+//     trying to reinvent its paste-address fallback here
+async function maybeOfferWalletSignin() {
+  var btn = document.getElementById('walletSigninBtn');
+  var noWalletLink = document.getElementById('noWalletLink');
+  var cachedAddr = localStorage.getItem('hf_connect_address') || localStorage.getItem('hfx_wallet_address');
+  var addr = cachedAddr;
+  if (!addr && window.ethereum) {
+    try {
+      var accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts[0]) addr = accounts[0];
+    } catch (e) {}
+  }
+  if (addr) {
+    btn.textContent = 'Sign in with ' + addr.slice(0, 6) + '…' + addr.slice(-4) + ' →';
+    btn.style.display = '';
+    btn.addEventListener('click', signInWithWallet);
+  } else if (window.ethereum || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    btn.textContent = 'Sign in with wallet →';
+    btn.style.display = '';
+    btn.addEventListener('click', signInWithWallet);
+  } else {
+    noWalletLink.style.display = '';
+  }
+}
+
 async function init() {
   if (!_token) {
     document.getElementById('authGate').style.display = 'flex';
+    maybeOfferWalletSignin();
     return;
   }
   // Get own profile
@@ -221,6 +305,7 @@ async function init() {
     if (withId) openOrStartConvo(withId);
   } catch(e) {
     document.getElementById('authGate').style.display = 'flex';
+    maybeOfferWalletSignin();
   }
 }
 

@@ -23039,6 +23039,11 @@ async function confirmTrade() {
             heldSharesWalk
           );
 
+          // Volume-weighted average across every level this order actually
+          // consumes — distinct from fillPrice (the worst single level touched,
+          // used for the FOK limit). Purely informational, computed from the
+          // same walk with no extra fetch.
+          let avgFillPrice = null, impactShares = 0, impactUsd = 0;
           if (clobSide === 'BUY') {
             // Walk asks cheapest→most-expensive (equivalent to SDK calculateBuyMarketPrice
             // which iterates backwards over descending-sorted asks). Accumulate USD spent
@@ -23048,8 +23053,15 @@ async function confirmTrade() {
             console.log('[qt-trade] Book walk BUY: need $' + amount + ', asks:', asks.length);
             for (const lvl of asks) {
               const lp = parseFloat(lvl.price), ls = parseFloat(lvl.size);
-              spent += lp * ls;
-              if (spent >= amount) { fillPrice = lp; break; }
+              const costAtLevel = lp * ls;
+              if (spent + costAtLevel >= amount) {
+                fillPrice = lp;
+                const remainingUsd = amount - spent;
+                impactUsd += remainingUsd; impactShares += remainingUsd / lp;
+                break;
+              }
+              spent += costAtLevel;
+              impactUsd += costAtLevel; impactShares += ls;
             }
           } else {
             // Walk bids best→worst (equivalent to SDK calculateSellMarketPrice iterating
@@ -23061,10 +23073,16 @@ async function confirmTrade() {
               bids.length > 0 ? '| best bid: ' + bids[0].price + ' × ' + bids[0].size : '| NO BIDS');
             for (const lvl of bids) {
               const bp = parseFloat(lvl.price), bs = parseFloat(lvl.size);
-              if (sharesLeft <= bs) { fillPrice = bp; break; }
+              if (sharesLeft <= bs) {
+                fillPrice = bp;
+                impactUsd += sharesLeft * bp; impactShares += sharesLeft;
+                break;
+              }
               sharesLeft -= bs;
+              impactUsd += bs * bp; impactShares += bs;
             }
           }
+          if (impactShares > 0) avgFillPrice = impactUsd / impactShares;
 
           if (fillPrice == null) {
             const totalBidSize = (bookData.bids || []).reduce((s, l) => s + parseFloat(l.size), 0);
@@ -23082,6 +23100,36 @@ async function confirmTrade() {
             return;
           }
 
+          // Surface expected impact before signing — best price is top-of-book,
+          // avgFillPrice is volume-weighted across levels this order actually
+          // consumes. Purely informational: does not change fillPrice/limit calc.
+          const bookLevels = clobSide === 'BUY' ? (bookData.asks || []) : (bookData.bids || []);
+          const sortedLevels = bookLevels.slice().sort((a, b) => clobSide === 'BUY' ? parseFloat(a.price) - parseFloat(b.price) : parseFloat(b.price) - parseFloat(a.price));
+          const bestPrice = sortedLevels.length > 0 ? parseFloat(sortedLevels[0].price) : fillPrice;
+          if (avgFillPrice != null && bestPrice > 0) {
+            const slippagePct = (clobSide === 'BUY' ? (avgFillPrice - bestPrice) : (bestPrice - avgFillPrice)) / bestPrice * 100;
+            console.log('[qt-trade] Impact: avg fill ~' + (avgFillPrice * 100).toFixed(1) + '¢ vs best ' + (bestPrice * 100).toFixed(1) + '¢ (' + (slippagePct >= 0 ? '+' : '') + slippagePct.toFixed(2) + '% impact)');
+            if (slippagePct > 0.05) {
+              showToast('Est. avg fill ' + (avgFillPrice * 100).toFixed(1) + '¢ (' + slippagePct.toFixed(1) + '% impact vs ' + (bestPrice * 100).toFixed(1) + '¢ best)', 'info', 4000);
+            }
+          }
+          // Don't walk arbitrarily deep to force a full fill at a bad price.
+          // Cap the limit at MAX_MARKET_IMPACT_PCT beyond best price — this is
+          // a FAK order, so capping just means "fill what's available within
+          // an acceptable price, cancel the rest" instead of "guarantee 100%
+          // fill no matter how bad the price gets." A capped fill is handled
+          // as a partial fill after the response comes back (see confirmTrade
+          // success handling) — the user sees exactly what filled and can top
+          // up the remainder in one more tap. Small/typical orders already
+          // fill within a level or two, well under this cap — unaffected.
+          const MAX_MARKET_IMPACT_PCT = 3;
+          if (bestPrice > 0) {
+            const capPrice = clobSide === 'BUY' ? bestPrice * (1 + MAX_MARKET_IMPACT_PCT / 100) : bestPrice * (1 - MAX_MARKET_IMPACT_PCT / 100);
+            if ((clobSide === 'BUY' && fillPrice > capPrice) || (clobSide === 'SELL' && fillPrice < capPrice)) {
+              console.log('[qt-trade] Impact cap: walked fill ' + (fillPrice * 100).toFixed(1) + '¢ exceeds ' + MAX_MARKET_IMPACT_PCT + '% cap — capping limit to ' + (capPrice * 100).toFixed(1) + '¢, order may partially fill');
+              fillPrice = capPrice;
+            }
+          }
           // Add slippage buffer: for SELL go 1 tick lower, for BUY go 1 tick higher
           // This protects against the book shifting between our read and submit
           let bumped;
@@ -24038,6 +24086,50 @@ async function confirmTrade() {
 
     _confirmTradeRetryCount = 0; // reset on success
     console.log('[qt-trade] Order success:', data);
+
+    // Verify against the ACTUAL fill amounts in the response rather than
+    // assuming the requested size filled. FAK can legitimately partially
+    // fill (see the impact cap above, and the book can shift between our
+    // read and submit even without it). data.takingAmount is atomic, same
+    // scale as takerAmt (both already ×DECIMALS), so a straight ratio is
+    // the fraction filled. Skip for status:'delayed' (order accepted but
+    // not yet matched — amounts are empty; treating that as "0% filled,
+    // resubmit" would risk double-filling once it actually matches later —
+    // separate known open issue, not papered over here).
+    let filledFraction = 1;
+    if (data && data.status !== 'delayed' && data.takingAmount != null && Number(takerAmt) > 0) {
+      const frac = Number(data.takingAmount) / Number(takerAmt);
+      if (isFinite(frac) && frac > 0) filledFraction = Math.min(1, frac);
+    }
+
+    if (filledFraction < 0.98) {
+      // Partial fill — don't close the modal or celebrate a full trade.
+      // Show exactly what happened and pre-fill the SAME still-open form
+      // with the remainder so finishing the order is one more click, not a
+      // fresh trade from scratch. Not clicking again (editing the field, or
+      // just closing the modal) is the "keep the partial fill as final"
+      // path — nothing here forces a follow-up.
+      const actualMakerRaw = Number(data.makingAmount || 0) / DECIMALS;
+      const actualTakerRaw = Number(data.takingAmount || 0) / DECIMALS;
+      const filledUsd = clobSide === 'BUY' ? actualMakerRaw : actualTakerRaw;
+      const filledShares = clobSide === 'BUY' ? actualTakerRaw : actualMakerRaw;
+      const avgFillCents = filledShares > 0 ? (filledUsd / filledShares) * 100 : roundedPrice * 100;
+      const remainingUsd = Math.max(0, amount * (1 - filledFraction));
+      if (typeof showToast === 'function') {
+        showToast('Partially filled: ' + (filledFraction * 100).toFixed(0) + '% @ avg ' + avgFillCents.toFixed(1) + '¢ — $' + remainingUsd.toFixed(2) + ' unfilled. Amount below set to the remainder.', 'info', 6000);
+      }
+      const amtInputEl = document.getElementById('tradeAmount');
+      if (amtInputEl && remainingUsd >= 1) {
+        amtInputEl.value = remainingUsd.toFixed(2);
+        if (typeof updateTradeEstimate === 'function') updateTradeEstimate();
+      }
+      btn.disabled = false;
+      btn.textContent = (_tradeModalData?.mode === 'sell' ? 'Sell ' : 'Buy ') + (_tradeModalData?.side || 'YES');
+      // Still refresh positions — a partial fill is a real, real-money trade.
+      setTimeout(() => loadPolymarketPositions(true), 2000);
+      setTimeout(() => loadPolymarketPositions(true), 8000);
+      return;
+    }
 
     // Calculate P&L for sells (proceeds minus cost basis)
     var tradePnl = null;

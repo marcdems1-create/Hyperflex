@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Top Whales · Top Traders — HYPERFLEX Leaderboard</title>
-<meta name="description" content="Polymarket's sharpest forecasters, most profitable traders, and biggest whales — three ranked leaderboards on one page."/>
+<title>Trader Leaderboard — Ranked by Verified ROI | HYPERFLEX</title>
+<meta name="description" content="Polymarket traders ranked by risk-adjusted, time-weighted realized ROI — durable markets only, hand-verified. No unverified scores."/>
 <link rel="canonical" href="https://hyperflex.network/predictors"/>
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
-<meta property="og:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
-<meta property="og:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
+<meta property="og:title" content="Trader Leaderboard — Ranked by Verified ROI | HYPERFLEX"/>
+<meta property="og:description" content="The most profitable traders across Polymarket, ranked by verified, risk-adjusted ROI on durable markets."/>
 <meta property="og:image" content="https://hyperflex.network/og-predictors.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@HyperFlexApp"/>
-<meta name="twitter:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
-<meta name="twitter:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
+<meta name="twitter:title" content="Trader Leaderboard — Ranked by Verified ROI | HYPERFLEX"/>
+<meta name="twitter:description" content="The most profitable traders across Polymarket, ranked by verified, risk-adjusted ROI on durable markets."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -78,13 +78,6 @@ a { color: var(--blue); text-decoration: none; }
 /* THREE TABS */
 .lb-tabs-section { max-width: 900px; margin: 28px auto 0; padding: 0 24px; }
 .lb-tabs-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.lb-tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
-.lb-tab { background: transparent; border: none; padding: 10px 18px; border-radius: 7px; cursor: pointer; color: var(--muted); font-family: var(--sans); font-size: 13px; font-weight: 600; transition: all .15s; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-.lb-tab:hover:not(.active) { color: var(--text); }
-.lb-tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-.lb-tab-label { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
-.lb-tab-sub { font-size: 10px; font-weight: 500; color: var(--dim); }
-.lb-tab.active .lb-tab-sub { color: var(--gold); }
 .lb-toolbar { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .search-input { flex: 1; min-width: 140px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; transition: border-color .15s; }
 .search-input::placeholder { color: var(--dim); }
@@ -194,9 +187,6 @@ a { color: var(--blue); text-decoration: none; }
 @media (max-width: 768px) {
   .hero { padding: 90px 16px 28px; }
   .lb-tabs-section, .lb-cards-section, .rising-section, .top-call-wrap { padding-left: 12px; padding-right: 12px; }
-  .lb-tabs { flex-wrap: wrap; }
-  .lb-tab { padding: 8px 12px; }
-  .lb-tab-label { font-size: 10px; }
   .lb-toolbar { flex-wrap: wrap; }
   .lb-card { flex-wrap: wrap; gap: 10px; }
   .lb-right { width: 100%; justify-content: flex-end; margin-top: 4px; }
@@ -227,7 +217,7 @@ a { color: var(--blue); text-decoration: none; }
   <div class="hero-inner">
     <div class="hero-badge">LEADERBOARD</div>
     <h1>The <em>sharpest</em> traders<br>in prediction markets</h1>
-    <p class="hero-sub">Three lenses: statistical accuracy, realized P&L, and raw capital deployed. Pick your signal.</p>
+    <p class="hero-sub">Risk-adjusted, time-weighted ROI on resolved Polymarket positions — durable markets only, capital-weighted, shrunk toward the field average so a short streak can't outrank a real track record.</p>
     <div class="hero-stat" id="heroStat">Loading…</div>
   </div>
 </section>
@@ -257,36 +247,19 @@ a { color: var(--blue); text-decoration: none; }
 <!-- THREE TABS + TOOLBAR -->
 <div class="lb-tabs-section">
   <div class="lb-tabs-row">
-    <div class="lb-tabs">
-      <button type="button" class="lb-tab active" data-tab="sharpest" onclick="setTab('sharpest')">
-        <span class="lb-tab-label">FLEX SCORE</span>
-        <span class="lb-tab-sub">demonstrated ROI</span>
-      </button>
-      <button type="button" class="lb-tab" data-tab="profitable" onclick="setTab('profitable')">
-        <span class="lb-tab-label">MOST PROFITABLE</span>
-        <span class="lb-tab-sub">realized P&amp;L</span>
-      </button>
-      <button type="button" class="lb-tab" data-tab="whales" onclick="setTab('whales')">
-        <span class="lb-tab-label">WHALE SCORE</span>
-        <span class="lb-tab-sub">capital-weighted signal</span>
-      </button>
-      <button type="button" class="lb-tab" data-tab="roi" onclick="setTab('roi')">
-        <span class="lb-tab-label">ROI SCORE</span>
-        <span class="lb-tab-sub">time-weighted, risk-adjusted</span>
-      </button>
-    </div>
     <div class="lb-toolbar">
-      <select id="roiWindowSelect" class="search-input" style="display:none;max-width:140px" onchange="onRoiFilterChange()">
+      <select id="roiWindowSelect" class="search-input" style="max-width:140px" onchange="onRoiFilterChange()">
         <option value="all">All-time</option>
         <option value="90d">90 days</option>
         <option value="30d">30 days</option>
       </select>
-      <select id="roiMinNSelect" class="search-input" style="display:none;max-width:120px" onchange="onRoiFilterChange()">
+      <select id="roiMinNSelect" class="search-input" style="max-width:120px" onchange="onRoiFilterChange()">
         <option value="10">Min 10 trades</option>
         <option value="25">Min 25 trades</option>
         <option value="50">Min 50 trades</option>
       </select>
       <input type="text" class="search-input" id="traderSearch" placeholder="Search traders…" oninput="onSearch(this.value)">
+      <button type="button" class="how-scores-link" onclick="openSharpModal()" style="background:none;border:1px solid var(--line-strong,rgba(255,255,255,.12));border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--soft,#9a9aa8);cursor:pointer;white-space:nowrap">How scores work</button>
       <a href="/copy-trading" class="copy-top3-btn" onclick="return handleCopyTop3(event)">Copy Top 3 ↗</a>
     </div>
   </div>
@@ -316,16 +289,14 @@ a { color: var(--blue); text-decoration: none; }
 <div class="ss-modal-overlay" id="ssModalOverlay" onclick="if(event.target===this)closeSharpModal()">
   <div class="ss-modal">
     <button class="ss-modal-close" onclick="closeSharpModal()">&times;</button>
-    <h3>How scores work</h3>
-    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">Three different lenses on Polymarket traders. All data updated daily.</p>
+    <h3>How the score works</h3>
+    <p style="font-size:13px;color:var(--soft);line-height:1.8;margin-bottom:20px">One ranking, sourced from realized, resolved Polymarket trades only. Updated daily.</p>
     <div class="ss-formula">
-      <div><span style="color:var(--green)">SHARPEST</span> &nbsp;&rarr; Calibration score (0-100). Derived from Brier scoring — how well-calibrated your confidence is across all resolved predictions.</div>
-      <div style="margin-top:10px"><span style="color:var(--gold)">MOST PROFITABLE</span> &nbsp;&rarr; Realized P&amp;L. Actual USDC made or lost on closed Polymarket positions.</div>
-      <div style="margin-top:10px"><span style="color:var(--blue)">BIGGEST WHALES</span> &nbsp;&rarr; Total volume deployed. Tracks footprint, not accuracy. Capital ≠ skill.</div>
-      <div style="margin-top:10px"><span style="color:#a855f7">ROI SCORE</span> &nbsp;&rarr; Realized ROI on resolved Polymarket positions, weighted by capital and recency (90-day half-life), then shrunk toward the field average based on sample size — so a 10-trade streak can't outrank a 300-trade record. Requires 10+ resolved trades to rank.</div>
+      <div><span style="color:#a855f7">ROI SCORE</span> &nbsp;&rarr; Realized ROI on resolved Polymarket positions, weighted by capital and recency (90-day half-life), then shrunk toward the field average based on sample size — so a 10-trade streak can't outrank a 300-trade record. Requires 10+ resolved trades to rank.</div>
+      <div style="margin-top:10px">Ranked on <b>durable markets only</b> — positions resolving weeks or months out. Ephemeral markets (5-minute crypto binaries, same-day parlays) age out of Polymarket's own data before they can be independently re-verified, so they're excluded from the score entirely rather than counted on trust.</div>
     </div>
-    <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>A top-10 whale can rank last on Sharpest. That divergence is the signal — it's where the edge hides.</span></div>
-    <div style="margin-top:20px;text-align:center"><a href="/creator/login#signup" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;display:inline-block">Get your Flex Score &rarr;</a></div>
+    <div class="ss-tip"><span class="ss-tip-icon">&#128279;</span><span>Every trade behind this score is checked against real on-chain fills — see <a href="/methodology" style="color:var(--green)">the methodology</a> for how.</span></div>
+    <div style="margin-top:20px;text-align:center"><a href="/connect" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(0,230,138,0.3);padding:8px 20px;border-radius:8px;display:inline-block">Connect your wallet &rarr;</a></div>
   </div>
 </div>
 
@@ -350,9 +321,14 @@ a { color: var(--blue); text-decoration: none; }
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-var currentTab = 'sharpest';
-var _rawFlex   = [];   // raw /api/predictors/leaderboard?mode=flex results
-var _rawWhale  = [];   // raw /api/predictors/leaderboard?mode=whale results
+// FLEX SCORE / MOST PROFITABLE / WHALE SCORE tabs removed 2026-08-08: all
+// three read from users.flex_score / flex_score_90d, computed off the
+// polymarket_trades table with zero market_durability filtering — never
+// touched by the redeemed-win fabrication fix, the ephemeral-whale-bias
+// fix, or the fabricated-redeemed purge documented in CLAUDE.md's Gate 1.
+// ROI SCORE (_computeRoiLeaderboard, durable markets only, hand-verified)
+// is the only mode this page has ever gotten right — it's the only one
+// kept. See SESSION_STATE.md 2026-08-08 for the full trace.
 var _rawRoi    = [];   // raw /api/predictors/leaderboard?mode=roi results
 var _roiWindow = 'all';
 var _roiMinN   = 10;
@@ -398,33 +374,10 @@ function normalizeWR(r) {
   return wr;
 }
 
-// ── Tab data helpers ───────────────────────────────────────────────────────
+// ── Tab data helper ────────────────────────────────────────────────────────
+// Already ranked server-side (shrunk score desc); keep that order.
 function tabData() {
-  if (currentTab === 'sharpest') {
-    return _rawFlex
-      .filter(function(r){ return r.flex_score != null || r.calibration_score != null; })
-      .sort(function(a,b){ return (b.flex_score||b.calibration_score||0)-(a.flex_score||a.calibration_score||0); });
-  }
-  if (currentTab === 'profitable') {
-    return _rawWhale
-      .filter(function(r){ return r.whale_pnl != null && r.whale_pnl !== 0; })
-      .sort(function(a,b){ return (b.whale_pnl||0)-(a.whale_pnl||0); });
-  }
-  if (currentTab === 'roi') {
-    // Already ranked server-side (shrunk score desc); keep that order.
-    return _rawRoi;
-  }
-  // whales — sort by whale_score (WHALE SCORE) first, then whale_rank, then volume
-  return _rawWhale
-    .sort(function(a,b){
-      var aw = a.whale_score != null ? a.whale_score : -1;
-      var bw = b.whale_score != null ? b.whale_score : -1;
-      if (bw !== aw) return bw - aw;
-      var ar = a.whale_rank != null ? a.whale_rank : 9999;
-      var br = b.whale_rank != null ? b.whale_rank : 9999;
-      if (ar !== br) return ar - br;
-      return (b.total_volume_usd||0)-(a.total_volume_usd||0);
-    });
+  return _rawRoi;
 }
 
 function filterBySearch(data) {
@@ -434,19 +387,6 @@ function filterBySearch(data) {
     var n = resolveName(r).toLowerCase();
     return n.includes(q) || (r.username && r.username.toLowerCase().includes(q));
   });
-}
-
-// ── Tab switching ──────────────────────────────────────────────────────────
-function setTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.lb-tab').forEach(function(t) {
-    t.classList.toggle('active', t.dataset.tab === tab);
-  });
-  document.getElementById('roiWindowSelect').style.display = (tab === 'roi') ? '' : 'none';
-  document.getElementById('roiMinNSelect').style.display   = (tab === 'roi') ? '' : 'none';
-  document.getElementById('heroStat').textContent = 'Loading…';
-  if (tab === 'roi' && !_rawRoi.length) { loadRoi(); return; }
-  renderCards();
 }
 
 async function loadRoi() {
@@ -486,11 +426,12 @@ function renderCards() {
   _rendered = data;
   var el = document.getElementById('lbCards');
 
-  var tabLabels = { sharpest: 'traders ranked by FLEX SCORE', profitable: 'whales ranked by P&L', whales: 'whales ranked by WHALE SCORE', roi: 'whales ranked by ROI SCORE' };
-  document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> ' + (tabLabels[currentTab] || 'traders');
+  document.getElementById('heroStat').innerHTML = '<strong>' + data.length + '</strong> traders ranked by ROI SCORE';
 
   if (!data.length) {
-    var roiEmptyMsg = currentTab === 'roi' ? 'No whale has enough resolved trades yet to rank at this filter — try a lower minimum or a wider window.' : ('No traders found' + (_searchQ ? ' matching "' + escHtml(_searchQ) + '"' : '') + '.');
+    var roiEmptyMsg = _searchQ
+      ? ('No traders found matching "' + escHtml(_searchQ) + '".')
+      : 'No wallet has enough resolved trades yet to rank at this filter — try a lower minimum or a wider window.';
     el.innerHTML = '<div class="state-msg">' + roiEmptyMsg + '</div>';
     return;
   }
@@ -512,18 +453,8 @@ function renderCards() {
     var rankCls = rank===1?'r1':rank===2?'r2':rank===3?'r3':'';
 
     // Avatar tier
-    var tierCls = 'tier-default';
-    if (currentTab === 'sharpest') {
-      var cs = r.flex_score || r.calibration_score || 0;
-      tierCls = cs >= 70 ? 'tier-sharp' : cs >= 50 ? 'tier-solid' : 'tier-default';
-    } else if (currentTab === 'profitable') {
-      tierCls = (r.whale_pnl||0) > 50000 ? 'tier-whale' : (r.whale_pnl||0) > 10000 ? 'tier-sharp' : 'tier-solid';
-    } else if (currentTab === 'roi') {
-      var rs = r.score_pct || 0;
-      tierCls = rs >= 20 ? 'tier-whale' : rs >= 8 ? 'tier-sharp' : 'tier-solid';
-    } else {
-      tierCls = r.is_whale ? 'tier-whale' : 'tier-default';
-    }
+    var rs = r.score_pct || 0;
+    var tierCls = rs >= 20 ? 'tier-whale' : rs >= 8 ? 'tier-sharp' : 'tier-solid';
 
     // Badge
     var badge = '';
@@ -532,89 +463,27 @@ function renderCards() {
     } else if (isRival) {
       var dir = idx < myIdx ? '↑' : '↓';
       badge = '<span class="lb-badge rival">RIVAL ' + dir + '</span>';
-    } else if (currentTab === 'sharpest') {
-      var cs2 = r.flex_score || r.calibration_score || 0;
-      var bl = cs2 >= 70 ? 'sharp' : cs2 >= 50 ? 'solid' : 'building';
-      var bt = cs2 >= 70 ? 'SHARP' : cs2 >= 50 ? 'SOLID' : 'BUILDING';
-      badge = '<span class="lb-badge ' + bl + '">' + bt + '</span>';
-    } else if (currentTab === 'profitable') {
-      var pnl = r.whale_pnl || 0;
-      var bt2 = pnl > 100000 ? 'WHALE' : pnl > 50000 ? 'SHARK' : pnl > 10000 ? 'SHARP' : 'PROFITABLE';
-      var bl2 = pnl > 50000 ? 'whale' : pnl > 10000 ? 'sharp' : 'solid';
-      badge = '<span class="lb-badge ' + bl2 + '">' + bt2 + '</span>';
-    } else if (currentTab === 'roi') {
-      if (r.trend === 'up') badge = '<span class="lb-badge sharp">TRENDING UP</span>';
-      else if (r.trend === 'down') badge = '<span class="lb-badge building">COOLING</span>';
-    } else if (r.whale_rank) {
-      badge = '<span class="lb-badge whale">RANK #' + r.whale_rank + '</span>';
+    } else if (r.trend === 'up') {
+      badge = '<span class="lb-badge sharp">TRENDING UP</span>';
+    } else if (r.trend === 'down') {
+      badge = '<span class="lb-badge building">COOLING</span>';
     }
 
-    // Metric + secondary per tab
-    var metricHtml = '', secondaryHtml = '', barHtml = '';
+    // Metric + secondary
+    var metricHtml = '', secondaryHtml = '';
     var wr = normalizeWR(r);
     var wrPct = wr != null ? Math.round(wr * 100) : null;
-    var barFill = wrPct != null ? '<div class="lb-bar"><div class="lb-bar-fill" style="width:' + Math.min(wrPct, 100) + '%;background:' + (wrPct >= 60 ? 'var(--green)' : wrPct >= 45 ? 'var(--blue)' : 'var(--muted)') + '"></div></div>' : '';
 
-    if (currentTab === 'sharpest') {
-      var flexVal = r.flex_score != null ? r.flex_score : (r.calibration_score != null ? r.calibration_score : null);
-      var cs3 = flexVal != null ? flexVal : '—';
-      var cc = typeof cs3 === 'number' ? (cs3 >= 70 ? 'pos' : cs3 >= 50 ? 'blue' : 'gold') : '';
-      var settledN = r.predictions_resolved || r.flex_settled_events || '?';
-      // Real formula per lib/flex-score.js: accuracy 35 + calibration 25 +
-      // P&L quality 20 + consistency 10 + breadth 10. Tooltip previously
-      // claimed "accuracy, ROI, volume, and recency" — none of "volume" or
-      // "recency" are actual components; fixed to match reality.
-      metricHtml = '<div class="lb-metric ' + cc + '"><span class="cal-score-wrap">' + cs3 + '<span style="font-size:.55em;opacity:.5">/100</span><span class="cal-tooltip">Flex Score — accuracy (35) + calibration (25) + P&amp;L quality (20) + consistency (10) + breadth (10).<br>Based on ' + settledN + ' resolved predictions.</span></span></div>';
-      // Real HFX Score, batched via loadHfxScores()/_hfxByUser — same
-      // formula and endpoint member.html reads, no second implementation.
-      // Populated a beat after the initial render (see loadHfxScores), so
-      // this is often empty on the very first paint and fills in shortly
-      // after — that's expected, not a bug.
-      var hfxEntry = _hfxByUser[r.user_id];
-      if (hfxEntry && hfxEntry.composite != null) {
-        metricHtml += '<div style="font-family:var(--mono);font-size:10px;color:#4d9fff;margin-top:2px;" title="HFX Score — calibration (40%) + correct picks (20%) + take streak (20%) + Challenge win rate (20%)"><span style="opacity:.6">HFX</span> ' + hfxEntry.composite + '</div>';
-      }
-      var parts = [];
-      if (wrPct != null) parts.push(wrPct + '% win rate');
-      var n = r.predictions_resolved || r.flex_settled_events;
-      if (n) parts.push(n + ' graded');
-      if (r.flex_tier) parts.push(r.flex_tier);
-      secondaryHtml = '<div class="lb-secondary">' + parts.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
-      barHtml = barFill;
-    } else if (currentTab === 'profitable') {
-      var pnl2 = r.whale_pnl != null ? r.whale_pnl : 0;
-      var pnlCls = pnl2 >= 0 ? 'pos' : 'neg';
-      metricHtml = '<div class="lb-metric ' + pnlCls + '">' + formatPnl(pnl2) + '</div>';
-      var vol = r.total_volume_usd;
-      var parts2 = [];
-      if (vol > 0) parts2.push('Vol ' + formatMoney(vol));
-      if (vol > 0 && pnl2 !== 0) parts2.push('ROI ' + (pnl2 >= 0 ? '+' : '') + (pnl2 / vol * 100).toFixed(1) + '%');
-      if (wrPct != null) parts2.push(wrPct + '% win rate');
-      secondaryHtml = '<div class="lb-secondary">' + parts2.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
-      barHtml = barFill;
-    } else if (currentTab === 'roi') {
-      var score = r.score_pct != null ? r.score_pct : 0;
-      var scoreCls = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
-      var scoreStr = (score >= 0 ? '+' : '') + score.toFixed(1) + '%';
-      metricHtml = '<div class="lb-metric ' + scoreCls + '"><span class="cal-score-wrap">' + scoreStr + '<span class="cal-tooltip">Time-weighted, capital-weighted realized ROI, shrunk toward the field average for sample size.<br>Based on ' + r.n + ' resolved trades' + (r.total_capital_usd ? (' / ' + formatMoney(r.total_capital_usd) + ' deployed') : '') + '.</span></span></div>';
-      var parts4 = [];
-      parts4.push(r.n + ' resolved');
-      if (r.raw_weighted_roi_pct != null) parts4.push('raw ' + (r.raw_weighted_roi_pct >= 0 ? '+' : '') + r.raw_weighted_roi_pct.toFixed(1) + '%');
-      if (r.total_capital_usd) parts4.push(formatMoney(r.total_capital_usd) + ' deployed');
-      secondaryHtml = '<div class="lb-secondary">' + parts4.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
-    } else {
-      var ws = r.whale_score != null ? r.whale_score : null;
-      var wsDisplay = ws != null ? (ws + '<span style="font-size:.55em;opacity:.5">/100</span>') : (r.whale_rank ? 'Rank #' + r.whale_rank : '—');
-      metricHtml = '<div class="lb-metric" style="color:#a855f7">' + wsDisplay + '</div>';
-      var vol2 = r.total_volume_usd || 0;
-      var pnl3 = r.whale_pnl;
-      var parts3 = [];
-      if (pnl3 != null) parts3.push('P&L ' + formatPnl(pnl3));
-      if (vol2 > 0) parts3.push('Vol ' + formatMoney(vol2));
-      if (r.whale_rank) parts3.push('Poly rank #' + r.whale_rank);
-      secondaryHtml = '<div class="lb-secondary">' + parts3.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
-      barHtml = barFill;
-    }
+    var score = r.score_pct != null ? r.score_pct : 0;
+    var scoreCls = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
+    var scoreStr = (score >= 0 ? '+' : '') + score.toFixed(1) + '%';
+    metricHtml = '<div class="lb-metric ' + scoreCls + '"><span class="cal-score-wrap">' + scoreStr + '<span class="cal-tooltip">Time-weighted, capital-weighted realized ROI, shrunk toward the field average for sample size.<br>Based on ' + r.n + ' resolved trades' + (r.total_capital_usd ? (' / ' + formatMoney(r.total_capital_usd) + ' deployed') : '') + '.</span></span></div>';
+    var parts4 = [];
+    parts4.push(r.n + ' resolved');
+    if (wrPct != null) parts4.push(wrPct + '% win rate');
+    if (r.raw_weighted_roi_pct != null) parts4.push('raw ' + (r.raw_weighted_roi_pct >= 0 ? '+' : '') + r.raw_weighted_roi_pct.toFixed(1) + '%');
+    if (r.total_capital_usd) parts4.push(formatMoney(r.total_capital_usd) + ' deployed');
+    secondaryHtml = '<div class="lb-secondary">' + parts4.map(function(p){ return '<span>' + p + '</span>'; }).join('') + '</div>';
 
     // Actions
     var uid = escHtml(r.user_id || '');
@@ -623,7 +492,7 @@ function renderCards() {
     actionsHtml += '<a href="/copy-trading" class="act-copy" onclick="event.stopPropagation()">Copy</a>';
     if (uid) actionsHtml += '<button class="act-follow" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>';
     actionsHtml += '<a href="'+escHtml(url)+'" class="act-profile" onclick="event.stopPropagation()">Profile →</a>';
-    if (addr && (currentTab === 'whales' || currentTab === 'roi')) {
+    if (addr) {
       actionsHtml += '<a href="https://polymarket.com/profile/'+escHtml(addr)+'" target="_blank" rel="noopener" class="poly-link" onclick="event.stopPropagation()">Poly ↗</a>';
     }
     actionsHtml += '</div>';
@@ -633,7 +502,7 @@ function renderCards() {
       '<div class="lb-avatar ' + tierCls + '">' + initial + '</div>' +
       '<div class="lb-middle">' +
         '<div class="lb-name-row"><span class="lb-name">' + escHtml(name) + '</span>' + badge + '</div>' +
-        metricHtml + secondaryHtml + barHtml +
+        metricHtml + secondaryHtml +
       '</div>' +
       '<div class="lb-right">' + actionsHtml + '</div>' +
     '</a>';
@@ -657,46 +526,14 @@ function renderCards() {
 // ── Data loading ───────────────────────────────────────────────────────────
 async function loadAll() {
   try {
-    var [flexRes, whaleRes] = await Promise.all([
-      fetch('/api/predictors/leaderboard?mode=flex&limit=100'),
-      fetch('/api/predictors/leaderboard?mode=whale&limit=100'),
-    ]);
-    _rawFlex  = flexRes.ok  ? await flexRes.json()  : [];
-    _rawWhale = whaleRes.ok ? await whaleRes.json() : [];
-    if (!Array.isArray(_rawFlex))  _rawFlex  = [];
-    if (!Array.isArray(_rawWhale)) _rawWhale = [];
-    renderCards();
+    await loadRoi(); // fetches _rawRoi and calls renderCards() itself
     loadFollowStates();
     loadMyScore();
     showStickyBar();
     loadRisingStars();
-    loadHfxScores();
   } catch (e) {
     document.getElementById('lbCards').innerHTML = '<div class="state-msg">Could not load. Retry shortly.</div>';
   }
-}
-
-// Real, server-computed HFX Score for the FLEX SCORE tab's secondary line
-// — same formula and endpoint member.html reads (GET .../hfx-score),
-// batched here instead of one request per row. Fire-and-forget: the
-// leaderboard renders immediately off _rawFlex, this fills in the HFX line
-// a beat later rather than delaying the whole page for a secondary stat.
-var _hfxByUser = {};
-function loadHfxScores() {
-  var ids = _rawFlex.map(function(r){ return r.user_id; }).filter(Boolean);
-  if (!ids.length) return;
-  fetch('/api/predictors/hfx-score-batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_ids: ids }),
-  })
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(d){
-      if (!d || !d.scores) return;
-      _hfxByUser = d.scores;
-      if (currentTab === 'sharpest') renderCards();
-    })
-    .catch(function(){});
 }
 
 async function loadTopCall() {
@@ -858,33 +695,29 @@ function showStickyBar() {
   fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } })
     .then(function(r){ return r.ok ? r.json() : {}; })
     .then(function(w) {
+      // Sourced from _rawRoi (the same verified, durable-market-gated ROI
+      // leaderboard the cards render), not the retired flex_score/whale_pnl
+      // columns — a logged-in user with a real ROI-verified record must see
+      // their actual standing here, not a stale/unverified number.
       var entry = null;
       if (userId) {
-        var all = _rawFlex.concat(_rawWhale);
-        for (var i = 0; i < all.length; i++) {
-          if (all[i].user_id === userId) { entry = all[i]; break; }
+        for (var i = 0; i < _rawRoi.length; i++) {
+          if (_rawRoi[i].user_id === userId) { entry = _rawRoi[i]; break; }
         }
       }
       if (entry) {
-        var pnl = entry.whale_pnl || 0;
-        var pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
-        // Prefer the real flex_score (same field the leaderboard rows below
-        // already prefer, see renderRow ~line 559) over calibration_score,
-        // which is just ONE of the five components that make up flex_score,
-        // rescaled to look like a standalone 0-100 number. Showing it here
-        // labeled "FLEX SCORE" was a real bug — a trader with weak overall
-        // score but strong calibration would see an inflated number.
-        var stickyScore = entry.flex_score != null ? entry.flex_score : entry.calibration_score;
+        var score = entry.score_pct != null ? entry.score_pct : 0;
+        var scoreColor = score >= 0 ? '#00e68a' : '#ff4d6a';
         document.getElementById('barContent').innerHTML =
           '<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:#c9920d">Your record</span>' +
-          (stickyScore != null ? '<span class="bar-stat">FLEX SCORE <strong>' + stickyScore + '/100</strong></span>' : '') +
-          (pnl !== 0 ? '<span class="bar-stat" style="color:' + pnlColor + ';font-weight:700">' + formatPnl(pnl) + '</span>' : '');
+          '<span class="bar-stat">ROI SCORE <strong style="color:' + scoreColor + '">' + (score >= 0 ? '+' : '') + score.toFixed(1) + '%</strong></span>' +
+          '<span class="bar-stat">' + entry.n + ' resolved</span>';
         bar.querySelector('.bar-link').href = '/m/' + (userId || '');
         bar.querySelector('.bar-link').textContent = 'View profile →';
       } else {
-        document.getElementById('barContent').innerHTML = '<span class="bar-stat" style="color:#c9920d">Get your FLEX SCORE — start trading on Polymarket</span>';
-        bar.querySelector('.bar-link').href = '/creator/dashboard';
-        bar.querySelector('.bar-link').textContent = 'Dashboard →';
+        document.getElementById('barContent').innerHTML = '<span class="bar-stat" style="color:#c9920d">Connect your wallet to appear on the leaderboard</span>';
+        bar.querySelector('.bar-link').href = '/connect';
+        bar.querySelector('.bar-link').textContent = 'Connect →';
       }
     }).catch(function(){});
   setTimeout(function(){ bar.classList.add('visible'); }, 800);
