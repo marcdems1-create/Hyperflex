@@ -49,6 +49,24 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26c (Messages follow-up: real live repro from Marc — one-click wallet sign-in was a dead click for pasted-preview addresses; PR #233 merged)
+
+**Trigger:** Marc tested PR #232's fix live and hit a second bug in the same feature: auth gate showed "Sign in with 0xda98…b270 →", clicking it did nothing ("still").
+
+**Shipped (`fc9e2cc`, merged to `main` via PR #233):**
+- Root cause: `connect.html` tracks whether a cached address came from a real wallet connection (`hf_connect_has_signer`/`hfx_wallet_address`, only set on an actual `eth_requestAccounts` call) vs. a plain paste-to-preview (`hf_connect_address`, written unconditionally either way — `previewAddress()` sets `_hasSigner = false` before caching it). `messages.html`'s one-click sign-in read `hf_connect_address` first, so a user who'd only ever pasted an address to preview a score (zero wallet touched) got offered a one-click "Sign in with `<that address>`" button that could never actually complete — `eth_requestAccounts` either silently did nothing (no extension) or prompted a totally different wallet.
+- `public/messages.html`: `maybeOfferWalletSignin()` now only trusts a cached address when it's actually signer-backed. Also hardened `signInWithWallet()`'s `!window.ethereum` desktop branch — it used to do a bare `return` with zero user feedback (a genuinely silent dead click, independent of the cache bug); now redirects to `/connect`.
+- **Branch-reuse note:** PR #232 had already been merged when this started, so per the branch-reuse rule the designated branch was restarted from `origin/main` (`git checkout -B ... origin/main`) rather than stacked on the old (now-squashed) history, then force-with-lease pushed after confirming the old remote tip was byte-identical in diff to what `main` already had.
+
+**Active blockers:**
+- Not click-tested against production by Claude (no network path to hyperflex.network, same standing limitation). This one specifically needs Marc to verify: (a) a pasted-only address no longer offers a false one-click button, (b) a real wallet connection's one-click sign-in still works end to end.
+
+**Queued (priority order):**
+1. Marc confirms both message-flow fixes (#232 + #233) together resolve the original "Messages tab goes nowhere" report end to end.
+
+**Notes for next session:**
+- This is the second real bug found in the wallet-identity-on-Messages area within one session (the other being the concurrent `9d6969f`/`5f4dd69` auth-gate fix noted in the entry below). If a third Messages complaint comes in, check whether `hf_token` actually gets set and persists correctly after `signInWithWallet()` succeeds — that path itself hasn't been independently stress-tested, only reasoned through.
+
 ## 2026-08-26b (found + fixed: canonical /@handle profile had no way to start a message — "Messages tab goes nowhere"; PR #232 merged)
 
 **Trigger:** Marc reported the Messages tab "goes nowhere." Nav mechanics checked out clean (plain `<a href="/messages">`, no click interceptors, route registered correctly, token keys consistent between nav.js and messages.html). Root cause was one layer deeper.
