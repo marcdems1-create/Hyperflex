@@ -20004,14 +20004,22 @@ function buildEdgeSignal(e, category) {
     // own implied probability IS N% — restating it as a discovered "edge" is
     // a tautology dressed as analysis. Replaced with the payout math, which
     // is arithmetic on the price and therefore always true.
-    const mult = pct > 0 ? (100 / pct).toFixed(1) : null;
-    if      (pct <= 10) reasons.push(`${pct}¢ YES — market implies ${pct}% odds, pays ${mult}× if it lands`);
-    else if (pct <= 30) reasons.push(`${pct}¢ YES — ${mult}× payout on a YES`);
-    else if (pct <  45) reasons.push(`${pct}¢ YES — market leaning NO, ${mult}× on a YES`);
-    else if (pct <= 55) reasons.push(`${pct}¢ YES — book is genuinely split`);
-    else if (pct <  70) reasons.push(`${pct}¢ YES — market leaning YES`);
-    else if (pct <  90) reasons.push(`${pct}¢ YES — market leaning strongly YES`);
-    else                reasons.push(`${pct}¢ YES — priced as near-certain`);
+    // Sub-1% markets must not be rounded to 0 — a 0.4¢ market is not a zero,
+    // and `100/0` produced the literal string "pays null× if it lands" on the
+    // deployed page. Use the exact price for the multiplier and the shared
+    // cents-aware formatter for display, same discipline as every other
+    // price-bearing surface.
+    const rawP = e.yes_price != null && isFinite(e.yes_price) ? Number(e.yes_price) : null;
+    const disp = _fmtChanceDisplay(rawP) || `${pct}%`;
+    const mult = (rawP != null && rawP > 0) ? (1 / rawP).toFixed(1) : null;
+    const payoff = mult ? `, pays ${mult}× if it lands` : '';
+    if      (pct <= 10) reasons.push(`${disp} YES — that is the market's own implied probability${payoff}`);
+    else if (pct <= 30) reasons.push(`${disp} YES${mult ? ` — ${mult}× payout on a YES` : ''}`);
+    else if (pct <  45) reasons.push(`${disp} YES — market leaning NO${mult ? `, ${mult}× on a YES` : ''}`);
+    else if (pct <= 55) reasons.push(`${disp} YES — book is genuinely split`);
+    else if (pct <  70) reasons.push(`${disp} YES — market leaning YES`);
+    else if (pct <  90) reasons.push(`${disp} YES — market leaning strongly YES`);
+    else                reasons.push(`${disp} YES — priced as near-certain`);
   }
 
   // Measured movement. This is the one signal here that is not a restatement
@@ -20175,18 +20183,29 @@ async function fetchFinanceMarkets() {
     // shipped `whale_count: 0` hardcoded, which meant buildEdgeSignal's whale
     // branch could never fire and 100% of the "edge" copy on /finance was
     // derived from nothing but the price itself.
-    const _whaleByCondition = new Map();
+    // ⚠️ Screener rows key on `market_id`, NOT `conditionId`. buildAlphaList
+    // builds it as `m.conditionId || m.slug || m.id` (server.js ~43538) and
+    // emits it under the `market_id` name — there is no `conditionId` property
+    // on those objects at all. The first version of this block checked
+    // `sm.conditionId` and therefore `continue`d on every single row, which is
+    // why the deployed /markets page reported 0 whale-backed markets out of 71
+    // while looking perfectly healthy. Index both the id and the slug, since
+    // market_id itself falls back to slug when conditionId is missing.
+    const _whaleByKey = new Map();
     try {
       const screener = (_screenerCache && Array.isArray(_screenerCache.data)) ? _screenerCache.data : [];
       for (const sm of screener) {
-        if (!sm.conditionId) continue;
-        _whaleByCondition.set(String(sm.conditionId).toLowerCase(), {
+        const wh = {
           whale_count:         sm.whale_count || 0,
           total_whale_capital: sm.total_whale_capital || 0,
           edge_score:          sm.edge_score || 0,
           depth_ratio:         sm.depth_ratio || null,
           depth_side:          sm.depth_side || null,
-        });
+        };
+        if (!wh.whale_count && !wh.edge_score) continue;
+        for (const k of [sm.market_id, sm.conditionId, sm.slug]) {
+          if (k) _whaleByKey.set(String(k).toLowerCase(), wh);
+        }
       }
     } catch (e) { /* enrichment is additive — never fail the fetch on it */ }
 
@@ -20230,7 +20249,9 @@ async function fetchFinanceMarkets() {
           const _gy = _parseGammaYes(m);
           const yp = _gy != null ? _gy : 0.5;
           const vol = parseFloat(m.volumeNum || m.volume || 0);
-          const wh = _whaleByCondition.get(String(m.conditionId || '').toLowerCase()) || {};
+          const wh = _whaleByKey.get(String(m.conditionId || '').toLowerCase())
+                  || _whaleByKey.get(String(m.slug || '').toLowerCase())
+                  || {};
           let yesTokenId = null;
           try {
             const tids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
