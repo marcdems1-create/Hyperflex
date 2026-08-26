@@ -50,6 +50,12 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 /* Reward-market card — daily rate is the dominant signal, not edge score. */
 .r-card { display:flex; flex-direction:column; gap:10px; padding:14px 16px; margin-bottom:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; transition:border-color .15s; text-decoration:none; color:inherit; }
 .r-card:hover { border-color:rgba(201,146,13,0.45); text-decoration:none; }
+/* Card is a <div>, not an <a>: it now contains a real button (the book's
+   Numbers/Chart toggle) and a real link (Trade), and nesting either inside
+   an anchor is invalid and double-fires navigation on tap. Click behaviour
+   is restored by a delegated handler. */
+.r-card { cursor:pointer; }
+.r-card a, .r-card button { cursor:pointer; }
 .r-card-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .r-badge { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; letter-spacing:0.08em; padding:3px 8px; border-radius:5px; background:rgba(201,146,13,0.16); color:var(--gold); text-transform:uppercase; white-space:nowrap; }
 .r-meta { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--faint); letter-spacing:0.06em; margin-left:auto; }
@@ -134,6 +140,44 @@ h1 { font-size:32px; font-weight:900; letter-spacing:-0.025em; margin:8px 0 8px;
 .r-post-est{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:10px 14px;background:rgba(0,212,255,.04);border-left:1px solid rgba(0,212,255,.12);}
 .r-est-num{font-family:var(--mono,monospace);font-size:15px;font-weight:700;color:#00d4ff;}
 .r-est-sub{font-family:var(--mono,monospace);font-size:8px;color:rgba(0,212,255,.5);letter-spacing:.06em;white-space:nowrap;}
+
+/* ── LIVE SPREAD + ORDER BOOK ──────────────────────────────────────────
+   The whole reward mechanic is "rest a maker order inside the spread", so
+   the spread itself is the single most decision-relevant number on the
+   card — and until now the page never showed it. "Post 63¢–72¢" was
+   derived from the mid alone, which tells you the reward band but not
+   whether there is any room to sit in, or how much size you'd be queued
+   behind.
+
+   Depth is drawn on a real price axis (not evenly-spaced rows) so the
+   distance between levels is honest: a book with everything stacked on
+   one tick looks stacked, and a thin scattered book looks thin.
+   Green = bid, red = ask — status colours, used here for their literal
+   meaning. A table twin sits underneath for the exact numbers. */
+.r-book-label{display:flex;align-items:baseline;gap:8px;font-family:var(--mono,monospace);font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(240,240,245,.35);text-transform:uppercase;margin:14px 0 8px;}
+.r-book-toggle{margin-left:auto;font-family:var(--mono,monospace);font-size:9px;font-weight:700;letter-spacing:.1em;color:rgba(240,240,245,.45);background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 7px;cursor:pointer;text-transform:uppercase;}
+.r-book-toggle:hover{color:var(--text);}
+.r-book{border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:12px 12px 10px;margin-bottom:14px;background:rgba(255,255,255,.012);}
+.r-book-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px;font-family:var(--mono,monospace);}
+.r-book-side{display:flex;flex-direction:column;gap:2px;}
+.r-book-side.ask{align-items:flex-end;}
+.r-book-k{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:rgba(240,240,245,.35);}
+.r-book-v{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;}
+.r-book-v.bid{color:#00c85a;}
+.r-book-v.ask{color:#ff4d6a;}
+.r-book-mid{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.r-spread-pill{font-family:var(--mono,monospace);font-size:11px;font-weight:800;color:var(--gold);background:rgba(201,146,13,.14);border:1px solid rgba(201,146,13,.32);border-radius:100px;padding:3px 9px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.r-book-svg{display:block;width:100%;height:74px;overflow:visible;}
+.r-book-axis{display:flex;justify-content:space-between;font-family:var(--mono,monospace);font-size:8.5px;color:rgba(240,240,245,.42);margin-top:3px;font-variant-numeric:tabular-nums;}
+.r-book-note{font-family:'Inter',sans-serif;font-size:10.5px;line-height:1.5;color:rgba(240,240,245,.5);margin-top:8px;}
+.r-book-note b{color:rgba(240,240,245,.8);font-weight:700;}
+.r-book-empty{font-family:var(--mono,monospace);font-size:10px;color:rgba(240,240,245,.42);padding:8px 0;line-height:1.6;}
+.r-book-table{width:100%;border-collapse:collapse;margin-top:4px;}
+.r-book-table th,.r-book-table td{font-family:var(--mono,monospace);font-size:10px;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,.05);}
+.r-book-table th{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,240,245,.35);font-weight:700;}
+.r-book-table td.bid{color:#00c85a;} .r-book-table td.ask{color:#ff4d6a;}
+.r-book-table caption{text-align:left;font-family:var(--mono,monospace);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,240,245,.35);padding-bottom:6px;}
+[hidden]{display:none !important;}
 </style>
 </head>
 <body>
@@ -289,8 +333,9 @@ function renderRewardCards(list) {
       : null;
 
     var spreadLabel = spread > 0 ? ('±' + spread.toFixed(1) + '¢') : '';
+    var token = firstTokenId(m);
 
-    return '<a class="r-card" href="' + esc(href) + '">' +
+    return '<div class="r-card" data-href="' + esc(href) + '">' +
       '<div class="r-card-top">' +
         '<span class="r-badge">' + fmtRate(rate) + ' / day</span>' +
         (spreadLabel ? '<span class="r-meta">spread ' + esc(spreadLabel) + '</span>' : '') +
@@ -314,20 +359,201 @@ function renderRewardCards(list) {
         (estDay ? '<div class="r-post-est"><span class="r-est-num">' + estDay + '/day</span><span class="r-est-sub">per $' + minSize + ' posted</span></div>' : '') +
       '</div>' +
 
+      // ── LIVE SPREAD + BOOK ──
+      (token
+        ? '<div class="r-book-label">Live spread &amp; book'
+            + '<button type="button" class="r-book-toggle">Numbers</button></div>'
+          + '<div class="r-book" data-token="' + esc(token) + '" data-spread="' + spread + '">'
+            + '<div class="r-book-empty">Loading book…</div>'
+          + '</div>'
+        : '') +
+
       // ── STATS ──
       '<div class="r-stats">' +
         '<div><span class="stat-k">Min order</span><span class="stat-v">$' + minSize.toLocaleString() + '</span></div>' +
         '<div><span class="stat-k">24h vol</span><span class="stat-v">' + fmtVol(m.volume_24h) + '</span></div>' +
         '<div><span class="stat-k">Liquidity</span><span class="stat-v">' + fmtVol(m.liquidity) + '</span></div>' +
-        '<div class="r-cta-cell"><span class="r-cta">Trade →</span></div>' +
+        '<div class="r-cta-cell"><a class="r-cta" href="' + esc(href) + '">Trade →</a></div>' +
       '</div>' +
-    '</a>';
+    '</div>';
   }).join('');
 }
+/* ── LIVE SPREAD + ORDER BOOK ─────────────────────────────────────────
+   Fetched per card, lazily. Each card is one /api/polymarket/orderbook
+   call (10s server cache); 28 reward markets firing on page load would be
+   28 upstream CLOB requests for cards mostly below the fold, so the fetch
+   waits until the card is near the viewport.
+   ───────────────────────────────────────────────────────────────────── */
+function firstTokenId(m){
+  var raw = m.clob_token_ids;
+  if (!raw) return null;
+  try { if (typeof raw === 'string') raw = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(raw) && raw.length) ? String(raw[0]) : null;
+}
+
+// Price axis is windowed around the action rather than showing 0–100¢:
+// at a 1¢ spread the whole book would collapse into a single pixel column.
+// The window always contains the reward band AND the plotted levels.
+function bookWindow(bestBid, bestAsk, mid, maxSpreadC){
+  var pad = Math.max(maxSpreadC * 1.6, 3);
+  var lo = Math.min(bestBid * 100, mid * 100 - maxSpreadC) - pad;
+  var hi = Math.max(bestAsk * 100, mid * 100 + maxSpreadC) + pad;
+  return { lo: Math.max(0, lo), hi: Math.min(100, hi) };
+}
+
+function renderBook(host, d, maxSpreadC){
+  var bids = (d && d.bids) || [], asks = (d && d.asks) || [];
+  var bb = d && d.best_bid != null ? Number(d.best_bid) : null;
+  var ba = d && d.best_ask != null ? Number(d.best_ask) : null;
+  if (!bids.length && !asks.length) {
+    host.innerHTML = '<div class="r-book-empty">No resting orders on this book right now — nothing to sit inside of yet.</div>';
+    return;
+  }
+  if (bb == null || ba == null) {
+    host.innerHTML = '<div class="r-book-empty">Book is one-sided right now; no two-way spread to show.</div>';
+    return;
+  }
+
+  var mid = d.mid_price != null ? Number(d.mid_price) : (bb + ba) / 2;
+  var spreadC = (ba - bb) * 100;
+  var W = 300, H = 56, BASE = H - 1;
+  var win = bookWindow(bb, ba, mid, maxSpreadC);
+  var span = Math.max(0.5, win.hi - win.lo);
+  var X = function(priceC){ return ((priceC - win.lo) / span) * W; };
+
+  // Only levels inside the window get drawn; sizes are normalised against
+  // the largest VISIBLE level so the shape reflects what's on screen.
+  var vis = function(arr){ return arr.map(function(l){
+      return { p: Number(l.price) * 100, s: Number(l.size) || 0 }; })
+    .filter(function(l){ return l.p >= win.lo && l.p <= win.hi && l.s > 0; }); };
+  var vb = vis(bids), va = vis(asks);
+  var maxSize = Math.max.apply(null, [1].concat(vb.concat(va).map(function(l){ return l.s; })));
+
+  // Square-root height scale. Book sizes span orders of magnitude — one
+  // level at 52k next to levels in the hundreds — and on a linear scale
+  // everything but the largest collapses onto the baseline as unreadable
+  // slivers. sqrt keeps the biggest level tallest while leaving smaller
+  // resting orders legible, which is the point of showing depth at all.
+  var bar = function(l, cls){
+    var h = Math.max(2.5, Math.sqrt(l.s / maxSize) * (H - 16));
+    var w = Math.max(2, W / span * 0.62);
+    return '<rect x="' + (X(l.p) - w / 2).toFixed(2) + '" y="' + (BASE - h).toFixed(2) + '"'
+      + ' width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '" rx="1" class="' + cls + '"'
+      + ' fill="' + (cls === 'b' ? '#00c85a' : '#ff4d6a') + '" fill-opacity="0.72"></rect>';
+  };
+
+  var rewardLo = Math.max(win.lo, mid * 100 - maxSpreadC);
+  var rewardHi = Math.min(win.hi, mid * 100 + maxSpreadC);
+
+  var svg = '<svg class="r-book-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"'
+    + ' role="img" aria-label="Order book depth. Best bid ' + (bb * 100).toFixed(1) + ' cents, best ask '
+    + (ba * 100).toFixed(1) + ' cents, spread ' + spreadC.toFixed(1) + ' cents.">'
+    // reward band first, so depth draws over it
+    + '<rect x="' + X(rewardLo).toFixed(2) + '" y="0" width="' + Math.max(0, X(rewardHi) - X(rewardLo)).toFixed(2)
+      + '" height="' + H + '" fill="#c9920d" fill-opacity="0.14"></rect>'
+    + '<text x="' + ((X(rewardLo) + X(rewardHi)) / 2).toFixed(2) + '" y="9" text-anchor="middle"'
+      + ' font-family="JetBrains Mono, monospace" font-size="7" letter-spacing="0.1em"'
+      + ' fill="#c9920d" fill-opacity="0.85">EARNS</text>'
+    + '<line x1="' + X(rewardLo).toFixed(2) + '" y1="0" x2="' + X(rewardLo).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+    + '<line x1="' + X(rewardHi).toFixed(2) + '" y1="0" x2="' + X(rewardHi).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+    + vb.map(function(l){ return bar(l, 'b'); }).join('')
+    + va.map(function(l){ return bar(l, 'a'); }).join('')
+    // the spread itself: the gap between touch prices
+    + '<line x1="' + X(bb * 100).toFixed(2) + '" y1="13" x2="' + X(bb * 100).toFixed(2) + '" y2="' + BASE + '" stroke="#00c85a" stroke-width="1.5"></line>'
+    + '<line x1="' + X(ba * 100).toFixed(2) + '" y1="13" x2="' + X(ba * 100).toFixed(2) + '" y2="' + BASE + '" stroke="#ff4d6a" stroke-width="1.5"></line>'
+    + '<line x1="0" y1="' + BASE + '" x2="' + W + '" y2="' + BASE + '" stroke="rgba(255,255,255,0.10)" stroke-width="1"></line>'
+    + '</svg>';
+
+  // Is there actually room to rest inside the reward band? Stated as fact,
+  // not as a recommendation.
+  var roomNote = spreadC <= 0.011 * 100
+    ? 'Spread is <b>' + spreadC.toFixed(1) + '¢</b> — the book is at touch, so a qualifying order joins the queue at ' + Math.round(bb * 100) + '¢ or ' + Math.round(ba * 100) + '¢.'
+    : 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>, and the reward band is <b>±' + maxSpreadC.toFixed(1) + '¢</b> of mid — there is room to rest inside it at ' + Math.round(rewardLo) + '¢–' + Math.round(rewardHi) + '¢.';
+
+  host.innerHTML =
+    '<div class="r-book-top">'
+      + '<div class="r-book-side bid"><span class="r-book-k">Best bid</span><span class="r-book-v bid">' + (bb * 100).toFixed(1) + '¢</span></div>'
+      + '<div class="r-book-mid"><span class="r-spread-pill">spread ' + spreadC.toFixed(1) + '¢</span><span class="r-book-k">mid ' + (mid * 100).toFixed(1) + '¢</span></div>'
+      + '<div class="r-book-side ask"><span class="r-book-k">Best ask</span><span class="r-book-v ask">' + (ba * 100).toFixed(1) + '¢</span></div>'
+    + '</div>'
+    + svg
+    + '<div class="r-book-axis"><span>' + win.lo.toFixed(0) + '¢</span><span>' + ((win.lo + win.hi) / 2).toFixed(0) + '¢</span><span>' + win.hi.toFixed(0) + '¢</span></div>'
+    + '<div class="r-book-note">' + roomNote + ' Shaded band is where a maker order earns.</div>'
+    + bookTableHtml(vb, va);
+}
+
+// Exact numbers behind the picture — depth is otherwise readable only by
+// eye, and the axis alone can't tell you the size at a level.
+function bookTableHtml(vb, va){
+  var top = function(arr, desc){
+    return arr.slice().sort(function(a, b){ return desc ? b.p - a.p : a.p - b.p; }).slice(0, 5);
+  };
+  var tb = top(vb, true), ta = top(va, false);
+  var rows = Math.max(tb.length, ta.length);
+  var body = '';
+  for (var i = 0; i < rows; i++) {
+    body += '<tr>'
+      + '<td class="bid">' + (tb[i] ? tb[i].p.toFixed(1) + '¢' : '') + '</td>'
+      + '<td class="bid">' + (tb[i] ? Math.round(tb[i].s).toLocaleString() : '') + '</td>'
+      + '<td class="ask">' + (ta[i] ? ta[i].p.toFixed(1) + '¢' : '') + '</td>'
+      + '<td class="ask">' + (ta[i] ? Math.round(ta[i].s).toLocaleString() : '') + '</td>'
+      + '</tr>';
+  }
+  return '<table class="r-book-table" hidden><caption>Top of book</caption><thead><tr>'
+    + '<th scope="col">Bid</th><th scope="col">Size</th><th scope="col">Ask</th><th scope="col">Size</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table>';
+}
+
+function loadBookSlots(root){
+  var slots = [].slice.call((root || document).querySelectorAll('.r-book[data-token]'));
+  var fill = function(slot){
+    var token = slot.getAttribute('data-token');
+    var ms = parseFloat(slot.getAttribute('data-spread')) || 0;
+    fetch('/api/polymarket/orderbook/' + encodeURIComponent(token))
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ renderBook(slot, d, ms); })
+      .catch(function(){ slot.innerHTML = '<div class="r-book-empty">Couldn\'t load the book for this market.</div>'; });
+  };
+  if (!('IntersectionObserver' in window)) { slots.forEach(fill); return; }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target);
+      fill(e.target);
+    });
+  }, { rootMargin: '250px' });
+  slots.forEach(function(s){ io.observe(s); });
+}
+
+// Card click -> market page. Delegated, and ignores clicks that landed on
+// a real control inside the card (the book toggle, the Trade link) or on a
+// text selection.
+document.addEventListener('click', function(e){
+  var card = e.target.closest('.r-card');
+  if (!card) return;
+  if (e.target.closest('a, button')) return;
+  if (window.getSelection && String(window.getSelection()).length) return;
+  var href = card.getAttribute('data-href');
+  if (href && href !== '#') window.location.href = href;
+});
+
+// Chart <-> table toggle, delegated since cards re-render every 10 minutes.
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('.r-book-toggle');
+  if (!btn) return;
+  e.preventDefault();
+  var card = btn.closest('.r-card');
+  var tbl = card && card.querySelector('.r-book-table');
+  if (!tbl) return;
+  tbl.hidden = !tbl.hidden;
+  btn.textContent = tbl.hidden ? 'Numbers' : 'Chart';
+});
+
 function loadRewardMarkets() {
   fetch('/api/ecosystem/rewards').then(function(r){return r.ok?r.json():null;}).then(function(d){
     var list = (d && Array.isArray(d.markets)) ? d.markets : [];
     renderRewardCards(list);
+    loadBookSlots(document.getElementById('rewardMarketsList'));
   }).catch(function(){
     var el = document.getElementById('rewardMarketsList');
     el.innerHTML = '<div class="empty"><div class="empty-title">Couldn’t load rewards feed.</div><div class="empty-body">Retrying in 10 minutes.</div></div>';
