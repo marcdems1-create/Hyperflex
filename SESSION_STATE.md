@@ -49,6 +49,42 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26b (found + fixed: canonical /@handle profile had no way to start a message — "Messages tab goes nowhere"; PR #232 merged)
+
+**Trigger:** Marc reported the Messages tab "goes nowhere." Nav mechanics checked out clean (plain `<a href="/messages">`, no click interceptors, route registered correctly, token keys consistent between nav.js and messages.html). Root cause was one layer deeper.
+
+**Shipped (`79cb35e`, landed on `main` via PR #232, squash-merged):**
+- `public/profile-trader.html` — added a Message button to `card-actions`. `messages.html`'s own empty state literally says "No conversations yet. Message a trader from their profile." — but `profile-trader.html`, the canonical `/@handle` profile since the 2026-07-30 swap, had zero messaging entry point (confirmed via grep: no match at all). `member.html` (now only the handle-less fallback) still has a working `openMessage()` → `/messages?with=<id>` button; this port reuses that pattern, plus member.html's decode-JWT-`hf_token`-payload `isOwner` check so the button hides on your own profile.
+- This is exactly the gap the 2026-07-30 SESSION_STATE.md entry already named ("❌ NOT ported — follow/DM/copy-trade/challenge...") — it just hadn't produced a user-visible complaint until now.
+
+**⚠️ Found while merging: a concurrent session had already shipped the bigger half of this same bug on `main` — `9d6969f`/`5f4dd69` ("Messages: offer one-click wallet sign-in" / "drop the email sign-in option").** `messages.html`'s auth gate only recognized a JWT (`hf_token`) and had zero awareness of a connected wallet — so a `/connect` wallet-only user (the product's primary flow) looked signed-in site-wide but hit what read as a completely different, broken account system on Messages. That's very plausibly the dominant cause of "goes nowhere," not the missing button documented above. The two fixes are complementary, not conflicting: theirs fixes the auth gate, this entry's fixes the (separate, real) missing entry-point-to-start-a-conversation gap. Worth Marc confirming both together resolve the complaint, not assuming either one alone did.
+
+**Active blockers:**
+- Not manually click-tested against production (sandbox has no network path to hyperflex.network, confirmed repeatedly across many prior sessions) — verified via `node --check` on the extracted inline script and a read of `.card-actions`/`.btn-mini` CSS (flex-wrap + gap, no layout fix needed for a 3rd button) and the `/api/user/profile/:handle` response shape (`u.id` confirmed present) — not via an actual browser click-through.
+
+**Queued (priority order):**
+1. Marc confirms live: Message button appears on a real `/@handle` profile, and (combined with the concurrent auth-gate fix) actually opens a conversation end to end.
+2. Same audit is worth repeating for the other features the 2026-07-30 entry flagged as unported (follow/copy-trade/challenge) — Message was the one that surfaced first because it produced a dead-end complaint; the others may have the same "documented as missing, never followed up" shape.
+
+## 2026-08-26 (Smart-money-on-your-book vs. Bullpen Whales — comparison doc + illustrative mockup, research only, nothing built)
+
+**Shipped (with hashes):**
+- `20f595c` (landed on `main` via PR #232, squash-merged, bundled with the Messages fix below since both were on this session's designated branch) — `docs/specs/smart-money-book-bullpen-comparison-2026-08-10.md`. Covers: (1) Bullpen frames inflow as direction+convergence first, wallet-grade second (WalletScope is a drill-down); our planned Phase 1 SHARP-tier list inverts that — CLV grade is the filter before a row ever renders. (2) Bullpen's language is real-time streaming ("before the crowd piles in"); we're snapshot-on-login, consistent with the rest of the platform (`syncAllUserPositions()` hourly, `/connect` ingestion at 8.5–14.7s) — recommends NOT chasing real-time parity. (3) UI patterns worth taking: direction-as-text not just color, convergence grouping (maps onto the existing whale-cluster `consensusMap` logic already in server.js), size-as-visual-weight. Worth explicitly skipping: chronological sort, grade-behind-a-click.
+- Followed by an illustrative HTML mockup (Artifact + sent directly as a file, **not committed to the repo** — lives only in this session's `/tmp` scratchpad and as a private claude.ai artifact) showing the three recommended patterns applied to a fake SHARP-tier wallet list, styled with the site's real tokens (Inter/JetBrains Mono, paper/gold/green/red/blue). Wallet handles reused from CLAUDE.md's already-public hand-verified set (taerv534, MELOCOTON007, TB14, gloriafoster); dollar figures are placeholders, not real data.
+
+**Active blockers:**
+- **Doc's Bullpen claims are secondary-source only, not first-hand-verified.** WebFetch to `bullpen.fi`, `docs.bullpen.fi`, and `cli.bullpen.fi` all returned `EGRESS_BLOCKED` this session — every claim about Bullpen's actual UI comes from search-engine snippets of Bullpen's own blog/docs and third-party "7 tools" roundups (Medium/PANews/Odaily/MEXC), never a direct screenshot or walkthrough. Flagged inline in the doc itself. If this feature moves toward a real build, get an actual look at Bullpen (Marc likely has access) before copying any specific pattern as gospel.
+- **Unrelated, but still open and directly gates this whole feature regardless of the doc/mockup above:** the `GET /api/admin/wallet-position-schema` live curl from 2026-08-05c is still not run. Not touched this session. Still needs Marc to run it with the real `ADMIN_SECRET` (or paste the value) — Claude has no way to obtain that secret in this sandbox.
+- **The mockup exists nowhere durable.** It's not in the repo, not linked from any doc. If Marc wants to keep referencing it, it should get pulled into `docs/specs/` as a static file (or at minimum this entry is the only pointer to where it came from) — right now it only survives as long as the sent file / artifact link does.
+
+**Queued (priority order):**
+1. Marc reviews the comparison doc + mockup and decides whether/how the expanded SHARP-tier wallet list should differ from Bullpen's pattern (convergence grouping, row-level grade, weight bars) — this doc's whole purpose was to unblock that decision, nothing past it has happened yet.
+2. Wallet-position-schema curl (see blocker above) — separate, older ask, still open, still gates actual Phase 1 build start per the 9d7341d prerequisite named in this session's own task.
+3. (done — landed via PR #232 alongside the Messages fix, see the entry above)
+
+**Notes for next session:**
+- Comparison doc + mockup are prep/scoping only — no schema, endpoint, or `public/` changes happened this session, matching the explicit "what this doesn't do" scope from the task.
+- If the mockup's direction gets picked up for a real build, treat it as a rough sketch of the three patterns only — it wasn't built against `home-kings.html`'s actual component conventions (trader-card.js render path, existing CSS classes) and shouldn't be copy-pasted as production CSS.
 ## 2026-08-20 (homepage rebuild SHIPPED + verified live; six real bugs found only against production; one false diagnosis corrected)
 
 **Shipped and on origin/main.** Verify with `git log origin/main --oneline -8`. Commits: `5baf5b5` (build), `89e781c`, `38494c7`, `6b91165`, `178cc41`, `90b435a`, `45a2e54`, `327c348`, `4888ef5`. Live and confirmed at hyperflex.network.
