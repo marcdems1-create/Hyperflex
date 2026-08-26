@@ -43264,13 +43264,33 @@ async function _buildAlphaListInner(opts = {}) {
     let binanceVolSurge = {};
     try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
-    // Fetch a wider window from Gamma API — we sort client-side by 24h volume anyway,
-    // so the server-side sort just needs to be a valid parameter.
-    // Use order=volume — markets/keyset only accepts 'volume' (not 'volume24hr';
-    // that param works on events/keyset but returns 0 on markets/keyset).
+    // ⚠️ ORDER PARAM: `volumeNum`, NOT `volume`. Gamma's `volume` column is a
+    // STRING, so `order=volume` sorts it lexicographically — measured live
+    // 2026-08-26, it returned markets in the order 100, 100, 100, 100, 1000,
+    // 100, 99948… i.e. a $100 market outranking a $99,948 one. The "we sort
+    // client-side anyway so the server sort just needs to be valid" reasoning
+    // that used to sit here is wrong: the server sort decides WHICH markets we
+    // ever see, and re-sorting 100 near-random markets does not recover the
+    // ones that were never fetched. Downstream effect, measured on production
+    // the same day: the $10k 24h-volume floor below left **9 markets** in
+    // `_screenerCache` with **zero whales matched platform-wide** — which is
+    // what /alpha-live, /api/signals, /api/alpha/top and the whale enrichment
+    // on /markets were all quietly running on.
+    //
+    // The old comment also claimed markets/keyset rejects `volume24hr`. It does
+    // not — both `volumeNum` and `volume24hr` sort correctly there (verified
+    // live). `volumeNum` is used because it is densely populated, while gamma
+    // only stamps `volume24hr` on roughly half of rows; the client-side `_vol`
+    // sort below still applies the 24h preference within the fetched window.
+    //
+    // NOTE (not fixed here): `limit=500` is also a lie — keyset caps a page at
+    // 100 and returns a `next_cursor`. This fetches 100, not 500. Correcting
+    // the sort makes those 100 the genuine top 100, which is the change worth
+    // making on its own; paging deeper is a separate, costlier decision
+    // (enrichment + whale matching scale with it).
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volumeNum&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
