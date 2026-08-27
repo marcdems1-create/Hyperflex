@@ -51,7 +51,7 @@
 
 ## 2026-08-26h (/markets is the page path; Yield folded into the bottom of that page)
 
-**Shipped:** `f489610` on `fix/alpha-liveness` (pushing to `origin/main`). `server.js`, `public/nav.js`, `public/finance.html`, `public/home.html`, `test/yield-live.test.js`.
+**Shipped:** `87e22fe` on `origin/main`. `server.js`, `public/nav.js`, `public/finance.html`, `public/home.html`, `test/yield-live.test.js`.
 
 **What changed:**
 - `GET /markets` serves `finance.html`. Old JSON list is `GET /api/community-markets`.
