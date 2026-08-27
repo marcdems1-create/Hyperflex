@@ -13209,7 +13209,7 @@ async function _buildTraderCards(roiRows) {
   // ISN'T uuid.
   const tradeRows = await dbQuery(`
     SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
-           entry_cost_usd, realized_pnl, realized_roi, closed_at, close_reason
+           entry_cost_usd, realized_pnl, realized_roi, closed_at, close_reason, condition_id
     FROM realized_trades
     WHERE user_id = ANY($1::uuid[]) AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
       AND market_durability = 'durable'
@@ -13257,7 +13257,7 @@ async function _buildTraderCards(roiRows) {
         maxTrade = { question: t.market_question, side: (t.side || '').toUpperCase(),
           entry_price: t.entry_price != null ? Number(t.entry_price) : null,
           exit_price: t.exit_price != null ? Number(t.exit_price) : null,
-          pnl, roi, daysAgo, isWin };
+          pnl, roi, daysAgo, isWin, conditionId: t.condition_id || null };
       }
     }
 
@@ -13331,6 +13331,7 @@ async function _buildTraderCards(roiRows) {
       multiplier: maxTrade.roi != null && maxTrade.roi >= 1 ? Math.round((1 + maxTrade.roi) * 10) / 10 : null,
       pnl_usd: Math.round(maxTrade.pnl * 100) / 100,
       days_ago: maxTrade.daysAgo != null ? Math.round(maxTrade.daysAgo) : null,
+      condition_id: maxTrade.conditionId, // stripped by _attachTradeCta before any response ships it
     } : null;
 
     return {
@@ -13481,12 +13482,22 @@ async function _computeCategoryRoiLeaderboards() {
   return result;
 }
 
+// 3-min cache, keyed by the request's own params — this endpoint now makes
+// one live gamma lookup per distinct evidence market (to decide whether its
+// "get in this trade" CTA can render), same reasoning as
+// _categoryWinsCache above.
+let _traderCardsCache = new Map(); // key -> { data, ts }
+const TRADER_CARDS_CACHE_MS = 3 * 60 * 1000;
+
 app.get('/api/trader-cards', async (req, res) => {
   try {
     if (!pool) return res.json({ cards: [] });
     const window = ['30d', '90d', 'all'].includes(req.query.window) ? req.query.window : 'all';
     const minN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.min_n, 10) || ROI_MIN_N_FLOOR);
     const limit = Math.min(24, parseInt(req.query.limit, 10) || 12);
+    const cacheKey = window + '|' + minN + '|' + limit + '|' + (req.query.user_id || '');
+    const cached = _traderCardsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < TRADER_CARDS_CACHE_MS) return res.json(cached.data);
 
     const computed = await _computeRoiLeaderboard(window, minN);
     if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
@@ -13501,7 +13512,21 @@ app.get('/api/trader-cards', async (req, res) => {
 
     const cards = await _buildTraderCards(rows);
     if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
-    res.json({ cards });
+
+    // "Get in this trade" enrichment — only on WIN evidence (never prompt
+    // someone toward the same trade that lost the featured wallet money).
+    // See _attachTradeCta's own comment for the "closed trade, market may
+    // have since resolved" reasoning.
+    await _attachTradeCta(
+      cards.filter(c => c.evidence && c.evidence.result === 'win'),
+      c => c.evidence.condition_id,
+      c => c.evidence.side,
+      (c, trade) => { c.evidence.trade = trade; }
+    );
+
+    const payload = { cards };
+    _traderCardsCache.set(cacheKey, { data: payload, ts: Date.now() });
+    res.json(payload);
   } catch (e) {
     console.error('[trader-cards]', e.message);
     res.status(500).json({ error: e.message });
@@ -14099,41 +14124,14 @@ app.get('/api/feed/category-wins', async (req, res) => {
       })
       .filter(c => c.entries.length >= 3); // thin categories with <3 real wins aren't a "wall"
 
-    // ── "Trade this" enrichment ─────────────────────────────────────────
-    // A win here is a CLOSED trade — the market it happened on may since
-    // have resolved, in which case there is nothing left to trade. Cross-
-    // reference every entry's condition_id against live gamma (same
-    // _fetchPolymarketMeta() helper the settlement-verification paths
-    // already use — see CLAUDE.md rule 10) and only attach `trade` when
-    // the market is demonstrably still open. A card whose CTA can't work
-    // must never render one — same defensive rule home-kings.html's
-    // live-calls CTA follows.
-    const uniqueConditionIds = [...new Set(
-      categories.flatMap(c => c.entries.map(e => e.win.condition_id)).filter(Boolean)
-    )];
-    const metaById = new Map();
-    await _mapLimit(uniqueConditionIds, 8, async (cid) => {
-      const meta = await _fetchPolymarketMeta(cid).catch(() => null);
-      if (meta) metaById.set(cid, meta);
-    });
-    for (const c of categories) {
-      for (const e of c.entries) {
-        const cid = e.win.condition_id;
-        const meta = cid ? metaById.get(cid) : null;
-        // Binary YES/NO only — a named multi-outcome side (e.g. a specific
-        // candidate) can't be passed to the prefilled trade widget.
-        const sideOk = e.win.side === 'YES' || e.win.side === 'NO';
-        const tradeable = !!(meta && !meta.closed && meta.active && meta.slug && sideOk
-          && (meta.lastTradePrice != null || meta.bestBid != null || meta.bestAsk != null));
-        e.trade = tradeable ? {
-          slug: meta.slug,
-          current_price: meta.lastTradePrice != null ? meta.lastTradePrice
-            : (meta.bestBid != null && meta.bestAsk != null ? Math.round(((meta.bestBid + meta.bestAsk) / 2) * 1e4) / 1e4
-              : (meta.bestAsk != null ? meta.bestAsk : meta.bestBid)),
-        } : null;
-        delete e.win.condition_id; // internal join key only, not a public field
-      }
-    }
+    // "Trade this" enrichment — see _attachTradeCta's own comment. A win
+    // here is a CLOSED trade, so the market may have since resolved.
+    await _attachTradeCta(
+      categories.flatMap(c => c.entries),
+      e => e.win.condition_id,
+      e => e.win.side,
+      (e, trade) => { e.trade = trade; delete e.win.condition_id; } // internal join key, not public
+    );
 
     const payload = { categories };
     _categoryWinsCache.set(limit, { data: payload, ts: Date.now() });
@@ -14152,25 +14150,40 @@ app.get('/api/feed/category-wins', async (req, res) => {
 // _buildTraderCards() every other trader surface uses to get full cards
 // (verdict/evidence/form/streak) rather than inventing a second, thinner
 // card shape just for this view.
+let _categoryLeaderboardCache = new Map(); // key -> { data, ts } — same 3-min reasoning as _traderCardsCache
 app.get('/api/category-leaderboard', async (req, res) => {
   try {
     const category = String(req.query.category || '').toLowerCase();
     if (!category || category === 'other') return res.status(400).json({ error: 'invalid category' });
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const cacheKey = category + '|' + limit;
+    const cached = _categoryLeaderboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < TRADER_CARDS_CACHE_MS) return res.json(cached.data);
 
     const byCategory = await _computeCategoryRoiLeaderboards();
     if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
     const cat = byCategory[category];
     if (!cat) return res.json({ category, label: category.charAt(0).toUpperCase() + category.slice(1), qualifying_count: 0, cards: [] });
 
-    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
     const rows = cat.leaderboard.slice(0, limit);
     const cards = rows.length ? await _buildTraderCards(rows) : [];
     if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
 
-    res.json({
+    // Same "get in this trade" enrichment as /api/trader-cards — see
+    // _attachTradeCta's own comment.
+    await _attachTradeCta(
+      cards.filter(c => c.evidence && c.evidence.result === 'win'),
+      c => c.evidence.condition_id,
+      c => c.evidence.side,
+      (c, trade) => { c.evidence.trade = trade; }
+    );
+
+    const payload = {
       category, label: category.charAt(0).toUpperCase() + category.slice(1),
       qualifying_count: cat.qualifying_count, cards,
-    });
+    };
+    _categoryLeaderboardCache.set(cacheKey, { data: payload, ts: Date.now() });
+    res.json(payload);
   } catch (e) {
     console.error('[category-leaderboard]', e.message);
     res.status(500).json({ error: e.message });
@@ -24213,6 +24226,40 @@ app.post('/api/admin/markets/sport-tag/sweep', async (req, res) => {
   const result = await sweepMarketSportTags();
   res.json(result);
 });
+
+// Cross-references a set of realized-trade condition_ids against live gamma
+// and attaches a `trade: {slug, current_price}` field to each entry whose
+// market is CONFIRMED still open + active + binary — never to one that may
+// have resolved since the trade closed. Shared by /api/feed/category-wins
+// and /api/trader-cards' + /api/category-leaderboard's evidence CTA — all
+// three show a CLOSED trade and all three need the identical "never render
+// a CTA that can't work" gate home-kings.html's live-calls CTA follows.
+// `entries` is any array of objects; `getCid`/`getSide` read the fields to
+// check, `setTrade` writes the result.
+async function _attachTradeCta(entries, getCid, getSide, setTrade) {
+  const uniqueConditionIds = [...new Set(entries.map(getCid).filter(Boolean))];
+  const metaById = new Map();
+  await _mapLimit(uniqueConditionIds, 8, async (cid) => {
+    const meta = await _fetchPolymarketMeta(cid).catch(() => null);
+    if (meta) metaById.set(cid, meta);
+  });
+  for (const entry of entries) {
+    const cid = getCid(entry);
+    const meta = cid ? metaById.get(cid) : null;
+    const side = getSide(entry);
+    // Binary YES/NO only — a named multi-outcome side (e.g. a specific
+    // candidate) can't be passed to the prefilled trade widget.
+    const sideOk = side === 'YES' || side === 'NO';
+    const tradeable = !!(meta && !meta.closed && meta.active && meta.slug && sideOk
+      && (meta.lastTradePrice != null || meta.bestBid != null || meta.bestAsk != null));
+    setTrade(entry, tradeable ? {
+      slug: meta.slug,
+      current_price: meta.lastTradePrice != null ? meta.lastTradePrice
+        : (meta.bestBid != null && meta.bestAsk != null ? Math.round(((meta.bestBid + meta.bestAsk) / 2) * 1e4) / 1e4
+          : (meta.bestAsk != null ? meta.bestAsk : meta.bestBid)),
+    } : null);
+  }
+}
 
 // ── T3 · CLOSING-PRICE SNAPSHOTS ────────────────────────────────────────────
 // Bedrock for CLV. For every sports-tagged market (from T2), snapshot the

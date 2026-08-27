@@ -17,12 +17,17 @@
   border: 1px solid #1e1e2a;
   border-radius: 14px;
   padding: 20px;
-  text-decoration: none;
   color: #f0f0f5;
   transition: border-color .15s, transform .15s;
   font-family: 'Inter', -apple-system, sans-serif;
 }
 .tcard:hover { border-color: #33333f; transform: translateY(-2px); }
+/* ── the card used to be one big <a> to the trader's profile. A second,
+   distinct action (get in the trade) can't nest inside it — nested <a>
+   tags are invalid HTML. .tcard-link now carries everything that used to
+   sit directly on the outer element (which is now a plain <article>); the
+   CTA is a sibling, same split as feed.html's .wcard-link / .wcard-cta. ── */
+.tcard-link { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit; flex: 1; min-height: 0; }
 
 /* ── identity row — no avatar-initials circle (Marc, on the same pattern
    elsewhere: "the score should be a number... put the score there and make
@@ -142,6 +147,24 @@
 .tcard-streak.is-win { color: #00e68a; background: rgba(0,230,138,.08); border: 1px solid rgba(0,230,138,.2); }
 .tcard-streak.is-loss { color: #ff4d6a; background: rgba(255,77,106,.07); border: 1px solid rgba(255,77,106,.18); }
 .tcard-streak.is-push { color: rgba(240,240,245,.4); background: rgba(240,240,245,.05); border: 1px solid rgba(240,240,245,.1); }
+
+/* ── "get in the trade" CTA — only rendered when the server confirmed
+   (live gamma) the evidence trade's market is still open, and only on a
+   WIN (never prompt toward the trade that lost this wallet money). Not
+   shown on 'compact' — that density already hides .tcard-evidence
+   entirely, so there's no specific trade to reference. Same gold-gradient
+   treatment as feed.html's .wcard-cta / home-kings.html's .call-cta. ── */
+.tcard-cta {
+  display: block; text-align: center; text-decoration: none;
+  font-family: 'Inter', -apple-system, sans-serif; font-weight: 700; font-size: 13px;
+  color: #151109; background: linear-gradient(180deg, #e0aa2e, #c9920d);
+  border: 1px solid #c9920d; border-radius: 8px; padding: 10px 12px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 8px 18px -10px rgba(201,146,13,.6);
+  transition: transform .15s ease;
+}
+.tcard-cta:hover { transform: translateY(-1px); }
+.tcard-compact .tcard-cta { display: none; }
+@media (prefers-reduced-motion: reduce) { .tcard-cta { transition: none; } }
 
 /* ── variants ── */
 .tcard-hero { width: 100%; max-width: 480px; padding: 26px; gap: 18px; }
