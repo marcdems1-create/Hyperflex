@@ -49,6 +49,53 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-24c (homepage board outage — hardening, cause NOT yet confirmed)
+
+**Symptom:** homepage shows "Could not load board figures." on all four
+charts and em-dashes on all four KPI tiles. HTML serves fine, so the app is
+up and the data layer is not.
+
+**Not a code regression.** `/api/board-stats`, `_computeRoiLeaderboard`, the
+pg pool and `home-kings.html` are all unchanged across the 22 commits that
+landed on main since `1650220`. The branch `claude/homepage-visual-pass` is
+NOT on main and was never deployed.
+
+**Root cause still unconfirmed** — the agent sandbox cannot reach
+hyperflex.network (proxy 403 on CONNECT). Two candidates, distinguished by
+one request that can be opened in a phone browser:
+- `/api/health` → `has_pool: false` means `DATABASE_URL` is missing/invalid
+  on the deploy. Boot log then reads `[boot] No DATABASE_URL — falling back
+  to Supabase REST client only`. **Primary suspect**: it explains every
+  data-backed section being empty at once while HTML still serves.
+- `/api/board-stats` → `500 {"error":"durable trade query failed"}` means the
+  durable query timed out (server log `[board-stats] durable fetch:`).
+
+**Shipped anyway (branch `claude/board-stats-resilience`, off main):**
+- `/api/board-stats` durable query is now `GROUP BY market_question` in SQL
+  instead of selecting every durable trade and summing in JS. The old form
+  had no LIMIT and grew with the trade table against a fixed
+  `statement_timeout: 15000` — a query that only gets slower against a fixed
+  ceiling eventually fails permanently.
+- The endpoint degrades instead of 500ing: if the durable query fails it
+  returns 200 with `figures_unavailable: true`, still serving the Flex Score
+  distribution and the ROI split (both come from the leaderboard, not the
+  durable rows). The degraded payload is deliberately NOT cached.
+- Client says "Figures temporarily unavailable — not a reading of zero" on
+  the two affected charts. It must never print "no graded capital yet"
+  during an outage — that is a claim about the record, not the outage.
+- Fixed `they hold $NaN` in the live-call footer
+  (`Number(undefined).toLocaleString()` is the string "NaN").
+
+**Active blockers:**
+- Root cause unconfirmed. This hardening removes one candidate and makes the
+  other survivable; it does not fix a missing `DATABASE_URL`.
+
+**Notes for next session:**
+- Open `/api/health` first. If `has_pool` is false, it is an env var on the
+  deploy, not code — no amount of query tuning will help.
+- New suite: `npm run test:board-stats` (130 assertions) proves the
+  aggregation refactor is numerically identical to the per-trade loop.
+
 ## 2026-08-26h (/markets is the page path; Yield folded into the bottom of that page)
 
 **Shipped:** `87e22fe` on `origin/main`. `server.js`, `public/nav.js`, `public/finance.html`, `public/home.html`, `test/yield-live.test.js`.

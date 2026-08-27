@@ -13661,11 +13661,30 @@ app.get('/api/board-stats', async (req, res) => {
     const [board, byCategory, durableRows, totalsRows] = await Promise.all([
       _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
       _computeCategoryRoiLeaderboards().catch(() => null),
+      // Aggregated in SQL, one row per market question, NOT one row per
+      // trade. The previous form selected every durable trade with no LIMIT
+      // and summed them in JS, so its cost grew with the trade table while
+      // the pool enforces statement_timeout: 15000 — a query that only ever
+      // gets slower against a fixed ceiling eventually fails permanently,
+      // and when it does this endpoint takes all four charts AND all four
+      // KPI tiles down with it. Grouping collapses the transfer to the
+      // number of distinct markets (orders of magnitude fewer rows) and
+      // leaves the arithmetic identical: the classifier still needs
+      // market_question in JS, which is the only reason this isn't grouped
+      // by category in SQL too.
       dbQuery(`
-        SELECT market_question, entry_cost_usd, realized_pnl, closed_at
+        SELECT market_question,
+               COUNT(*)::int                                 AS trades,
+               COUNT(*) FILTER (WHERE realized_pnl > 0)::int  AS wins,
+               COUNT(*) FILTER (WHERE realized_pnl < 0)::int  AS losses,
+               COUNT(*) FILTER (WHERE realized_pnl = 0)::int  AS pushes,
+               SUM(entry_cost_usd)::float8                    AS capital,
+               MIN(closed_at)                                 AS first_close,
+               MAX(closed_at)                                 AS last_close
         FROM realized_trades
         WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL
           AND closed_at IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+        GROUP BY market_question
       `).catch(e => { console.warn('[board-stats] durable fetch:', e.message); return null; }),
       dbQuery(`
         SELECT COUNT(*)::int AS graded_trades,
@@ -13674,7 +13693,53 @@ app.get('/api/board-stats', async (req, res) => {
         FROM realized_trades WHERE closed_at IS NOT NULL
       `).catch(() => null),
     ]);
-    if (durableRows == null) return res.status(500).json({ error: 'durable trade query failed' });
+    // ── Flex Score distribution + profitable/losing split. These come from
+    // the ROI leaderboard, NOT from the durable rows, so they are computed
+    // first: if the durable query is the thing that failed, these two charts
+    // can still render instead of the whole board going dark.
+    const rankedRows = board ? board.rows : [];
+    const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
+      label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
+    }));
+    let unscored = 0, profitableWallets = 0, losingWallets = 0;
+    for (const r of rankedRows) {
+      if (r.flex_score == null) unscored++;
+      else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
+      if (r.raw_weighted_roi_pct != null) {
+        if (r.raw_weighted_roi_pct > 0) profitableWallets++;
+        else if (r.raw_weighted_roi_pct < 0) losingWallets++;
+      }
+    }
+    const totalsRow = totalsRows && totalsRows[0] ? totalsRows[0] : {};
+    const SCOPE_NOTE = 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.';
+
+    // Partial service beats a blank board. `figures_unavailable` tells the
+    // client these figures are MISSING, not zero — the charts that depend on
+    // them must say "unavailable", never "no data yet", which would be a
+    // claim about the record rather than about the outage.
+    // Deliberately NOT cached: caching a degraded payload would keep the
+    // board broken for the full 5-minute TTL after the database recovers.
+    if (durableRows == null) {
+      return res.json({
+        figures_unavailable: true,
+        totals: {
+          ranked_wallets: board ? rankedRows.length : null,
+          minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+          wallets_tracked: totalsRow.wallets_tracked ?? null,
+          graded_trades: totalsRow.graded_trades ?? null,
+          durable_trades: totalsRow.durable_trades ?? null,
+          scored_trades: null, wins: null, losses: null, pushes: null,
+          win_rate_pct: null, capital_usd: null,
+          first_resolution_at: null, last_resolution_at: null,
+        },
+        categories: null,
+        uncategorized: null,
+        score_distribution: board ? { buckets: scoreBuckets, unscored } : null,
+        wallet_roi_split: board ? { profitable: profitableWallets, losing: losingWallets } : null,
+        scope_note: SCOPE_NOTE,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     // ── per-category rollup over every durable trade (not just ranked
     // wallets') so a category's real depth isn't understated by a thin
@@ -13682,21 +13747,24 @@ app.get('/api/board-stats', async (req, res) => {
     // liquidity figure, and the same documented caveat: this is capital
     // OUR tracked wallets deployed, not Polymarket's own category volume.
     const catAgg = new Map();
-    let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
+    let wins = 0, losses = 0, pushes = 0, capitalUsd = 0, scoredTrades = 0;
     let uncategorizedCapital = 0, uncategorizedTrades = 0;
     let firstClose = null, lastClose = null;
 
+    // One row per market question now (see the GROUP BY above), so every
+    // accumulator adds a count instead of incrementing by one.
     for (const t of durableRows) {
-      const pnl = Number(t.realized_pnl);
-      const cost = Number(t.entry_cost_usd);
+      const trades = Number(t.trades) || 0;
+      const w = Number(t.wins) || 0, l = Number(t.losses) || 0, p = Number(t.pushes) || 0;
+      const cost = Number(t.capital) || 0;
+      scoredTrades += trades;
       capitalUsd += cost;
-      if (pnl > 0) wins++; else if (pnl < 0) losses++; else pushes++;
+      wins += w; losses += l; pushes += p;
 
-      const ms = new Date(t.closed_at).getTime();
-      if (!Number.isNaN(ms)) {
-        if (firstClose == null || ms < firstClose) firstClose = ms;
-        if (lastClose == null || ms > lastClose) lastClose = ms;
-      }
+      const firstMs = t.first_close ? new Date(t.first_close).getTime() : NaN;
+      const lastMs = t.last_close ? new Date(t.last_close).getTime() : NaN;
+      if (!Number.isNaN(firstMs) && (firstClose == null || firstMs < firstClose)) firstClose = firstMs;
+      if (!Number.isNaN(lastMs) && (lastClose == null || lastMs > lastClose)) lastClose = lastMs;
 
       const category = classifyCardCategory(t.market_question);
       if (category === 'other') {
@@ -13708,13 +13776,13 @@ app.get('/api/board-stats', async (req, res) => {
         // headline "capital graded" figure is a number that contradicts the
         // tile directly above it.
         uncategorizedCapital += cost;
-        uncategorizedTrades++;
+        uncategorizedTrades += trades;
         continue;
       }
       if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
       const c = catAgg.get(category);
-      c.trades++; c.capital += cost;
-      if (pnl > 0) c.wins++; else if (pnl < 0) c.losses++;
+      c.trades += trades; c.capital += cost;
+      c.wins += w; c.losses += l;
     }
 
     const categories = [...catAgg.entries()]
@@ -13732,24 +13800,9 @@ app.get('/api/board-stats', async (req, res) => {
       }))
       .sort((a, b) => b.capital_usd - a.capital_usd);
 
-    // ── Flex Score distribution across the ranked board, in tens. A wallet
-    // on the board with no flex_score yet is counted separately rather than
-    // bucketed at zero, which would invent a rating it doesn't have.
-    const rankedRows = board ? board.rows : [];
-    const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
-      label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
-    }));
-    let unscored = 0, profitableWallets = 0, losingWallets = 0;
-    for (const r of rankedRows) {
-      if (r.flex_score == null) unscored++;
-      else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
-      if (r.raw_weighted_roi_pct != null) {
-        if (r.raw_weighted_roi_pct > 0) profitableWallets++;
-        else if (r.raw_weighted_roi_pct < 0) losingWallets++;
-      }
-    }
-
-    const totals = totalsRows && totalsRows[0] ? totalsRows[0] : {};
+    // (Flex Score distribution + ROI split are computed above, before the
+    // durable-query bail-out, so the degraded path can still serve them.)
+    const totals = totalsRow;
     const data = {
       totals: {
         ranked_wallets: board ? rankedRows.length : null,
@@ -13757,7 +13810,7 @@ app.get('/api/board-stats', async (req, res) => {
         wallets_tracked: totals.wallets_tracked ?? null,
         graded_trades: totals.graded_trades ?? null,
         durable_trades: totals.durable_trades ?? null,
-        scored_trades: durableRows.length,
+        scored_trades: scoredTrades,
         wins, losses, pushes,
         win_rate_pct: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 1000) / 10 : null,
         capital_usd: Math.round(capitalUsd),
@@ -13770,7 +13823,7 @@ app.get('/api/board-stats', async (req, res) => {
       uncategorized: { capital_usd: Math.round(uncategorizedCapital), trades: uncategorizedTrades },
       score_distribution: { buckets: scoreBuckets, unscored },
       wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
-      scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',
+      scope_note: SCOPE_NOTE,
       updated_at: new Date().toISOString(),
     };
 

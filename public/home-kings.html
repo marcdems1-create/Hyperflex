@@ -1855,8 +1855,13 @@ function callCardHtml(c){
     // prediction market cannot tell what "Trade NO at 90¢" buys or what it
     // pays, and bouncing them for lack of jargon costs us the exact visitor
     // this surface exists to convert.
+    // Number(undefined).toLocaleString() is the string "NaN", so a payload
+    // missing this field printed "they hold $NaN" on the one surface whose
+    // whole claim is that its numbers reconcile. Drop the clause instead.
     + '<p class="call-foot">' + esc(centsOf(c.current_price)) + ' a share, pays $1 if ' + esc(m.side) + ' resolves'
-      + ' · they hold $' + esc(Number(c.trader_position_usd).toLocaleString('en-US'))
+      + (Number.isFinite(Number(c.trader_position_usd))
+          ? ' · they hold $' + esc(Number(c.trader_position_usd).toLocaleString('en-US'))
+          : '')
       + ' · you set your own size</p>'
   + '</article>';
 }
@@ -2155,8 +2160,21 @@ function loadBoardStats(){
     .then(function(d){
       if (!d) throw new Error('no data');
       renderKpis(d.totals || {});
-      renderCapitalDonut(d.categories, d.uncategorized);
-      renderWinLoss(d.categories);
+      // `figures_unavailable` means the durable-trade query failed while the
+      // rest of the response survived. The two charts built from it must say
+      // so: "No graded capital to break down yet" is a statement about the
+      // record, and printing it during an outage would be a false one.
+      if (d.figures_unavailable) {
+        ['capitalChart', 'winLossChart'].forEach(function(id){
+          var el = document.getElementById(id);
+          if (el) el.innerHTML = '<p class="chart-empty">Figures temporarily unavailable — not a reading of zero.</p>';
+        });
+      } else {
+        renderCapitalDonut(d.categories, d.uncategorized);
+        renderWinLoss(d.categories);
+      }
+      // Both of these come from the leaderboard, not the durable rows, so
+      // they still render during that partial outage.
       renderScoreHist(d.score_distribution || {});
       renderSplit(d.wallet_roi_split);
       var note = document.getElementById('boardScopeNote');
