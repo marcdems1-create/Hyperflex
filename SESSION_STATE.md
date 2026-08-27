@@ -49,6 +49,18 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-27a (Yield cards moved to the top of /markets)
+
+**Shipped:** `4e4d9fe` on `origin/main`. `public/finance.html` only.
+
+**What changed:** `#yield` (reward cards + book visual) now sits under the page header, above the market KPI row / The read / The board. Same APIs, same cards — order on the page flipped because the cards read better than the list as the lead.
+
+**Active blockers:** none from this pass. `limit=500` keyset cap still open from 26g.
+
+**Queued:** none.
+
+**Notes for next session:** hard-reload `/markets` — the route already sends `no-cache`.
+
 ## 2026-08-26h (/markets is the page path; Yield folded into the bottom of that page)
 
 **Shipped:** `87e22fe` on `origin/main`. `server.js`, `public/nav.js`, `public/finance.html`, `public/home.html`, `test/yield-live.test.js`.
