@@ -60,15 +60,21 @@ pg pool and `home-kings.html` are all unchanged across the 22 commits that
 landed on main since `1650220`. The branch `claude/homepage-visual-pass` is
 NOT on main and was never deployed.
 
-**Root cause still unconfirmed** — the agent sandbox cannot reach
-hyperflex.network (proxy 403 on CONNECT). Two candidates, distinguished by
-one request that can be opened in a phone browser:
-- `/api/health` → `has_pool: false` means `DATABASE_URL` is missing/invalid
-  on the deploy. Boot log then reads `[boot] No DATABASE_URL — falling back
-  to Supabase REST client only`. **Primary suspect**: it explains every
-  data-backed section being empty at once while HTML still serves.
-- `/api/board-stats` → `500 {"error":"durable trade query failed"}` means the
-  durable query timed out (server log `[board-stats] durable fetch:`).
+**Root cause — DB layer saturated, NOT config and NOT a code regression.**
+Live `/api/health` on 2026-08-27 17:21Z returned:
+`has_pool:true, pg_ok:false, pg_error:"pg_timeout_5s",
+ supabase_ok:false, supabase_error:"supabase_timeout_5s"`
+So `DATABASE_URL` is set and correct — the env-var theory is dead. Both the
+direct pool and the Supabase REST client time out at 5s simultaneously,
+including a `count(*)` on `users`. That is contention, not a broken query.
+
+**The load source found by audit:** `_computeRoiLeaderboard` runs a
+GROUPING SETS aggregate over every durable row of `realized_trades` and had
+**no cache at all**, while being the first thing `/api/board-stats`,
+`/api/live-calls`, `/api/kings` and `/api/category-leaderboard` each do. One
+cold homepage load therefore fired several concurrent full scans, each able
+to hold one of 25 pool connections for the full 15s `statement_timeout`.
+Same cascade class CLAUDE.md already records at the max:5 → max:25 bump.
 
 **Shipped anyway (branch `claude/board-stats-resilience`, off main):**
 - `/api/board-stats` durable query is now `GROUP BY market_question` in SQL
@@ -86,9 +92,21 @@ one request that can be opened in a phone browser:
 - Fixed `they hold $NaN` in the live-call footer
   (`Number(undefined).toLocaleString()` is the string "NaN").
 
+**Also shipped (same branch), after the health reading:**
+- `_computeRoiLeaderboard` now has a 90s result cache **and single-flight**
+  (concurrent callers with the same key await one query). Single-flight is
+  the half that stops the cold-cache stampede. A null/failed result is never
+  cached, so recovery is immediate.
+- `/api/health` now reports `pool: {total, idle, waiting, max}` and a
+  separate `pg_ping` (`SELECT 1`). The old probe was `count(*) FROM users` —
+  a full scan, which can time out on its own merit while Postgres is fine.
+  `waiting > 0` with `idle: 0` is the signature of pool exhaustion.
+
 **Active blockers:**
-- Root cause unconfirmed. This hardening removes one candidate and makes the
-  other survivable; it does not fix a missing `DATABASE_URL`.
+- Whether load reduction alone clears it is UNVERIFIED — the sandbox cannot
+  reach production. If `pool.waiting` stays high after deploy, the database
+  itself needs attention (Railway metrics: connections, CPU, disk), not more
+  query tuning.
 
 **Notes for next session:**
 - Open `/api/health` first. If `has_pool` is false, it is an env var on the

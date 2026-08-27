@@ -1510,7 +1510,31 @@ app.get('/api/health', async (req, res) => {
     has_pool: !!pool,
     timestamp: new Date().toISOString()
   };
-  // Test 1: Direct Postgres pool (the fix)
+  // Pool saturation, which was previously invisible here. This is the field
+  // that separates "the database is down" from "every connection is busy":
+  // waiting > 0 with idle 0 means callers are queued behind the pool's max,
+  // and a trivial query will report a timeout even though Postgres is fine.
+  if (pool) {
+    checks.pool = {
+      total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: 25,
+    };
+  }
+  // Test 1a: liveness. SELECT 1 touches no table, so if THIS times out the
+  // problem is reaching Postgres or getting a connection, not query cost.
+  if (pool) {
+    try {
+      const start = Date.now();
+      await Promise.race([
+        pool.query('SELECT 1'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('pg_ping_timeout_5s')), 5000))
+      ]);
+      checks.pg_ping_ms = Date.now() - start;
+      checks.pg_ping_ok = true;
+    } catch (e) { checks.pg_ping_ok = false; checks.pg_ping_error = e.message; }
+  }
+  // Test 1b: the original count(*) probe. Kept, but it is NOT a liveness
+  // check — count(*) on users is a full scan, so it can time out on its own
+  // merit while the database is perfectly healthy. Compare against the ping.
   if (pool) {
     try {
       const start = Date.now();
@@ -12682,7 +12706,49 @@ function _roiWindowClause(window) {
   return ''; // all-time
 }
 
+// ── ROI leaderboard cache + single-flight ────────────────────────────────
+// _computeRoiLeaderboard runs a GROUPING SETS aggregate across every durable
+// row of realized_trades. It had no cache, and it is the first thing
+// /api/board-stats, /api/live-calls, /api/kings and /api/category-leaderboard
+// each do — so ONE cold homepage load fired several of these concurrently,
+// each able to hold a pool connection for the full statement_timeout (15s)
+// against a pool of 25. That is how a trivial query elsewhere ends up
+// reporting a 5s timeout: the pool is exhausted, not the database broken.
+// (Same class of cascade CLAUDE.md records at the max:5 -> max:25 bump.)
+//
+// Two protections, both deliberately small:
+//   · a short result cache, well under the 3-5 min TTLs the endpoints above
+//     already apply on top, so freshness is unchanged in practice;
+//   · single-flight — concurrent callers with the same key await ONE query
+//     instead of each starting their own. This is the half that actually
+//     stops the thundering herd; a plain cache still lets N cold callers
+//     stampede simultaneously.
+const _roiBoardCache = new Map();    // key -> { ts, data }
+const _roiBoardInflight = new Map(); // key -> Promise
+const ROI_BOARD_TTL_MS = 90 * 1000;
+
 async function _computeRoiLeaderboard(window, minN) {
+  const key = String(window) + ':' + String(minN);
+  const hit = _roiBoardCache.get(key);
+  if (hit && Date.now() - hit.ts < ROI_BOARD_TTL_MS) return hit.data;
+
+  const inflight = _roiBoardInflight.get(key);
+  if (inflight) return inflight;
+
+  const p = _computeRoiLeaderboardUncached(window, minN)
+    .then((data) => {
+      // Only a real result is cached. Caching a null would pin the board to
+      // "query failed" for the whole TTL after the database recovers.
+      if (data != null) _roiBoardCache.set(key, { ts: Date.now(), data });
+      return data;
+    })
+    .finally(() => { _roiBoardInflight.delete(key); });
+
+  _roiBoardInflight.set(key, p);
+  return p;
+}
+
+async function _computeRoiLeaderboardUncached(window, minN) {
   const windowClause = _roiWindowClause(window);
   // Eligibility gate changed 2026-07-20: was `u.is_whale = true` (capital
   // deployed). Found that selection axis structurally over-represents
