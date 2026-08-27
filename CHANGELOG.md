@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-08-26 — feat(markets): page lives at `/markets`; Yield is a section, not a tab
+
+### feat(server.js): `GET /markets` is the page, not the old JSON
+- `GET /markets` used to return the community-markets table as JSON, which is why nav pointed "Markets" at `/finance`. It now `sendFile`s `public/finance.html`. The JSON list moved to `GET /api/community-markets` (no in-repo client was fetching `GET /markets`).
+- `GET /finance` and `GET /mentions` 301 → `/markets`. `GET /incentives` 301 → `/markets#yield`. `GET /markets/:id` and `POST /markets` unchanged (community-market CRUD).
+- Sitemap includes `/markets`. Reserved slug `finance` added ( `markets` was already reserved).
+
+### feat(public/nav.js + public/finance.html): Yield folds into the board
+- Primary nav: Yield tab removed; Markets href is `/markets`. Search still finds "Yield" → `/markets#yield`.
+- Heading "All markets" → "The board" (pairs with homepage "The read"). Market list stays.
+- Yield section (`#yield`) is the old `/incentives` rewards board (stats, reward cards, order-book visual), appended below the market list. Same APIs: `/api/ecosystem/rewards`, `/api/incentives/stats`, `/api/incentives/active`.
+
+### Don't break
+- Do not put JSON back on `GET /markets`. Do not re-add a Yield primary-nav tab. `events?order=volume` still must not be "fixed" to `volumeNum`.
+
+---
+
 ## 2026-08-26 — fix(alpha): `volumeNum` selected dead 0¢ legs, so whale enrichment on /markets stayed empty (branch `main`)
 
 ### fix(server.js `buildAlphaList`): `order=volumeNum` → `order=volume24hr`

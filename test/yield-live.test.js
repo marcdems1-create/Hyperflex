@@ -1,4 +1,4 @@
-// Live suite for /incentives (Yield). Hits production.
+// Live suite for Yield (now on /markets#yield). Hits production.
 // The page's whole job is telling a maker where to rest an order, so these
 // assertions check the two things that decide that: the reward program's
 // terms, and the live book those terms apply to.
@@ -88,9 +88,9 @@ const soft = (n, c, d) => { if (c) pass++; else { warn++; warnings.push(n + (d ?
   ok('bad token id does not 500', bad.status < 500, 'HTTP ' + bad.status);
 
   // Page-level
-  const page = await fetch(BASE + '/incentives');
+  const page = await fetch(BASE + '/markets');
   const html = await page.text();
-  ok('yield page 200', page.status === 200);
+  ok('markets page 200 (yield now lives here)', page.status === 200);
   ok('page ships the book component', /r-book-svg|r-book\b/.test(html));
   ok('page ships the numbers/table toggle', /r-book-toggle/.test(html));
   ok('card is not an anchor wrapping a button', !/<a class="r-card"/.test(html));

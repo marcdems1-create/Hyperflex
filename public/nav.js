@@ -403,8 +403,7 @@
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenge', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
-    { href: '/incentives', label: 'Yield', gold: true },
-    { href: '/finance', label: 'Markets' },
+    { href: '/markets', label: 'Markets' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
@@ -473,7 +472,9 @@
     { href: '/api-docs', label: '⚙️ API' }
   ];
   // Combined for search index
-  var links = primaryLinks.concat(moreLinks.filter(function(l){return !l.sep}));
+  var links = primaryLinks.concat(moreLinks.filter(function(l){return !l.sep})).concat([
+    { href: '/markets#yield', label: 'Yield' }
+  ]);
 
   var path = window.location.pathname.replace(/\/$/, '') || '/';
 
@@ -511,7 +512,7 @@
     '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
       primaryLinks.filter(function(l){ return !l.authOnly || isLoggedIn; }).map(function(l) {
-        var isActive = path === l.href;
+        var isActive = path === l.href || (l.href === '/markets' && path === '/finance');
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         var label = l.label;

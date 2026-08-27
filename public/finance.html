@@ -470,6 +470,129 @@
   }
   .foot b{color:var(--ink-muted);font-weight:600;}
 
+  /* ---------- yield (was /incentives) ---------- */
+  #yield{scroll-margin-top:72px;padding:8px 20px 0;}
+  .yield-lede{
+    font-size:0.88rem;line-height:1.6;color:var(--ink-muted);
+    max-width:62ch;margin:0 0 14px;
+  }
+  .yield-lede b{color:var(--ink);font-weight:600;}
+  .yield-kpis{padding:0;margin:0 0 14px;}
+  .yield-summary{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:14px 16px;margin:0 0 16px;
+    font-size:0.8rem;line-height:1.55;color:var(--ink-muted);
+  }
+  .yield-summary b{color:var(--ink);font-weight:600;}
+  .yield-banner{
+    display:none;align-items:center;gap:12px;padding:14px 16px;margin:0 0 14px;
+    border-radius:var(--radius);
+    background:linear-gradient(90deg,rgba(201,146,13,0.12),rgba(53,176,117,0.08));
+    border:1px solid rgba(201,146,13,0.35);
+  }
+  .yield-banner.show{display:flex;}
+  .yield-banner-mark{font-size:18px;color:var(--gold);font-weight:900;line-height:1;}
+  .yield-banner-text{font-size:13px;color:var(--ink);line-height:1.4;}
+  .yield-banner-text b{color:var(--gold);font-family:var(--font-mono);font-weight:800;}
+
+  .r-card{
+    display:flex;flex-direction:column;gap:10px;padding:14px 16px;margin-bottom:8px;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    transition:border-color .15s;color:inherit;cursor:pointer;
+  }
+  .r-card:hover{border-color:rgba(201,146,13,0.45);}
+  .r-card a,.r-card button{cursor:pointer;}
+  .r-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .r-badge{
+    font-family:var(--font-mono);font-size:10px;font-weight:800;letter-spacing:0.08em;
+    padding:3px 8px;border-radius:5px;background:var(--gold-soft);color:var(--gold);
+    text-transform:uppercase;white-space:nowrap;
+  }
+  .r-meta{font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);letter-spacing:0.06em;margin-left:auto;}
+  .r-q{font-size:14px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .r-stats{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:center;font-family:var(--font-mono);font-size:11px;}
+  .r-stats > div{display:flex;flex-direction:column;gap:2px;}
+  .r-stats .stat-k{font-size:9px;color:var(--ink-faint);letter-spacing:0.08em;text-transform:uppercase;}
+  .r-stats .stat-v{color:var(--ink);font-weight:800;font-size:13px;font-variant-numeric:tabular-nums;}
+  .r-cta{
+    padding:7px 14px;border-radius:6px;background:var(--gold);color:#0b0d12;
+    font-family:var(--font-mono);font-size:11px;font-weight:800;letter-spacing:0.06em;text-decoration:none;
+  }
+  .r-cta:hover{filter:brightness(1.1);}
+  #rewardMarketsList .empty{
+    padding:28px 20px;text-align:center;background:var(--surface);
+    border:1px dashed var(--border);border-radius:var(--radius);color:var(--ink-muted);
+  }
+  #rewardMarketsList .empty .empty-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:6px;}
+  #rewardMarketsList .empty .empty-body{font-size:12px;line-height:1.5;}
+  #rewardMarketsList .empty a{color:var(--gold);}
+
+  .pool{display:block;padding:14px 16px;margin-bottom:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-decoration:none;color:inherit;transition:border-color .15s;}
+  .pool:hover{border-color:rgba(53,176,117,0.35);text-decoration:none;}
+  .pool-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .pool-side{font-family:var(--font-mono);font-size:10px;font-weight:800;letter-spacing:0.08em;padding:3px 8px;border-radius:5px;text-transform:uppercase;}
+  .pool-side.yes{background:var(--green-soft);color:var(--green);}
+  .pool-side.no{background:var(--red-soft);color:var(--red);}
+  .pool-side.both,.pool-side.liquidity{background:rgba(155,109,214,0.14);color:var(--purple);}
+  .pool-sponsor{font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);letter-spacing:0.06em;}
+  .pool-sponsor b{color:var(--ink);font-weight:700;}
+  .pool-q{font-size:14px;font-weight:600;color:var(--ink);line-height:1.3;margin-bottom:8px;}
+  .pool-stats{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);}
+  .pool-stats b{color:var(--ink);font-weight:800;}
+  .pool-stats .reward{color:var(--green);}
+  .pool-bar{height:3px;background:var(--surface-2);border-radius:2px;margin-top:8px;overflow:hidden;}
+  .pool-bar-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));border-radius:2px;}
+
+  .yield-mech{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:6px 18px;margin-top:14px;}
+  .mech-line{display:flex;align-items:flex-start;gap:14px;padding:14px 0;font-size:14px;line-height:1.5;color:var(--ink-muted);border-top:1px dashed var(--border);}
+  .mech-line:first-child{border-top:0;}
+  .mech-num{font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--ink-faint);min-width:24px;padding-top:1px;}
+  .mech-line b{color:var(--ink);font-weight:700;}
+  .mech-line a{color:var(--gold);}
+
+  .r-post-label{font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin:14px 0 8px;}
+  .r-post-row{display:flex;align-items:stretch;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:14px;}
+  .r-post-side{flex:1;display:flex;flex-direction:column;gap:3px;padding:10px 12px;}
+  .r-post-side-label{font-family:var(--font-mono);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;}
+  .r-post-side-label.yes,.r-post-price.yes{color:var(--green);}
+  .r-post-side-label.no,.r-post-price.no{color:var(--red);}
+  .r-post-price{font-family:var(--font-mono);font-size:22px;font-weight:700;line-height:1;}
+  .r-post-range{font-family:var(--font-mono);font-size:9px;color:var(--ink-faint);letter-spacing:.04em;}
+  .r-post-divider{width:1px;background:var(--border);flex-shrink:0;}
+  .r-post-est{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:10px 14px;background:rgba(91,141,217,.06);border-left:1px solid rgba(91,141,217,.18);}
+  .r-est-num{font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--blue);}
+  .r-est-sub{font-family:var(--font-mono);font-size:8px;color:var(--ink-faint);letter-spacing:.06em;white-space:nowrap;}
+
+  .r-book-label{display:flex;align-items:baseline;gap:8px;font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin:14px 0 8px;}
+  .r-book-toggle{margin-left:auto;font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--ink-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 7px;cursor:pointer;text-transform:uppercase;}
+  .r-book-toggle:hover{color:var(--ink);}
+  .r-book{border:1px solid var(--border);border-radius:6px;padding:12px 12px 10px;margin-bottom:14px;background:rgba(255,255,255,.012);}
+  .r-book-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px;font-family:var(--font-mono);}
+  .r-book-side{display:flex;flex-direction:column;gap:2px;}
+  .r-book-side.ask{align-items:flex-end;}
+  .r-book-k{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);}
+  .r-book-v{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;}
+  .r-book-v.bid{color:var(--green);}
+  .r-book-v.ask{color:var(--red);}
+  .r-book-mid{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .r-spread-pill{font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--gold);background:var(--gold-soft);border:1px solid rgba(201,146,13,.32);border-radius:100px;padding:3px 9px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .r-book-svg{display:block;width:100%;height:74px;overflow:visible;}
+  .r-book-axis{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:8.5px;color:var(--ink-faint);margin-top:3px;font-variant-numeric:tabular-nums;}
+  .r-book-note{font-size:10.5px;line-height:1.5;color:var(--ink-muted);margin-top:8px;}
+  .r-book-note b{color:var(--ink);font-weight:700;}
+  .r-book-empty{font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);padding:8px 0;line-height:1.6;}
+  .r-book-table{width:100%;border-collapse:collapse;margin-top:4px;}
+  .r-book-table th,.r-book-table td{font-family:var(--font-mono);font-size:10px;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--border);}
+  .r-book-table th{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;}
+  .r-book-table td.bid{color:var(--green);}
+  .r-book-table td.ask{color:var(--red);}
+  .r-book-table caption{text-align:left;font-family:var(--font-mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);padding-bottom:6px;}
+  @media(max-width:600px){
+    .r-stats{grid-template-columns:1fr 1fr;}
+    .r-stats .r-cta-cell{grid-column:span 2;}
+    .r-cta{display:block;text-align:center;}
+  }
+
   @media (prefers-reduced-motion: reduce){
     .hist-bar,.mv-fill,.sheet,.sheet-backdrop,.skel{transition:none;animation:none;}
   }
@@ -479,8 +602,9 @@
     .page-head{padding:34px 40px 6px;}
     h1{font-size:2.6rem;}
     .kpi-row{grid-template-columns:repeat(4,minmax(0,1fr));padding:0 40px;gap:13px;}
+    .yield-kpis{grid-template-columns:repeat(3,minmax(0,1fr));padding:0;}
     .kpi-val{font-size:2rem;}
-    .section-head,.chart-stack,.cat-rail,.mkt-list,.foot{padding-left:40px;padding-right:40px;}
+    .section-head,.chart-stack,.cat-rail,.mkt-list,#yield,.foot{padding-left:40px;padding-right:40px;}
     .chart-stack{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
     .chart-card.wide{grid-column:1 / -1;}
     /* The movers track is the widest thing on the page and the only chart
@@ -568,7 +692,7 @@
   </div>
 
   <div class="section-head">
-    <h2 class="section-title">All markets</h2>
+    <h2 class="section-title">The board</h2>
     <span class="section-count" id="listCount"></span>
   </div>
 
@@ -577,6 +701,47 @@
   <div class="mkt-list" id="mktList">
     <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>
   </div>
+
+  <section id="yield" aria-label="Yield">
+    <div class="section-head" style="padding:26px 0 12px;margin:10px 0 0;">
+      <h2 class="section-title">Yield</h2>
+      <span class="section-count">Liquidity rewards · 10-min cache</span>
+    </div>
+    <p class="yield-lede">
+      Polymarket pays USDC for posting <b>maker orders inside the spread</b> on selected markets.
+      Programs rotate; the list below is the live set. Market orders don't qualify.
+    </p>
+    <div class="banner yield-banner" id="rewardBanner">
+      <span class="yield-banner-mark">●</span>
+      <span class="yield-banner-text" id="rewardBannerText"></span>
+    </div>
+    <div class="kpi-row yield-kpis" aria-label="Yield summary">
+      <div class="kpi"><div class="kpi-val is-mute" id="sMarkets">—</div><span class="kpi-key">Markets paying</span><div class="kpi-sub">Active liquidity-reward programs</div></div>
+      <div class="kpi"><div class="kpi-val is-mute" id="sBestRate">—</div><span class="kpi-key">Best daily rate</span><div class="kpi-sub">Highest USDC/day on the board</div></div>
+      <div class="kpi"><div class="kpi-val is-mute" id="sTotalPool">—</div><span class="kpi-key">Total daily pool</span><div class="kpi-sub">Sum of live program budgets</div></div>
+    </div>
+    <div class="yield-summary">
+      <b>How it works:</b> click a market, switch to Limit, post inside the spread shown on the card.
+      Min-size matters — orders below it don't accrue. Resting on the book is the work.
+    </div>
+    <div id="rewardMarketsList">
+      <div class="empty">
+        <div class="empty-title">Loading live rewards…</div>
+        <div class="empty-body">Pulling active programs from Polymarket.</div>
+      </div>
+    </div>
+    <div id="poolsSection" style="display:none">
+      <div class="section-head" style="padding:18px 0 10px;margin:0;">
+        <h3 class="section-title">Sponsored pools</h3>
+      </div>
+      <div id="poolsList"></div>
+    </div>
+    <div class="yield-mech">
+      <div class="mech-line"><span class="mech-num">01</span><span><b>Polymarket runs the program.</b> A subset of active markets gets a daily USDC budget paid to traders who post maker orders inside a set spread. The cards above are the ones with a budget right now.</span></div>
+      <div class="mech-line"><span class="mech-num">02</span><span><b>Post a limit, not a market order.</b> Open the trade widget, switch to Limit, set your price inside the spread. Sitting on the book is the work; the longer the order rests, the more you earn.</span></div>
+      <div class="mech-line"><span class="mech-num">03</span><span><b>Polymarket attributes + pays.</b> Rewards accrue continuously and settle in USDC. <a href="https://docs.polymarket.com/quickstart/orders-rewards/rewards">Polymarket's rewards docs ↗</a></span></div>
+    </div>
+  </section>
 
   <p class="foot">
     <b>What this page does not claim.</b> A price is the market's own implied probability,
@@ -593,7 +758,7 @@
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
-   /markets (served at /finance) — rebuilt 2026-08-25.
+   /markets — rebuilt 2026-08-25, routed here (was /finance) 2026-08-26.
 
    Two things were wrong with the previous build:
 
@@ -1137,9 +1302,369 @@ Array.prototype.forEach.call(document.querySelectorAll('.chart-toggle'), functio
   });
 });
 
+
+/* ---------- yield (was /incentives) ---------- */
+(function(){
+function yFmtVol(v){ v = Number(v||0); if (v >= 1e6) return '$' + (v/1e6).toFixed(1).replace(/\.0$/,'') + 'M'; if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k'; return '$' + Math.round(v); }
+function yFmtUsd(v){ v = Number(v||0); if (v >= 1e6) return '$' + (v/1e6).toFixed(2).replace(/\.?0+$/,'') + 'M'; if (v >= 1e3) return '$' + (v/1e3).toFixed(1).replace(/\.0$/,'') + 'k'; if (v >= 1) return '$' + v.toFixed(0); return '$' + v.toFixed(2); }
+function yFmtRate(v){ v = Number(v||0); if (v >= 1000) return '$' + Math.round(v).toLocaleString(); if (v >= 1) return '$' + v.toFixed(2); return '$' + v.toFixed(3); }
+function pctFromYes(yes){ var p = Number(yes||0); if (p > 1) p = p / 100; return Math.round(p * 100); }
+function setKpi(id, val){
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.className = 'kpi-val' + (val === '—' ? ' is-mute' : '');
+}
+
+// Banner threshold: total daily reward pool >= $25k qualifies as a
+// "big rewards day" and the banner fires. Tuned conservatively — most
+// days the pool is single-thousands; a $25k+ day is the kind of event
+// that pulls returning traders to the page.
+var BANNER_THRESHOLD_USD = 25000;
+
+// STATS — /api/incentives/stats now returns markets_with_rewards,
+// best_daily_rate, total_daily_pool alongside the legacy pool fields.
+function paintStats(d) {
+  if (!d) return;
+  var n     = d.markets_with_rewards != null ? d.markets_with_rewards : null;
+  var best  = d.best_daily_rate      != null ? d.best_daily_rate      : null;
+  var total = d.total_daily_pool     != null ? d.total_daily_pool     : null;
+  setKpi('sMarkets', n != null ? String(n) : '—');
+  setKpi('sBestRate', best != null && best > 0 ? yFmtRate(best) + '/d' : '—');
+  setKpi('sTotalPool', total != null && total > 0 ? yFmtUsd(total) + '/d' : '—');
+
+  // Auto-banner — appears only when the total daily pool crosses the
+  // threshold. No banner on a quiet day, no manual ops needed.
+  var banner = document.getElementById('rewardBanner');
+  var text   = document.getElementById('rewardBannerText');
+  if (total != null && total >= BANNER_THRESHOLD_USD) {
+    text.innerHTML = 'Big rewards day · <b>' + yFmtUsd(total) + '</b> in liquidity rewards paying today across <b>' + (n || 0) + '</b> markets.';
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+function loadStats() {
+  fetch('/api/incentives/stats').then(function(r){return r.ok?r.json():null;}).then(paintStats).catch(function(){});
+}
+
+// REWARD MARKETS — every Polymarket market with an active liquidity-
+// rewards program, sorted by daily rate. Empty state is honest: no
+// fallback to edge cards or liquidity-only markets.
+function renderRewardCards(list) {
+  var el = document.getElementById('rewardMarketsList');
+  if (!Array.isArray(list) || !list.length) {
+    el.innerHTML = '<div class="empty">' +
+      '<div class="empty-title">No reward programs running right now.</div>' +
+      '<div class="empty-body">Polymarket rotates liquidity-rewards programs in and out daily. Check back in a few hours. ' +
+      'Looking for structural edges instead? <a href="/alpha-live">Browse the alpha terminal →</a></div>' +
+    '</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(m){
+    var yesPct  = pctFromYes(m.yes_price);
+    var noPct   = 100 - yesPct;
+    var rate    = Number(m.reward_rate || 0);
+    // Polymarket does not always publish the program's spread/min-size.
+    // Coercing a missing value to 0 produced real nonsense on live cards:
+    // "post 68¢ – 68¢" (a zero-width range), "Min order $0", and a
+    // zero-width reward band. Missing stays missing and is labelled.
+    var spread  = m.max_spread == null ? null : Number(m.max_spread);
+    var minSize = m.min_size   == null ? null : Number(m.min_size);
+    var liq     = Number(m.liquidity   || 0);
+    var slug    = m.slug || '';
+    var href    = slug ? '/market/' + encodeURIComponent(slug) : (m.url || '#');
+
+    // qualifying price ranges for each side — only meaningful if the
+    // program actually published a spread
+    var hasSpread = spread != null && spread > 0;
+    var yesRange = hasSpread
+      ? 'post ' + Math.max(0, yesPct - spread).toFixed(0) + '¢ – ' + Math.min(99, yesPct + spread).toFixed(0) + '¢'
+      : 'range not published';
+    var noRange = hasSpread
+      ? 'post ' + Math.max(0, noPct - spread).toFixed(0) + '¢ – ' + Math.min(99, noPct + spread).toFixed(0) + '¢'
+      : 'range not published';
+
+    // estimated daily earnings per min_size posted
+    var estDay = (liq > 0 && minSize != null && minSize > 0 && rate > 0)
+      ? '$' + ((minSize / liq) * rate).toFixed(2)
+      : null;
+
+    var spreadLabel = hasSpread ? ('±' + spread.toFixed(1) + '¢') : '';
+    var token = firstTokenId(m);
+
+    return '<div class="r-card" data-href="' + esc(href) + '">' +
+      '<div class="r-card-top">' +
+        '<span class="r-badge">' + yFmtRate(rate) + ' / day</span>' +
+        (spreadLabel ? '<span class="r-meta">spread ' + esc(spreadLabel) + '</span>' : '') +
+      '</div>' +
+      '<div class="r-q">' + esc(m.question || 'Untitled market') + '</div>' +
+
+      // ── WHAT TO POST ──
+      '<div class="r-post-label">WHAT TO POST</div>' +
+      '<div class="r-post-row">' +
+        '<div class="r-post-side">' +
+          '<span class="r-post-side-label yes">YES</span>' +
+          '<span class="r-post-price yes">' + yesPct + '¢</span>' +
+          '<span class="r-post-range">' + yesRange + '</span>' +
+        '</div>' +
+        '<div class="r-post-divider"></div>' +
+        '<div class="r-post-side">' +
+          '<span class="r-post-side-label no">NO</span>' +
+          '<span class="r-post-price no">' + noPct + '¢</span>' +
+          '<span class="r-post-range">' + noRange + '</span>' +
+        '</div>' +
+        (estDay ? '<div class="r-post-est"><span class="r-est-num">' + estDay + '/day</span><span class="r-est-sub">per $' + minSize + ' posted</span></div>' : '') +
+      '</div>' +
+
+      // ── LIVE SPREAD + BOOK ──
+      (token
+        ? '<div class="r-book-label">Live spread &amp; book'
+            + '<button type="button" class="r-book-toggle">Numbers</button></div>'
+          + '<div class="r-book" data-token="' + esc(token) + '" data-spread="' + (hasSpread ? spread : 0) + '">'
+            + '<div class="r-book-empty">Loading book…</div>'
+          + '</div>'
+        : '') +
+
+      // ── STATS ──
+      '<div class="r-stats">' +
+        '<div><span class="stat-k">Min order</span><span class="stat-v">' + (minSize != null && minSize > 0 ? '$' + minSize.toLocaleString() : '—') + '</span></div>' +
+        '<div><span class="stat-k">24h vol</span><span class="stat-v">' + yFmtVol(m.volume_24h) + '</span></div>' +
+        '<div><span class="stat-k">Liquidity</span><span class="stat-v">' + yFmtVol(m.liquidity) + '</span></div>' +
+        '<div class="r-cta-cell"><a class="r-cta" href="' + esc(href) + '">Trade →</a></div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+/* ── LIVE SPREAD + ORDER BOOK ─────────────────────────────────────────
+   Fetched per card, lazily. Each card is one /api/polymarket/orderbook
+   call (10s server cache); 28 reward markets firing on page load would be
+   28 upstream CLOB requests for cards mostly below the fold, so the fetch
+   waits until the card is near the viewport.
+   ───────────────────────────────────────────────────────────────────── */
+function firstTokenId(m){
+  var raw = m.clob_token_ids;
+  if (!raw) return null;
+  try { if (typeof raw === 'string') raw = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(raw) && raw.length) ? String(raw[0]) : null;
+}
+
+// Price axis is windowed around the action rather than showing 0–100¢:
+// at a 1¢ spread the whole book would collapse into a single pixel column.
+// The window always contains the reward band AND the plotted levels.
+function bookWindow(bestBid, bestAsk, mid, maxSpreadC){
+  var pad = Math.max((maxSpreadC > 0 ? maxSpreadC : 0) * 1.6, 3);
+  var lo = Math.min(bestBid * 100, mid * 100 - maxSpreadC) - pad;
+  var hi = Math.max(bestAsk * 100, mid * 100 + maxSpreadC) + pad;
+  return { lo: Math.max(0, lo), hi: Math.min(100, hi) };
+}
+
+function renderBook(host, d, maxSpreadC){
+  var bids = (d && d.bids) || [], asks = (d && d.asks) || [];
+  var bb = d && d.best_bid != null ? Number(d.best_bid) : null;
+  var ba = d && d.best_ask != null ? Number(d.best_ask) : null;
+  if (!bids.length && !asks.length) {
+    host.innerHTML = '<div class="r-book-empty">No resting orders on this book right now — nothing to sit inside of yet.</div>';
+    return;
+  }
+  if (bb == null || ba == null) {
+    host.innerHTML = '<div class="r-book-empty">Book is one-sided right now; no two-way spread to show.</div>';
+    return;
+  }
+
+  var mid = d.mid_price != null ? Number(d.mid_price) : (bb + ba) / 2;
+  var spreadC = (ba - bb) * 100;
+  var W = 300, H = 56, BASE = H - 1;
+  var win = bookWindow(bb, ba, mid, maxSpreadC);
+  var span = Math.max(0.5, win.hi - win.lo);
+  var X = function(priceC){ return ((priceC - win.lo) / span) * W; };
+
+  // Only levels inside the window get drawn; sizes are normalised against
+  // the largest VISIBLE level so the shape reflects what's on screen.
+  var vis = function(arr){ return arr.map(function(l){
+      return { p: Number(l.price) * 100, s: Number(l.size) || 0 }; })
+    .filter(function(l){ return l.p >= win.lo && l.p <= win.hi && l.s > 0; }); };
+  var vb = vis(bids), va = vis(asks);
+  var maxSize = Math.max.apply(null, [1].concat(vb.concat(va).map(function(l){ return l.s; })));
+
+  // Square-root height scale. Book sizes span orders of magnitude — one
+  // level at 52k next to levels in the hundreds — and on a linear scale
+  // everything but the largest collapses onto the baseline as unreadable
+  // slivers. sqrt keeps the biggest level tallest while leaving smaller
+  // resting orders legible, which is the point of showing depth at all.
+  var bar = function(l, cls){
+    var h = Math.max(2.5, Math.sqrt(l.s / maxSize) * (H - 16));
+    var w = Math.max(2, W / span * 0.62);
+    return '<rect x="' + (X(l.p) - w / 2).toFixed(2) + '" y="' + (BASE - h).toFixed(2) + '"'
+      + ' width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '" rx="1" class="' + cls + '"'
+      + ' fill="' + (cls === 'b' ? '#00c85a' : '#ff4d6a') + '" fill-opacity="0.72"></rect>';
+  };
+
+  // A missing max_spread means Polymarket hasn't published the program's
+  // band. Drawing it as ±0 produced a zero-width "EARNS" sliver implying a
+  // single qualifying price, which is worse than drawing nothing. The book
+  // and the spread are still worth showing on their own.
+  var hasBand = maxSpreadC > 0;
+  var rewardLo = hasBand ? Math.max(win.lo, mid * 100 - maxSpreadC) : 0;
+  var rewardHi = hasBand ? Math.min(win.hi, mid * 100 + maxSpreadC) : 0;
+
+  var svg = '<svg class="r-book-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"'
+    + ' role="img" aria-label="Order book depth. Best bid ' + (bb * 100).toFixed(1) + ' cents, best ask '
+    + (ba * 100).toFixed(1) + ' cents, spread ' + spreadC.toFixed(1) + ' cents.">'
+    // reward band first, so depth draws over it
+    + (hasBand
+        ? '<rect x="' + X(rewardLo).toFixed(2) + '" y="0" width="' + Math.max(0, X(rewardHi) - X(rewardLo)).toFixed(2)
+            + '" height="' + H + '" fill="#c9920d" fill-opacity="0.14"></rect>'
+          + '<text x="' + ((X(rewardLo) + X(rewardHi)) / 2).toFixed(2) + '" y="9" text-anchor="middle"'
+            + ' font-family="JetBrains Mono, monospace" font-size="7" letter-spacing="0.1em"'
+            + ' fill="#c9920d" fill-opacity="0.85">EARNS</text>'
+          + '<line x1="' + X(rewardLo).toFixed(2) + '" y1="0" x2="' + X(rewardLo).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+          + '<line x1="' + X(rewardHi).toFixed(2) + '" y1="0" x2="' + X(rewardHi).toFixed(2) + '" y2="' + H + '" stroke="#c9920d" stroke-opacity="0.45" stroke-width="1"></line>'
+        : '')
+    + vb.map(function(l){ return bar(l, 'b'); }).join('')
+    + va.map(function(l){ return bar(l, 'a'); }).join('')
+    // the spread itself: the gap between touch prices
+    + '<line x1="' + X(bb * 100).toFixed(2) + '" y1="13" x2="' + X(bb * 100).toFixed(2) + '" y2="' + BASE + '" stroke="#00c85a" stroke-width="1.5"></line>'
+    + '<line x1="' + X(ba * 100).toFixed(2) + '" y1="13" x2="' + X(ba * 100).toFixed(2) + '" y2="' + BASE + '" stroke="#ff4d6a" stroke-width="1.5"></line>'
+    + '<line x1="0" y1="' + BASE + '" x2="' + W + '" y2="' + BASE + '" stroke="rgba(255,255,255,0.10)" stroke-width="1"></line>'
+    + '</svg>';
+
+  // Is there actually room to rest inside the reward band? Stated as fact,
+  // not as a recommendation.
+  var roomNote;
+  if (!hasBand) {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>. Polymarket has not published a reward band for this program, so no earning zone is drawn.';
+  } else if (spreadC <= 1.1) {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b> — the book is at touch, so a qualifying order joins the queue at ' + Math.round(bb * 100) + '¢ or ' + Math.round(ba * 100) + '¢. Shaded band is where a maker order earns.';
+  } else {
+    roomNote = 'Spread is <b>' + spreadC.toFixed(1) + '¢</b>, and the reward band is <b>±' + maxSpreadC.toFixed(1) + '¢</b> of mid — there is room to rest inside it at ' + Math.round(rewardLo) + '¢–' + Math.round(rewardHi) + '¢.';
+  }
+
+  host.innerHTML =
+    '<div class="r-book-top">'
+      + '<div class="r-book-side bid"><span class="r-book-k">Best bid</span><span class="r-book-v bid">' + (bb * 100).toFixed(1) + '¢</span></div>'
+      + '<div class="r-book-mid"><span class="r-spread-pill">spread ' + spreadC.toFixed(1) + '¢</span><span class="r-book-k">mid ' + (mid * 100).toFixed(1) + '¢</span></div>'
+      + '<div class="r-book-side ask"><span class="r-book-k">Best ask</span><span class="r-book-v ask">' + (ba * 100).toFixed(1) + '¢</span></div>'
+    + '</div>'
+    + svg
+    + '<div class="r-book-axis"><span>' + win.lo.toFixed(0) + '¢</span><span>' + ((win.lo + win.hi) / 2).toFixed(0) + '¢</span><span>' + win.hi.toFixed(0) + '¢</span></div>'
+    + '<div class="r-book-note">' + roomNote + '</div>'
+    + bookTableHtml(vb, va);
+}
+
+// Exact numbers behind the picture — depth is otherwise readable only by
+// eye, and the axis alone can't tell you the size at a level.
+function bookTableHtml(vb, va){
+  var top = function(arr, desc){
+    return arr.slice().sort(function(a, b){ return desc ? b.p - a.p : a.p - b.p; }).slice(0, 5);
+  };
+  var tb = top(vb, true), ta = top(va, false);
+  var rows = Math.max(tb.length, ta.length);
+  var body = '';
+  for (var i = 0; i < rows; i++) {
+    body += '<tr>'
+      + '<td class="bid">' + (tb[i] ? tb[i].p.toFixed(1) + '¢' : '') + '</td>'
+      + '<td class="bid">' + (tb[i] ? Math.round(tb[i].s).toLocaleString() : '') + '</td>'
+      + '<td class="ask">' + (ta[i] ? ta[i].p.toFixed(1) + '¢' : '') + '</td>'
+      + '<td class="ask">' + (ta[i] ? Math.round(ta[i].s).toLocaleString() : '') + '</td>'
+      + '</tr>';
+  }
+  return '<table class="r-book-table" hidden><caption>Top of book</caption><thead><tr>'
+    + '<th scope="col">Bid</th><th scope="col">Size</th><th scope="col">Ask</th><th scope="col">Size</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table>';
+}
+
+function loadBookSlots(root){
+  var slots = [].slice.call((root || document).querySelectorAll('.r-book[data-token]'));
+  var fill = function(slot){
+    var token = slot.getAttribute('data-token');
+    var ms = parseFloat(slot.getAttribute('data-spread')) || 0;
+    fetch('/api/polymarket/orderbook/' + encodeURIComponent(token))
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ renderBook(slot, d, ms); })
+      .catch(function(){ slot.innerHTML = '<div class="r-book-empty">Couldn\'t load the book for this market.</div>'; });
+  };
+  if (!('IntersectionObserver' in window)) { slots.forEach(fill); return; }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target);
+      fill(e.target);
+    });
+  }, { rootMargin: '250px' });
+  slots.forEach(function(s){ io.observe(s); });
+}
+
+// Card click -> market page. Delegated, and ignores clicks that landed on
+// a real control inside the card (the book toggle, the Trade link) or on a
+// text selection.
+document.addEventListener('click', function(e){
+  var card = e.target.closest('.r-card');
+  if (!card) return;
+  if (e.target.closest('a, button')) return;
+  if (window.getSelection && String(window.getSelection()).length) return;
+  var href = card.getAttribute('data-href');
+  if (href && href !== '#') window.location.href = href;
+});
+
+// Chart <-> table toggle, delegated since cards re-render every 10 minutes.
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('.r-book-toggle');
+  if (!btn) return;
+  e.preventDefault();
+  var card = btn.closest('.r-card');
+  var tbl = card && card.querySelector('.r-book-table');
+  if (!tbl) return;
+  tbl.hidden = !tbl.hidden;
+  btn.textContent = tbl.hidden ? 'Numbers' : 'Chart';
+});
+
+function loadRewardMarkets() {
+  fetch('/api/ecosystem/rewards').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    var list = (d && Array.isArray(d.markets)) ? d.markets : [];
+    renderRewardCards(list);
+    loadBookSlots(document.getElementById('rewardMarketsList'));
+  }).catch(function(){
+    var el = document.getElementById('rewardMarketsList');
+    el.innerHTML = '<div class="empty"><div class="empty-title">Couldn’t load rewards feed.</div><div class="empty-body">Retrying in 10 minutes.</div></div>';
+  });
+}
+loadStats();
+loadRewardMarkets();
+setInterval(function(){ loadStats(); loadRewardMarkets(); }, 10 * 60 * 1000);
+
+// SPONSORED POOLS — only renders the section when real pools exist.
+fetch('/api/incentives/active').then(function(r){return r.ok?r.json():null;}).then(function(d){
+  if (!d || !d.pools || !d.pools.length) return;
+  document.getElementById('poolsSection').style.display='block';
+  document.getElementById('poolsList').innerHTML=d.pools.map(function(p){
+    var sideKey=String(p.side||'').toLowerCase();
+    var sideLabel=p.side==='LIQUIDITY'?'LP depth':p.side==='BOTH'?'Either side':p.side;
+    var pct=p.pool_size_usd>0?Math.min(100,Math.round((p.pool_size_usd-p.remaining_usd)/p.pool_size_usd*100)):0;
+    var sponsor=p.sponsor?'Sponsored by <b>'+esc(p.sponsor)+'</b>':'Sponsored';
+    var href=p.market_slug?'/market/'+encodeURIComponent(p.market_slug):'#';
+    return '<a class="pool" href="'+href+'">'+
+      '<div class="pool-top"><span class="pool-side '+sideKey+'">'+esc(sideLabel)+'</span><span class="pool-sponsor">'+sponsor+'</span></div>'+
+      '<div class="pool-q">'+esc(p.market_question)+'</div>'+
+      '<div class="pool-stats">'+
+        '<span class="reward">$<b>'+Number(p.reward_per_unit_usd).toFixed(p.reward_per_unit_usd<1?3:2)+'</b> per share</span>'+
+        '<span>$<b>'+Number(p.remaining_usd).toLocaleString()+'</b> remaining</span>'+
+        '<span>Pool $'+Number(p.pool_size_usd).toLocaleString()+'</span>'+
+      '</div>'+
+      '<div class="pool-bar"><div class="pool-bar-fill" style="width:'+pct+'%"></div></div>'+
+    '</a>';
+  }).join('');
+}).catch(function(){});
+
+if (location.hash === '#yield') {
+  var y = document.getElementById('yield');
+  if (y) setTimeout(function(){ y.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+}
+})();
+
 loadMarkets();
 </script>
 
-<script src="/nav.js?v=28"></script>
+<script src="/nav.js?v=30"></script>
 </body>
 </html>

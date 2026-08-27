@@ -727,6 +727,7 @@ app.get('/sitemap.xml', async (req, res) => {
     // Static pages
     const staticPages = [
       { loc: '/', priority: '1.0', freq: 'daily' },
+      { loc: '/markets', priority: '0.9', freq: 'hourly' },
       { loc: '/predictors', priority: '0.9', freq: 'daily' },
       { loc: '/odds', priority: '0.9', freq: 'hourly' },
       { loc: '/whales', priority: '0.8', freq: 'daily' },
@@ -808,6 +809,19 @@ app.get('/', (req, res) => {
 // stale URL is de-indexed in favor of /transparency. Above the static handler
 // so it wins before express.static can serve accuracy.html.
 app.get('/accuracy', (req, res) => res.redirect(301, '/transparency'));
+
+// Markets page used to live at /finance because GET /markets was a JSON
+// dump of the community-markets table. These sit above static so
+// /finance.html and /incentives.html cannot bypass the redirects.
+app.get('/markets', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'finance.html'));
+});
+app.get('/finance', (req, res) => res.redirect(301, '/markets'));
+app.get('/finance.html', (req, res) => res.redirect(301, '/markets'));
+app.get('/mentions', (req, res) => res.redirect(301, '/markets'));
+app.get('/incentives', (req, res) => res.redirect(301, '/markets#yield'));
+app.get('/incentives.html', (req, res) => res.redirect(301, '/markets#yield'));
 
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
@@ -1956,8 +1970,10 @@ function _gammaCursor(body) {
 
 // ── MARKETS ───────────────────────────────────────
 
-// Get all open markets
-app.get('/markets', async (req, res) => {
+// Legacy JSON list of Hyperflex-hosted community markets. Used to live at
+// GET /markets, which blocked routing a real page there. HTML is served
+// from the /markets route registered above express.static.
+app.get('/api/community-markets', async (req, res) => {
   let data, error;
   if (pool) {
     const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 ORDER BY expiry_date ASC', [false]);
@@ -10795,7 +10811,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'partners', 'casino', 'live', 'transparency', 'track-record',
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal', 'compare', 'arbitrage', 'feed', 'discuss', 'group', 'passport', 'verify', 'challenges', 'incentives', 'finance', 'partners', 'casino', 'live', 'transparency', 'track-record',
   // Sports wedge surfaces (tipster product)
   'picks', 't', 'datafeed'
 ]);
@@ -20684,9 +20700,7 @@ async function _renderMentionsHero() {
 `;
 }
 
-app.get('/finance', (req, res) => res.sendFile(path.join(__dirname, 'public', 'finance.html')));
-
-app.get('/mentions', (req, res) => res.redirect(301, '/finance'));
+// /finance and /mentions 301 to /markets — registered above express.static.
 
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 
@@ -40380,8 +40394,7 @@ app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 // Lives at /challenges/nba so the URL slot reads "challenges hub → nba" once
 // we add NFL/MLB/NHL surfaces. Same /api/challenges/nba/* namespace.
 app.get('/challenges/nba', (req, res) => res.sendFile(path.join(__dirname, 'public', 'challenges-nba.html')));
-// Incentives storefront — trader earns + sponsor funds dual-CTA page.
-app.get('/incentives', (req, res) => res.sendFile(path.join(__dirname, 'public', 'incentives.html')));
+// /incentives 301 to /markets#yield — registered above express.static.
 
 // Sports vertical landing — featured fight + coming-soon cards. The
 // fight detail pages live at /fight/:slug; this is the hub the banner

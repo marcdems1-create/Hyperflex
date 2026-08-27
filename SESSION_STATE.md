@@ -49,6 +49,26 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26h (/markets is the page path; Yield folded into the bottom of that page)
+
+**Shipped:** `f489610` on `fix/alpha-liveness` (pushing to `origin/main`). `server.js`, `public/nav.js`, `public/finance.html`, `public/home.html`, `test/yield-live.test.js`.
+
+**What changed:**
+- `GET /markets` serves `finance.html`. Old JSON list is `GET /api/community-markets`.
+- `/finance` and `/mentions` 301 → `/markets`. `/incentives` 301 → `/markets#yield`.
+- Nav: Markets → `/markets`; Yield tab removed (search still finds it).
+- Page heading "All markets" → "The board". Yield rewards section lives at `#yield` below the list.
+
+**Active blockers:**
+- `limit=500` on keyset still caps at 100. Unrelated, still open from 26g.
+- Other pages still load `nav.js?v=29` (cached Yield tab + `/finance` href). Those old links 301. Only `/markets` and `home.html` cache-bust to `v=30`. Do not mass-bump the other HTML files — they have unrelated dirty WIP in this working tree.
+
+**Queued:** none from this pass.
+
+**Notes for next session:**
+- Post-deploy: `curl -I https://hyperflex.network/markets` is HTML, `/finance` and `/incentives` are 301, page has "The board" and `#yield`.
+- `public/incentives.html` still exists; `/incentives.html` can bypass the 301 via static. Not blocked this pass.
+
 ## 2026-08-26g (/markets whale_count still 0 — volumeNum selected dead 0¢ legs; remaining string-sort sweep)
 
 **Shipped:** cherry-picked onto current `main`. `server.js` + `lib/data-engine.js`. `node --check` both pass.
