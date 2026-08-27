@@ -49,6 +49,32 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26f ("Get in the trade" CTA extended to /traders' shared trader-card component — PR #239 merged)
+
+**Trigger:** Marc, follow-up to the /feed CTA pass — "do the same for trader profile cards" (also flagged not yet seeing the /feed change live — see note below).
+
+**Scoping note:** "trader profile cards" was ambiguous — could have meant `profile-trader.html`'s `/@handle` page (already has a Gate-4-compliant "Copy this →" button on open positions, unrelated work, untouched) or the shared `.tcard` component (`public/trader-card.js`, `HFXTraderCard.render`). Picked the latter: it's the only thing actually called "card" in the codebase's own naming, and it's the sole live consumer is `/traders` (nav-linked as "Leaderboard") via `/api/trader-cards` + `/api/category-leaderboard` — `home-kings.html` renders its own hand-rolled card, doesn't use this component at all despite an older CLAUDE.md comment suggesting otherwise (confirmed via grep, zero `HFXTraderCard.render(` calls in home-kings.html — that doc comment is stale).
+
+**Shipped (`12c6c58`, merged to `main` via PR #239):**
+- Same win-only, server-verified-tradeable, $25-default, `copy_user_id`-as-provenance rules as the `/feed` CTA (prior entry). Explicitly gated to `card.evidence.result === 'win'` — evidence can be a wallet's biggest LOSS too (the card's "one call, shown vividly" is whichever trade has the largest |pnl|, win or loss), and a CTA reading "get in this trade" on the trade that lost money would be actively bad advice, not just a missed opportunity.
+- Factored the gamma cross-reference logic out of the `/feed` commit's inline code into a shared `_attachTradeCta(entries, getCid, getSide, setTrade)` helper (server.js, next to `_fetchPolymarketMeta`) — `/api/feed/category-wins` now calls it too instead of carrying its own copy. Wired into `/api/trader-cards` and `/api/category-leaderboard` (the two endpoints `home-traders-preview.html` actually fetches from), each with its own 3-min cache (`_traderCardsCache`, `_categoryLeaderboardCache`) since both now make external gamma calls on a cache miss.
+- Not shown on the `compact` card variant (dense grid — already hides the evidence line entirely, so there's no specific trade to point at).
+- Same structural fix as the `/feed` win-cards: `HFXTraderCard.render()` used to emit one big `<a>` around the entire card; a second action can't nest inside that (invalid HTML), so the outer element is now an `<article>` with an inner `.tcard-link` `<a>` and the CTA as a sibling.
+
+**On "don't see a change on /feed yet":** confirmed via `git log origin/main -- public/feed.html` that the CTA commit (`8ea7e5f`) really is on `main` — not a phantom merge. This sandbox has no network path to hyperflex.network (standing limitation, can't personally confirm the live page), but nothing points to a real deploy failure. Most likely a stale browser tab — `/feed`'s route has no cache-busting mechanism and no `no-cache` header, same root cause as the `/finance` false-alarm documented in the 2026-08-08c entry ("if a just-pushed change doesn't appear live, curl the raw response before concluding the deploy failed — a stale browser tab is a much more common cause than a broken deploy in this repo"). Told Marc to hard-reload; flagged as worth a real live check regardless since Code can't verify it directly.
+
+**Active blockers:**
+- Not verified against live gamma/production data for either the `/feed` or `/traders` CTA work — both only exercised against mock data. Worth a real check once deployed: does a genuinely-resolved market correctly suppress the CTA, does a genuinely-open one correctly show a working one.
+- The original "don't see a change" report is still technically unconfirmed from Code's side (see above) — if Marc reports it's STILL not showing after a hard reload, that would need actual investigation, not just the cache-explanation offered this entry.
+
+**Queued (priority order):**
+1. Marc confirms live: `/feed` shows the CTA work after a hard reload, and `/traders` shows the new trader-card CTA (Featured + Movers rows; compact "Recent notable calls" correctly has none).
+2. If `/feed` genuinely still doesn't show the change after a hard reload, that's a real deploy/routing issue to chase, not a cache one.
+
+**Notes for next session:**
+- `_attachTradeCta()` (server.js, near `_fetchPolymarketMeta`) is now the one shared place this "is a closed trade's market still open enough to trade" check lives — reuse it for any future surface with the same need (e.g. if `profile-trader.html`'s evidence/best-call sections ever want the same CTA) rather than writing a fourth copy.
+- If picking up `profile-trader.html`'s open-positions "Copy this →" button work: that's a separate, already-existing mechanism (`loadOpenPositions`, gated on `durable_verified`) — untouched by this arc, don't confuse it with the evidence-based CTA added here.
+
 ## 2026-08-26e ("Get in this trade" CTA on every /feed card — PR #237 merged; caught a real &copy_user_id HTML-entity corruption bug)
 
 **Trigger:** Marc, follow-up to the feed visual pass — "each card should have a prompt to get in the trade."
