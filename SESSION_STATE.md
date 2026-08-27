@@ -49,6 +49,27 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26e ("Get in this trade" CTA on every /feed card — PR #237 merged; caught a real &copy_user_id HTML-entity corruption bug)
+
+**Trigger:** Marc, follow-up to the feed visual pass — "each card should have a prompt to get in the trade."
+
+**Shipped (`8ea7e5f`, merged to `main` via PR #237):**
+- **Live Feed (anomaly) cards** — already linked to `/market/:slug` as the whole card (live screener signals, inherently on active/open markets per the Alpha Engine's own filtering, so no per-entry check needed). Added an explicit "Get in this trade →" prompt line so the existing whole-card link reads as an action, not just information.
+- **Win-cards** — these are *closed* trades, so the market may since have resolved; a CTA that can't work must never render (same rule `home-kings.html`'s live-calls CTA follows). `GET /api/feed/category-wins` (server.js) now cross-references each win's `condition_id` against live gamma via `_fetchPolymarketMeta` (existing helper, reused per CLAUDE.md rule 10 — extended it to also return `slug`, additive) and only attaches a `trade: {slug, current_price}` field when the market is demonstrably still open (`!closed && active`, binary YES/NO side only). Added a 3-min response cache (`_categoryWinsCache`) since this now makes one external gamma call per distinct market on a cache miss — previously zero external calls. Client (`feed.html`) only renders the CTA when `e.trade` is present; otherwise the win-card looks exactly as before, nothing broken or invented.
+- Both CTAs: $25 site-default size, never the trader's own position size; `copy_user_id` is attribution-only (tags the resulting trade as inspired by that trader's call) — never a claim the trader currently holds the position, since by definition a "win" card's trade is already closed. Same Gate 4 discipline as home-kings.html throughout.
+
+**⚠️ Real bug caught during verification, worth remembering generally:** the win-card's `tradeHref` was built by concatenating a raw `&` into an HTML string headed for `innerHTML`, without a final `esc()` pass on the assembled URL. `&copy_user_id=uid-1` parsed as the legacy `&copy` named HTML entity (recognized by browsers even without a trailing semicolon) followed by literal `_user_id=uid-1` — rendered as `©_user_id=uid-1` in the actual DOM, silently corrupting the URL. Caught by asserting on the actual rendered `href` attribute in a headless-browser check, not just eyeballing a screenshot — a static screenshot wouldn't have shown this at all, since the visible button text was unaffected. Fixed by `esc()`-ing the fully assembled href at the point of insertion (matching `home-kings.html`'s own `esc(tradeHref)` pattern) rather than escaping individual pieces. Applied the same fix to the anomaly-card href too, even though its param names (`from`/`side`/`size`) didn't happen to collide with a known HTML entity today — escaping the assembled URL is the correct discipline regardless of whether today's param names happen to be safe.
+
+**Active blockers:**
+- Not verified against live gamma/production data — the tradeability check (`_fetchPolymarketMeta` cross-reference) has only been exercised against mock data simulating both an open and a resolved market. Worth confirming real win-cards on the live site correctly show/hide the CTA once deployed.
+
+**Queued (priority order):**
+1. Marc confirms live: win-cards for genuinely-resolved markets correctly show no CTA, and win-cards for still-open markets show a working one that lands on the right price/side in `/market/:slug`.
+
+**Notes for next session:**
+- **General lesson, not just this bug:** any HTML built via string concatenation + `innerHTML` must have `esc()` applied to the *fully assembled* dynamic value (a URL, in this case) at the point of insertion into an attribute — not to its individual pieces before concatenation. A bare `&` in that context is live HTML markup, not a literal character, and several legacy named entities (`&copy`, `&reg`, `&amp`, others) are recognized by browsers without a trailing `;`. `grep -n "href=\"'" public/*.html` type spot-checks for missing `esc()` around assembled URLs elsewhere in the codebase could be worth a pass if this class of bug turns up again.
+- `_fetchPolymarketMeta(conditionId)` (server.js, near `_midprice`) is now the shared "is this market still tradeable, and what's its slug" helper — reuse it rather than writing a second gamma cross-reference if another surface needs the same check.
+
 ## 2026-08-26d (Feed visual pass: avatars, animated KPI strip, skeleton loading, section rhythm — PR #235 merged)
 
 **Trigger:** Marc — "front page looks great... make the rest of the site look and feel this intuitive and visually appealing. focus on the feed it looks dry, liven it up."
