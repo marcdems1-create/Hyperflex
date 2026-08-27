@@ -80,7 +80,30 @@
       : card.polymarket_address ? '/trader/' + esc(card.polymarket_address)
       : '#';
 
-    var html = '<a class="' + cls + '" href="' + profileHref + '" data-user-id="' + esc(card.user_id) + '">';
+    // "Get in the trade" — only when the server has confirmed (live gamma)
+    // the evidence trade's market is genuinely still open, and only on a
+    // WIN (never prompt toward the same trade that lost this wallet
+    // money). A closed-trade evidence line can easily point at a market
+    // that has since resolved; a CTA that can't work must never render
+    // (same rule home-kings.html's live-calls CTA follows). copy_user_id
+    // attributes the resulting trade to this call — provenance, not a
+    // claim the trader currently holds the position.
+    var ctaHtml = '';
+    if (variant !== 'compact' && card.evidence && card.evidence.result === 'win' && card.evidence.trade) {
+      var trade = card.evidence.trade;
+      var sideLower = card.evidence.side.toLowerCase();
+      var priceC = Math.round(trade.current_price * 100) + '¢';
+      // esc() the fully-assembled href, not its pieces — a raw "&" inserted
+      // via innerHTML is live HTML, not a literal character (e.g.
+      // "&copy_user_id" parses as the legacy "&copy" named entity).
+      var tradeHref = '/market/' + encodeURIComponent(trade.slug)
+        + '?from=trader&side=' + encodeURIComponent(sideLower) + '&size=25'
+        + (card.user_id ? '&copy_user_id=' + encodeURIComponent(card.user_id) : '');
+      ctaHtml = '<a class="tcard-cta" href="' + esc(tradeHref) + '">Trade ' + esc(card.evidence.side) + ' at ' + esc(priceC) + ' on Polymarket &rarr;</a>';
+    }
+
+    var html = '<article class="' + cls + '" data-user-id="' + esc(card.user_id) + '">'
+      + '<a class="tcard-link" href="' + profileHref + '">';
 
     html += '<div class="tcard-identity">'
       + '<div class="tcard-handle">' + esc(handle(card)) + '</div>'
@@ -138,7 +161,9 @@
       + (streakText ? '<span class="' + streakCls + '">' + esc(streakText) + '</span>' : '')
       + '</div>';
 
-    html += '</a>';
+    html += '</a>' // close .tcard-link
+      + ctaHtml
+      + '</article>';
     return html;
   }
 
