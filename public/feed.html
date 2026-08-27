@@ -108,6 +108,13 @@ body {
 .anom-side { display: inline-block; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 4px; }
 .anom-side.yes { color: var(--green); background: rgba(0,230,138,.1); }
 .anom-side.no  { color: var(--red); background: rgba(255,77,106,.1); }
+/* ── explicit trade prompt at the foot of each live-feed card — plain text,
+   not its own <a>, since the whole card is already the link to /market/:slug
+   (these are live screener signals on already-open markets, no per-entry
+   tradeability check needed the way closed win-cards need one). Same gold
+   "act on it" framing as .wcard-cta, just inert since it's nested inside
+   an existing anchor. ── */
+.anom-cta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.06); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; color: var(--gold); }
 .anom-empty { padding: 20px 16px; color: var(--muted); font-size: 12.5px; }
 
 /* ── CATEGORY WIN ROWS (score wall) ── */
@@ -124,10 +131,17 @@ body {
 .wcard {
   flex: 0 0 auto; width: 238px; background: linear-gradient(160deg, var(--card2), var(--card));
   border: 1px solid var(--border); border-left: 3px solid var(--accent, var(--gold));
-  border-radius: 4px 14px 14px 4px; padding: 16px; text-decoration: none; color: var(--ink);
+  border-radius: 4px 14px 14px 4px; padding: 16px; color: var(--ink);
   display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, transform .15s, box-shadow .15s;
 }
 .wcard:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -14px rgba(0,0,0,.55); }
+/* ── the card used to be one big <a> to the trader's profile. Adding a
+   second, distinct action (trade the market) means it can no longer be a
+   single link — nested <a> tags are invalid HTML and behave unpredictably.
+   .wcard-link now carries everything that used to live directly on .wcard;
+   the CTA below is a sibling, same split as home-kings.html's
+   .call-trader / .call-cta. ── */
+.wcard-link { display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; flex: 1; min-height: 0; }
 /* ── who traded it comes FIRST — Marc: "the focus is on the roi" (it was),
    name needs to lead. Score+n sits beside the name in a badge, not the
    avatar-initials circle (Marc: "the score should be a number instead
@@ -163,6 +177,16 @@ body {
 .wcard-hero .mult { font-size: 19px; font-weight: 900; letter-spacing: -.02em; color: var(--green); font-variant-numeric: tabular-nums; }
 .wcard-entry { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; color: var(--muted); }
 .wcard-q { font-size: 12px; color: rgba(240,240,245,.72); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 33px; margin-top: auto; }
+
+/* ── "get in the trade" CTA — only rendered when the server has confirmed
+   (live gamma) the win's market is still open; a card whose CTA can't
+   work must never show one. Same gold-gradient treatment as home-kings.html's
+   .call-cta, scaled to this card's smaller footprint. Amount is always the
+   site default, never sized to the trader's own win (Gate 4). ── */
+.wcard-cta { display: block; text-align: center; text-decoration: none; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12.5px; color: #151109; background: linear-gradient(180deg, #e0aa2e, var(--gold)); border: 1px solid var(--gold); border-radius: 8px; padding: 9px 10px; margin-top: 2px; box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 8px 16px -10px rgba(201,146,13,.6); transition: transform .15s; }
+.wcard-cta:hover { transform: translateY(-1px); }
+.wcard-cta-foot { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); text-align: center; line-height: 1.4; margin-top: -4px; }
+@media (prefers-reduced-motion: reduce) { .wcard-cta { transition: none; } }
 
 .empty-state { padding: 24px 16px; color: var(--muted); font-size: 12.5px; }
 
@@ -351,19 +375,36 @@ function loadAnomalies() {
         var colors = ANOM_COLORS[s.type] || ['rgba(201,146,13,.12)', '#c9920d'];
         var label = ANOM_LABELS[s.type] || String(s.type || '').toUpperCase();
         var side = (s.side || '').toUpperCase();
-        var url = s.slug ? '/market/' + esc(s.slug) : '#';
+        // These are live screener signals on markets the Alpha Engine
+        // already restricts to active/open (no per-entry tradeability
+        // check needed the way closed win-cards need one, below). Same
+        // $25 site-default size as every other trade CTA on the feed
+        // (Gate 4) — it's the same number market.html would default to
+        // on its own, just made explicit here.
+        // esc() the fully-assembled URL, not the slug alone — a raw "&"
+        // inserted via innerHTML is live HTML, not a plain character (see
+        // the identical note on tradeHref in winCardHtml below).
+        var url = s.slug ? esc('/market/' + encodeURIComponent(s.slug) + '?from=feed-signal'
+          + (side === 'YES' || side === 'NO' ? '&side=' + side.toLowerCase() : '') + '&size=' + CALL_DEFAULT_USD)
+          : '#';
         var isNew = prevKeys && !prevKeys.has(signalKey(s));
         return '<a class="anom-card' + (isNew ? ' flash' : '') + '" style="--accent:' + colors[1] + ';--i:' + i + '" href="' + url + '">'
           + '<div class="anom-badge-row"><span class="anom-badge" style="background:' + colors[0] + ';color:' + colors[1] + '">' + esc(label) + '</span><span class="anom-age">' + esc(tAgo(s.detected_at)) + '</span></div>'
           + '<div class="anom-market">' + esc(s.market || '') + '</div>'
           + '<div class="anom-reason">' + esc(reasonFor(s)) + '</div>'
           + (side ? '<span class="anom-side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>' : '')
+          + (s.slug ? '<div class="anom-cta"><span>Get in this trade</span><span>&rarr;</span></div>' : '')
           + '</a>';
       }).join('');
       _anomSeenKeys = new Set(list.map(signalKey));
     })
     .catch(renderAnomEmpty);
 }
+
+// The site's standing default trade size — NEVER the trader's own
+// position size (Gate 4, CLAUDE.md). Same constant name/value as
+// home-kings.html's live-calls CTA.
+var CALL_DEFAULT_USD = 25;
 
 // ── CATEGORY WIN ROWS: /api/feed/category-wins, most-liquid category first,
 // each row a scrolling wall of real winning trades. Score+n always travel
@@ -381,21 +422,47 @@ function winCardHtml(e, accent, i) {
   // markup is a separate implementation, doesn't route through that
   // shared component, so it needed the identical fix applied here too).
   var href = e.username ? '/@' + esc(e.username) : e.polymarket_address ? '/trader/' + esc(e.polymarket_address) : '#';
+  // "Get in the trade" — only when the server has confirmed (live gamma,
+  // see /api/feed/category-wins) this win's market is genuinely still
+  // open. A closed-trade win can easily point at a market that has since
+  // resolved; a CTA that can't work must never render (same rule
+  // home-kings.html's live-calls CTA follows). copy_user_id attributes
+  // the resulting trade to this trader's call — it is provenance, not a
+  // claim that they currently hold the position (they may have already
+  // exited, that's what "win" means here).
+  var ctaHtml = '';
+  if (e.trade && e.trade.slug) {
+    var sideLower = win.side.toLowerCase();
+    var priceC = Math.round(e.trade.current_price * 100) + '¢';
+    // esc() the fully-assembled href, not the pieces going into it — a raw
+    // "&" inserted via innerHTML is live HTML, and "&copy_user_id" without
+    // this is parsed as the legacy "&copy" named entity (©) followed by
+    // "_user_id", silently corrupting the URL. Same pattern home-kings.html
+    // uses for its own tradeHref.
+    var tradeHref = '/market/' + encodeURIComponent(e.trade.slug)
+      + '?from=trader&side=' + encodeURIComponent(sideLower) + '&size=' + CALL_DEFAULT_USD
+      + (e.user_id ? '&copy_user_id=' + encodeURIComponent(e.user_id) : '');
+    ctaHtml = '<a class="wcard-cta" href="' + esc(tradeHref) + '">Trade ' + esc(win.side) + ' at ' + esc(priceC) + ' on Polymarket &rarr;</a>'
+      + '<p class="wcard-cta-foot">' + esc(priceC) + ' a share, pays $1 if ' + esc(win.side) + ' resolves</p>';
+  }
   // Same Flex Score hero treatment as every other card on the homepage/feed
   // (2026-08-05): gold, prominent badge is the hero; win rate/ROI/trade
   // count are the smaller supporting row directly beneath. The specific win
   // (mult/entry/question) is this card's own evidence — kept as-is below.
-  return '<a class="wcard" style="--accent:' + accent + ';--i:' + (i || 0) + '" href="' + href + '">'
-    + '<div class="wcard-who">'
-      + avatarHtml(handle, e.polymarket_address)
-      + '<div class="wcard-flexbadge' + (flexKnown ? '' : ' is-mute') + '"><span class="num">' + esc(flexText) + '</span><span class="lbl">Flex</span></div>'
-      + '<div class="wcard-handle">' + esc(handle) + '</div>'
-    + '</div>'
-    + '<div class="wcard-substats">' + esc(fmtPlainPct(e.win_rate_pct)) + ' WR · ' + esc(fmtPct(e.raw_weighted_roi_pct)) + ' ROI · ' + esc(e.n) + ' trades</div>'
-    + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
-    + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
-    + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
-    + '</a>';
+  return '<article class="wcard" style="--accent:' + accent + ';--i:' + (i || 0) + '">'
+    + '<a class="wcard-link" href="' + href + '">'
+      + '<div class="wcard-who">'
+        + avatarHtml(handle, e.polymarket_address)
+        + '<div class="wcard-flexbadge' + (flexKnown ? '' : ' is-mute') + '"><span class="num">' + esc(flexText) + '</span><span class="lbl">Flex</span></div>'
+        + '<div class="wcard-handle">' + esc(handle) + '</div>'
+      + '</div>'
+      + '<div class="wcard-substats">' + esc(fmtPlainPct(e.win_rate_pct)) + ' WR · ' + esc(fmtPct(e.raw_weighted_roi_pct)) + ' ROI · ' + esc(e.n) + ' trades</div>'
+      + '<div class="wcard-hero"><span class="won-label">Won</span><span class="mult">' + esc(multText) + '</span></div>'
+      + '<div class="wcard-entry">' + esc(verb) + (entryC ? ' at ' + entryC : '') + '</div>'
+      + '<div class="wcard-q">' + esc((win.question || '').slice(0, 80)) + '</div>'
+    + '</a>'
+    + ctaHtml
+    + '</article>';
 }
 
 function loadCategoryRows() {

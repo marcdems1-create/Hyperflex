@@ -14002,13 +14002,25 @@ app.get('/api/live-calls', async (req, res) => {
 // only real signal available without a separate live Polymarket
 // category-volume integration. Documented assumption, not Polymarket's own
 // category volume.
+// 3-min cache, keyed by the request's own limit param — this handler now
+// makes one live gamma lookup per distinct market that makes the cut (to
+// find out whether a win's market is still open enough to trade), and
+// doing that on every uncached hit from every /feed visitor would hammer
+// gamma for no reason since the underlying wins barely change minute to
+// minute. Matches the client's own 3-min poll interval (feed.html).
+let _categoryWinsCache = new Map(); // limit -> { data, ts }
+const CATEGORY_WINS_CACHE_MS = 3 * 60 * 1000;
+
 app.get('/api/feed/category-wins', async (req, res) => {
   try {
     if (!pool) return res.json({ categories: [] });
+    const limit = Math.min(30, parseInt(req.query.limit, 10) || 16);
+    const cached = _categoryWinsCache.get(limit);
+    if (cached && (Date.now() - cached.ts) < CATEGORY_WINS_CACHE_MS) return res.json(cached.data);
 
     const rows = await dbQuery(`
       SELECT user_id::text AS user_id, market_question, side, entry_price, exit_price,
-             entry_cost_usd, realized_pnl, realized_roi, closed_at
+             entry_cost_usd, realized_pnl, realized_roi, closed_at, condition_id
       FROM realized_trades
       WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL AND closed_at IS NOT NULL
         AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
@@ -14043,7 +14055,6 @@ app.get('/api/feed/category-wins', async (req, res) => {
       if (!existing || pnl > Number(existing.realized_pnl)) byUser.set(t.user_id, t);
     }
 
-    const limit = Math.min(30, parseInt(req.query.limit, 10) || 16);
     const categories = [...liquidityByCat.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([cat, totalVolume]) => {
@@ -14072,6 +14083,7 @@ app.get('/api/feed/category-wins', async (req, res) => {
                 multiplier: roi != null && roi >= 1 ? Math.round((1 + roi) * 10) / 10 : null,
                 pnl_usd: Math.round(pnl * 100) / 100,
                 closed_at: t.closed_at,
+                condition_id: t.condition_id || null,
               },
             };
           })
@@ -14087,7 +14099,45 @@ app.get('/api/feed/category-wins', async (req, res) => {
       })
       .filter(c => c.entries.length >= 3); // thin categories with <3 real wins aren't a "wall"
 
-    res.json({ categories });
+    // ── "Trade this" enrichment ─────────────────────────────────────────
+    // A win here is a CLOSED trade — the market it happened on may since
+    // have resolved, in which case there is nothing left to trade. Cross-
+    // reference every entry's condition_id against live gamma (same
+    // _fetchPolymarketMeta() helper the settlement-verification paths
+    // already use — see CLAUDE.md rule 10) and only attach `trade` when
+    // the market is demonstrably still open. A card whose CTA can't work
+    // must never render one — same defensive rule home-kings.html's
+    // live-calls CTA follows.
+    const uniqueConditionIds = [...new Set(
+      categories.flatMap(c => c.entries.map(e => e.win.condition_id)).filter(Boolean)
+    )];
+    const metaById = new Map();
+    await _mapLimit(uniqueConditionIds, 8, async (cid) => {
+      const meta = await _fetchPolymarketMeta(cid).catch(() => null);
+      if (meta) metaById.set(cid, meta);
+    });
+    for (const c of categories) {
+      for (const e of c.entries) {
+        const cid = e.win.condition_id;
+        const meta = cid ? metaById.get(cid) : null;
+        // Binary YES/NO only — a named multi-outcome side (e.g. a specific
+        // candidate) can't be passed to the prefilled trade widget.
+        const sideOk = e.win.side === 'YES' || e.win.side === 'NO';
+        const tradeable = !!(meta && !meta.closed && meta.active && meta.slug && sideOk
+          && (meta.lastTradePrice != null || meta.bestBid != null || meta.bestAsk != null));
+        e.trade = tradeable ? {
+          slug: meta.slug,
+          current_price: meta.lastTradePrice != null ? meta.lastTradePrice
+            : (meta.bestBid != null && meta.bestAsk != null ? Math.round(((meta.bestBid + meta.bestAsk) / 2) * 1e4) / 1e4
+              : (meta.bestAsk != null ? meta.bestAsk : meta.bestBid)),
+        } : null;
+        delete e.win.condition_id; // internal join key only, not a public field
+      }
+    }
+
+    const payload = { categories };
+    _categoryWinsCache.set(limit, { data: payload, ts: Date.now() });
+    res.json(payload);
   } catch (e) {
     console.error('[feed/category-wins]', e.message);
     res.status(500).json({ error: e.message });
@@ -24208,6 +24258,7 @@ async function _fetchPolymarketMeta(conditionId) {
       closed: !!m.closed,
       active: m.active !== false,
       question: m.question || null,
+      slug: m.slug || null,
       lastTradePrice: _num(m.lastTradePrice),
       bestBid: _num(m.bestBid),
       bestAsk: _num(m.bestAsk),
