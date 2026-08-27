@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-08-27 — feat(markets): Yield cards lead the page, board list sits below
+
+Yield (reward cards + live book) moved from below "The board" to the top of `/markets`, right under the page header. The board list, KPIs, and charts are unchanged — just lower. `#yield` hash still works.
+
+---
+
 ## 2026-08-26 — feat(markets): page lives at `/markets`; Yield is a section, not a tab
 
 ### feat(server.js): `GET /markets` is the page, not the old JSON

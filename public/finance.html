@@ -471,7 +471,7 @@
   .foot b{color:var(--ink-muted);font-weight:600;}
 
   /* ---------- yield (was /incentives) ---------- */
-  #yield{scroll-margin-top:72px;padding:8px 20px 0;}
+  #yield{scroll-margin-top:72px;padding:8px 20px 28px;border-bottom:1px solid var(--border);margin-bottom:8px;}
   .yield-lede{
     font-size:0.88rem;line-height:1.6;color:var(--ink-muted);
     max-width:62ch;margin:0 0 14px;
@@ -635,6 +635,47 @@
     </div>
   </header>
 
+  <section id="yield" aria-label="Yield">
+    <div class="section-head">
+      <h2 class="section-title">Yield</h2>
+      <span class="section-count">Liquidity rewards · 10-min cache</span>
+    </div>
+    <p class="yield-lede">
+      Polymarket pays USDC for posting <b>maker orders inside the spread</b> on selected markets.
+      Programs rotate; the list below is the live set. Market orders don't qualify.
+    </p>
+    <div class="banner yield-banner" id="rewardBanner">
+      <span class="yield-banner-mark">●</span>
+      <span class="yield-banner-text" id="rewardBannerText"></span>
+    </div>
+    <div class="kpi-row yield-kpis" aria-label="Yield summary">
+      <div class="kpi"><div class="kpi-val is-mute" id="sMarkets">—</div><span class="kpi-key">Markets paying</span><div class="kpi-sub">Active liquidity-reward programs</div></div>
+      <div class="kpi"><div class="kpi-val is-mute" id="sBestRate">—</div><span class="kpi-key">Best daily rate</span><div class="kpi-sub">Highest USDC/day on the board</div></div>
+      <div class="kpi"><div class="kpi-val is-mute" id="sTotalPool">—</div><span class="kpi-key">Total daily pool</span><div class="kpi-sub">Sum of live program budgets</div></div>
+    </div>
+    <div class="yield-summary">
+      <b>How it works:</b> click a market, switch to Limit, post inside the spread shown on the card.
+      Min-size matters — orders below it don't accrue. Resting on the book is the work.
+    </div>
+    <div id="rewardMarketsList">
+      <div class="empty">
+        <div class="empty-title">Loading live rewards…</div>
+        <div class="empty-body">Pulling active programs from Polymarket.</div>
+      </div>
+    </div>
+    <div id="poolsSection" style="display:none">
+      <div class="section-head" style="padding:18px 0 10px;margin:0;">
+        <h3 class="section-title">Sponsored pools</h3>
+      </div>
+      <div id="poolsList"></div>
+    </div>
+    <div class="yield-mech">
+      <div class="mech-line"><span class="mech-num">01</span><span><b>Polymarket runs the program.</b> A subset of active markets gets a daily USDC budget paid to traders who post maker orders inside a set spread. The cards above are the ones with a budget right now.</span></div>
+      <div class="mech-line"><span class="mech-num">02</span><span><b>Post a limit, not a market order.</b> Open the trade widget, switch to Limit, set your price inside the spread. Sitting on the book is the work; the longer the order rests, the more you earn.</span></div>
+      <div class="mech-line"><span class="mech-num">03</span><span><b>Polymarket attributes + pays.</b> Rewards accrue continuously and settle in USDC. <a href="https://docs.polymarket.com/quickstart/orders-rewards/rewards">Polymarket's rewards docs ↗</a></span></div>
+    </div>
+  </section>
+
   <section class="kpi-row" id="kpiRow" aria-label="Market summary">
     <div class="kpi"><div class="kpi-val is-mute" id="kpiCount">—</div><span class="kpi-key">Markets tracked</span><div class="kpi-sub">Liquid, non-noise, across 5 categories</div></div>
     <div class="kpi"><div class="kpi-val is-mute" id="kpiVol">—</div><span class="kpi-key">24h volume</span><div class="kpi-sub">Traded across everything listed here</div></div>
@@ -701,47 +742,6 @@
   <div class="mkt-list" id="mktList">
     <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>
   </div>
-
-  <section id="yield" aria-label="Yield">
-    <div class="section-head" style="padding:26px 0 12px;margin:10px 0 0;">
-      <h2 class="section-title">Yield</h2>
-      <span class="section-count">Liquidity rewards · 10-min cache</span>
-    </div>
-    <p class="yield-lede">
-      Polymarket pays USDC for posting <b>maker orders inside the spread</b> on selected markets.
-      Programs rotate; the list below is the live set. Market orders don't qualify.
-    </p>
-    <div class="banner yield-banner" id="rewardBanner">
-      <span class="yield-banner-mark">●</span>
-      <span class="yield-banner-text" id="rewardBannerText"></span>
-    </div>
-    <div class="kpi-row yield-kpis" aria-label="Yield summary">
-      <div class="kpi"><div class="kpi-val is-mute" id="sMarkets">—</div><span class="kpi-key">Markets paying</span><div class="kpi-sub">Active liquidity-reward programs</div></div>
-      <div class="kpi"><div class="kpi-val is-mute" id="sBestRate">—</div><span class="kpi-key">Best daily rate</span><div class="kpi-sub">Highest USDC/day on the board</div></div>
-      <div class="kpi"><div class="kpi-val is-mute" id="sTotalPool">—</div><span class="kpi-key">Total daily pool</span><div class="kpi-sub">Sum of live program budgets</div></div>
-    </div>
-    <div class="yield-summary">
-      <b>How it works:</b> click a market, switch to Limit, post inside the spread shown on the card.
-      Min-size matters — orders below it don't accrue. Resting on the book is the work.
-    </div>
-    <div id="rewardMarketsList">
-      <div class="empty">
-        <div class="empty-title">Loading live rewards…</div>
-        <div class="empty-body">Pulling active programs from Polymarket.</div>
-      </div>
-    </div>
-    <div id="poolsSection" style="display:none">
-      <div class="section-head" style="padding:18px 0 10px;margin:0;">
-        <h3 class="section-title">Sponsored pools</h3>
-      </div>
-      <div id="poolsList"></div>
-    </div>
-    <div class="yield-mech">
-      <div class="mech-line"><span class="mech-num">01</span><span><b>Polymarket runs the program.</b> A subset of active markets gets a daily USDC budget paid to traders who post maker orders inside a set spread. The cards above are the ones with a budget right now.</span></div>
-      <div class="mech-line"><span class="mech-num">02</span><span><b>Post a limit, not a market order.</b> Open the trade widget, switch to Limit, set your price inside the spread. Sitting on the book is the work; the longer the order rests, the more you earn.</span></div>
-      <div class="mech-line"><span class="mech-num">03</span><span><b>Polymarket attributes + pays.</b> Rewards accrue continuously and settle in USDC. <a href="https://docs.polymarket.com/quickstart/orders-rewards/rewards">Polymarket's rewards docs ↗</a></span></div>
-    </div>
-  </section>
 
   <p class="foot">
     <b>What this page does not claim.</b> A price is the market's own implied probability,
