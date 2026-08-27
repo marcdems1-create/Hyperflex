@@ -29,11 +29,17 @@
    CTA is a sibling, same split as feed.html's .wcard-link / .wcard-cta. ── */
 .tcard-link { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit; flex: 1; min-height: 0; }
 
-/* ── identity row — no avatar-initials circle (Marc, on the same pattern
-   elsewhere: "the score should be a number... put the score there and make
-   it pop"). The card's Flex Score hero (below) already carries that job;
-   the handle is the sole identity element here. ── */
+/* ── identity row. The Flex Score hero (below) still carries the "biggest
+   number on the card" job (Marc: "the score should be a number... put the
+   score there and make it pop") — the glyph here is a small decorative
+   identity pattern, not initials, not competing with the score. ── */
 .tcard-identity { display: flex; align-items: center; gap: 10px; }
+.tcard-avatar-wrap { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; padding: 2px; border: 1.5px solid rgba(240,240,245,.14); transition: border-color .15s; }
+.tcard-avatar-wrap.is-hot { border-color: rgba(0,230,138,.55); }
+.tcard-avatar-wrap.is-cold { border-color: rgba(255,77,106,.5); }
+.tcard-avatar { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.tcard-hero .tcard-avatar-wrap { width: 40px; height: 40px; }
+.tcard-compact .tcard-avatar-wrap { width: 26px; height: 26px; padding: 1.5px; }
 .tcard-handle { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 15px; color: rgba(240,240,245,.7); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tcard-rank {
   margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
@@ -120,18 +126,32 @@
 }
 .tcard-compact .tcard-styleflag { font-size: 10px; padding: 5px 8px; }
 
-/* ── evidence — one call, shown vividly ── */
+/* ── evidence — one call, shown vividly. This is the card's proof moment,
+   restyled as a callout band (not a plain indented line) so the receipt
+   reads with the same weight as an ad's "here's the number" — colored
+   background, tag, bigger multiplier. Still strictly past-tense/resolved;
+   the loud treatment is cosmetic, not a claim about a live opportunity. ── */
 .tcard-evidence {
-  border-left: 2px solid rgba(240,240,245,.12);
-  padding: 2px 0 2px 12px;
-  display: flex; flex-direction: column; gap: 3px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid rgba(240,240,245,.1);
+  background: rgba(240,240,245,.03);
 }
+.tcard-evidence.is-win { background: rgba(0,230,138,.07); border-color: rgba(0,230,138,.24); }
+.tcard-evidence.is-loss { background: rgba(255,77,106,.06); border-color: rgba(255,77,106,.2); }
+.tcard-evidence-tag {
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .1em; text-transform: uppercase; color: rgba(240,240,245,.4);
+}
+.tcard-evidence.is-win .tcard-evidence-tag { color: #00e68a; }
+.tcard-evidence.is-loss .tcard-evidence-tag { color: #ff4d6a; }
 .tcard-evidence-line {
-  font-family: 'Inter', -apple-system, sans-serif; font-size: 15px; font-weight: 700;
-  color: rgba(240,240,245,.85);
+  font-family: 'Inter', -apple-system, sans-serif; font-size: 16px; font-weight: 700;
+  color: rgba(240,240,245,.9);
 }
-.tcard-evidence-line .mult-win { color: #00e68a; }
-.tcard-evidence-line .mult-loss { color: #ff4d6a; }
+.tcard-evidence-line .mult-win { color: #00e68a; font-size: 1.15em; font-weight: 900; }
+.tcard-evidence-line .mult-loss { color: #ff4d6a; font-size: 1.15em; font-weight: 900; }
 .tcard-evidence-q {
   font-size: 13px; color: rgba(240,240,245,.45); line-height: 1.4;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;

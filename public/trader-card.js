@@ -12,6 +12,42 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ── IDENTITY GLYPH — deterministic, colorful, zero network calls. Not an
+  // initials-in-circle avatar (Marc, on this exact component: "the score
+  // should be a number instead of having an image with the first two
+  // letters... put the score there and make it pop") — the Flex Score stays
+  // the number the eye lands on first. This is a small decorative pattern
+  // (abstract shapes, no letters) hashed from the wallet/handle so the same
+  // trader always renders the same glyph, purely for visual scannability in
+  // dense grids/rails. ──
+  var PALETTE = ['#c9920d', '#00e68a', '#ff4d6a', '#4d9fff', '#a855f7', '#f59e0b'];
+  function hashStr(s) {
+    s = String(s || '');
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+    return Math.abs(h);
+  }
+  function avatarHtml(seed, size) {
+    size = size || 34;
+    var h = hashStr(seed);
+    var c1 = PALETTE[h % PALETTE.length];
+    var c2 = PALETTE[(h >> 3) % PALETTE.length];
+    var c3 = PALETTE[(h >> 7) % PALETTE.length];
+    var rot = h % 360;
+    var uid = 'av' + (h % 1000000);
+    var shapes = [
+      { x: 6 + (h % 14), y: 4 + ((h >> 2) % 12), r: 13 + ((h >> 4) % 9), fill: c1, op: 0.9 },
+      { x: 20 + ((h >> 6) % 16), y: 20 + ((h >> 8) % 16), r: 10 + ((h >> 5) % 10), fill: c2, op: 0.75 },
+      { x: (h >> 9) % 34, y: 26 + ((h >> 3) % 12), r: 8 + ((h >> 10) % 8), fill: c3, op: 0.6 }
+    ];
+    var circles = shapes.map(function (s) { return '<circle cx="' + s.x + '" cy="' + s.y + '" r="' + s.r + '" fill="' + s.fill + '" opacity="' + s.op + '"/>'; }).join('');
+    return '<svg class="tcard-avatar" width="' + size + '" height="' + size + '" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+      + '<defs><clipPath id="' + uid + '"><circle cx="20" cy="20" r="20"/></clipPath></defs>'
+      + '<g clip-path="url(#' + uid + ')" transform="rotate(' + rot + ' 20 20)">'
+      + '<rect width="40" height="40" fill="' + c1 + '" opacity="0.16"/>' + circles
+      + '</g></svg>';
+  }
+
   function handle(card) {
     if (card.username) return '@' + card.username;
     if (card.display_name) return card.display_name;
@@ -105,7 +141,14 @@
     var html = '<article class="' + cls + '" data-user-id="' + esc(card.user_id) + '">'
       + '<a class="tcard-link" href="' + profileHref + '">';
 
+    // Identity glyph ring reflects current streak — green hot, red cold,
+    // neutral otherwise — so the eye can scan a rail for "who's on a run"
+    // before reading a single number.
+    var avSeed = card.polymarket_address || card.username || card.user_id;
+    var ringCls = card.streak && card.streak.type === 'win' ? 'is-hot' : card.streak && card.streak.type === 'loss' ? 'is-cold' : '';
+
     html += '<div class="tcard-identity">'
+      + '<div class="tcard-avatar-wrap ' + ringCls + '">' + avatarHtml(avSeed, variant === 'hero' ? 40 : variant === 'compact' ? 26 : 34) + '</div>'
       + '<div class="tcard-handle">' + esc(handle(card)) + '</div>'
       + (card.whale_rank ? '<div class="tcard-rank">#' + esc(card.whale_rank) + '</div>' : '')
       + '</div>';
@@ -149,8 +192,16 @@
       html += '<div class="' + sfCls + '">' + esc(card.style_flag.text) + '</div>';
     }
 
+    // Evidence callout — restyled as the card's proof-of-call moment (louder
+    // than a plain text line: colored band, tag, bigger multiplier) since
+    // this IS the receipt the rest of the card's score is built on. Still a
+    // resolved, past-tense call (never a live "buy now" prompt) — score+n
+    // above it and the win/loss framing keep rule 3 intact either way.
     if (variant !== 'compact' && ev) {
-      html += '<div class="tcard-evidence">'
+      var evResult = card.evidence && card.evidence.result === 'win' ? 'is-win' : 'is-loss';
+      var evTag = evResult === 'is-win' ? 'VERIFIED WIN' : 'VERIFIED LOSS';
+      html += '<div class="tcard-evidence ' + evResult + '">'
+        + '<div class="tcard-evidence-tag">' + evTag + '</div>'
         + '<div class="tcard-evidence-line">' + ev.line + '</div>'
         + '<div class="tcard-evidence-q">' + esc((ev.question || '').slice(0, 90)) + '</div>'
         + '</div>';
@@ -177,5 +228,5 @@
     info.hidden = !info.hidden;
   }
 
-  window.HFXTraderCard = { render: render, sparkline: sparkline, esc: esc, toggleFlexInfo: toggleFlexInfo };
+  window.HFXTraderCard = { render: render, sparkline: sparkline, esc: esc, toggleFlexInfo: toggleFlexInfo, avatarHtml: avatarHtml };
 })();

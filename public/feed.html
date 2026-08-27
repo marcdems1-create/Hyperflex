@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FLEX Feed — HYPERFLEX</title>
-<link rel="stylesheet" href="/trader-card.css?v=2">
+<link rel="stylesheet" href="/trader-card.css?v=3">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -190,9 +190,43 @@ body {
 
 .empty-state { padding: 24px 16px; color: var(--muted); font-size: 12.5px; }
 
+/* ── ALPHA SIGNALS rail — the Alpha Terminal's edge cards, compact, living
+   beside the trader-first feed rather than folded into it (rule 2: markets
+   are evidence, never the headline — this rail is visibly secondary, the
+   main column stays traders/wins). Mobile: renders as its own section
+   after the main column, i.e. at the bottom of the page (see grid below). ── */
+.feed-layout { display: block; }
+.feed-main { min-width: 0; }
+.feed-alpha-rail { margin-top: 34px; padding: 0 16px; }
+.alpha-rail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.alpha-rail-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: pulse 1.8s ease-in-out infinite; flex-shrink: 0; }
+.alpha-rail-head h2 { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -.01em; }
+.alpha-rail-head a { margin-left: auto; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.alpha-rail-head a:hover { color: var(--ink); }
+.alpha-rail-sub { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; max-width: 480px; }
+.alpha-rail-empty { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
+.alpha-rail-list { display: flex; flex-direction: column; gap: 10px; }
+.acard {
+  display: block; background: var(--card); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, var(--cyan)); border-radius: 4px 10px 10px 4px;
+  padding: 12px 13px; text-decoration: none; color: var(--ink);
+  transition: border-color .15s, transform .15s;
+}
+.acard:hover { transform: translateX(2px); }
+.acard-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.acard-score { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 800; color: var(--accent, var(--cyan)); }
+.acard-score-lbl { font-family: 'Inter', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.acard-new { margin-left: auto; font-family: 'Inter', sans-serif; font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--purple); background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.3); border-radius: 8px; padding: 1px 6px; }
+.acard-q { font-size: 12.5px; font-weight: 600; line-height: 1.35; color: rgba(240,240,245,.85); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.acard-trade { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.acard-trade .roi { color: var(--green); font-weight: 700; margin-left: auto; }
+.acard-trade .side { font-weight: 800; padding: 1px 6px; border-radius: 4px; }
+.acard-trade .side.yes { color: var(--green); background: rgba(0,230,138,.1); }
+.acard-trade .side.no { color: var(--red); background: rgba(255,77,106,.1); }
+
 /* ── desktop scale-up (>=1024px) ── */
 @media (min-width: 1024px) {
-  .page-wrap { max-width: 1240px; margin: 0 auto; padding: 36px 0 88px; }
+  .page-wrap { max-width: 1520px; margin: 0 auto; padding: 36px 0 88px; }
   .page-head, .anom-head, .cat-row-head, .anom-scroll, .win-scroll, .anom-empty, .empty-state { padding-left: 32px; padding-right: 32px; }
   .page-head h1 { font-size: 28px; }
   .anom-card { width: 250px; }
@@ -201,6 +235,11 @@ body {
   .wcard-hero .mult { font-size: 22px; }
   .kpi-row { grid-template-columns: repeat(3, minmax(0,180px)); padding: 0 32px; }
   .kpi-val { font-size: 1.9rem; }
+
+  .feed-layout { display: grid; grid-template-columns: 1fr 340px; gap: 28px; align-items: start; padding-right: 32px; }
+  .feed-main .anom-head, .feed-main .anom-scroll, .feed-main .cat-row-head,
+  .feed-main .win-scroll, .feed-main .anom-empty, .feed-main .empty-state { padding-right: 0; }
+  .feed-alpha-rail { margin-top: 0; padding: 0; position: sticky; top: 88px; max-height: calc(100vh - 110px); overflow-y: auto; }
 }
 </style>
 </head>
@@ -219,18 +258,32 @@ body {
 
   <div class="kpi-row" id="kpiRow"></div>
 
-  <div class="anom-section">
-    <div class="anom-head"><span class="live-swatch"></span><h2>Live Feed</h2></div>
-    <div class="anom-scroll fade-row" id="anomScroll"></div>
+  <div class="feed-layout">
+    <div class="feed-main">
+      <div class="anom-section">
+        <div class="anom-head"><span class="live-swatch"></span><h2>Live Feed</h2></div>
+        <div class="anom-scroll fade-row" id="anomScroll"></div>
+      </div>
+
+      <hr class="sect-divider">
+
+      <div id="catRows"></div>
+    </div>
+
+    <aside class="feed-alpha-rail">
+      <div class="alpha-rail-head">
+        <span class="alpha-rail-dot"></span>
+        <h2>Alpha Signals</h2>
+        <a href="/alpha-live">Full Terminal →</a>
+      </div>
+      <p class="alpha-rail-sub">Live edges from the Alpha Terminal — whale clusters, volume, book depth. Markets, not traders — evidence to act on, not a track record.</p>
+      <div id="alphaRailList"><div class="alpha-rail-empty">Loading…</div></div>
+    </aside>
   </div>
-
-  <hr class="sect-divider">
-
-  <div id="catRows"></div>
 
 </div>
 
-<script src="/trader-card.js?v=2"></script>
+<script src="/trader-card.js?v=3"></script>
 <script>
 'use strict';
 
@@ -486,6 +539,42 @@ function loadCategoryRows() {
     .catch(function() { wrap.innerHTML = '<div class="empty-state">Could not load the category feed. <a href="javascript:void 0" onclick="loadCategoryRows();return false" style="color:#a78bfa">retry</a></div>'; });
 }
 
+// ── ALPHA SIGNALS rail — real Alpha Terminal edge cards (buildAlphaList,
+// same source /alpha-live reads from), compact. This is the "if it's real
+// alpha it should be on the feed" rail: market-led by design (edge score,
+// entry/win/ROI), which is why it lives in its own clearly-labeled side
+// column instead of blending into the trader-first main feed.
+function alphaRailEmpty(msg) {
+  var el = document.getElementById('alphaRailList');
+  if (el) el.innerHTML = '<div class="alpha-rail-empty">' + esc(msg) + '</div>';
+}
+function loadAlphaRail() {
+  fetch('/api/alpha/top?n=8')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) {
+      var markets = (d && (d.markets || d)) || [];
+      if (!markets.length) { alphaRailEmpty('No live edges right now — check back shortly.'); return; }
+      document.getElementById('alphaRailList').innerHTML = '<div class="alpha-rail-list">' + markets.slice(0, 8).map(function(m) {
+        var mktPct = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
+        var t = m.trade || { side: 'YES', entry_cost: mktPct, potential_profit: 100 - mktPct, roi_pct: 0 };
+        var entry = t.entry_cost != null ? t.entry_cost : mktPct;
+        var win = t.potential_profit != null ? t.potential_profit : (100 - entry);
+        var roi = t.roi_pct != null ? t.roi_pct : (entry > 0 ? Math.round(win / entry * 100) : 0);
+        var side = (t.side || 'YES').toUpperCase();
+        var accent = m.edge_score >= 60 ? '#00e68a' : m.edge_score >= 35 ? '#4d9fff' : '#9a9aa8';
+        var body = '<div class="acard-top"><span class="acard-score">' + esc(m.edge_score) + '</span><span class="acard-score-lbl">Edge</span>'
+          + (m.is_new ? '<span class="acard-new">New</span>' : '') + '</div>'
+          + '<div class="acard-q">' + esc(m.question || '') + '</div>'
+          + '<div class="acard-trade"><span class="side ' + (side === 'YES' ? 'yes' : 'no') + '">' + esc(side) + '</span>'
+          + '<span>' + esc(entry) + '¢ → ' + esc(win) + '¢</span>'
+          + '<span class="roi">+' + esc(roi) + '%</span></div>';
+        if (!m.slug) return '<div class="acard" style="--accent:' + accent + '">' + body + '</div>';
+        return '<a class="acard" style="--accent:' + accent + '" href="/market/' + encodeURIComponent(m.slug) + '">' + body + '</a>';
+      }).join('') + '</div>';
+    })
+    .catch(function() { alphaRailEmpty('Could not load alpha signals.'); });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   renderKpis();
   document.getElementById('anomScroll').innerHTML = skelRow(4, '220px');
@@ -493,11 +582,13 @@ document.addEventListener('DOMContentLoaded', function() {
     '<div class="cat-row"><div class="win-scroll">' + skelRow(4, '238px') + '</div></div>';
   loadAnomalies();
   loadCategoryRows();
+  loadAlphaRail();
   setInterval(loadAnomalies, 2 * 60 * 1000);
   // Category wins change less often than live signals (a new qualifying
   // win is a rarer event than a whale position), so a longer interval here
   // is enough to keep "Live Feed" honest without hammering the endpoint.
   setInterval(loadCategoryRows, 3 * 60 * 1000);
+  setInterval(loadAlphaRail, 90 * 1000);
 });
 </script>
 </body>
