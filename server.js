@@ -19510,7 +19510,7 @@ async function _fetchPreviewMarkets(cfg, n = 8) {
   // Layer 1 — broad gamma keyword search (recall, outcome markets only)
   for (const term of terms) {
     try {
-      const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volume&ascending=false&search=${encodeURIComponent(term)}`;
+      const url = `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=15&order=volumeNum&ascending=false&search=${encodeURIComponent(term)}`;
       const r = await _nodeFetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
       if (!r.ok) continue;
       const body = await r.json().catch(() => null);
@@ -20274,9 +20274,56 @@ async function fetchFinanceMarkets() {
           depth_side:          sm.depth_side || null,
         };
         if (!wh.whale_count && !wh.edge_score) continue;
-        for (const k of [sm.market_id, sm.conditionId, sm.slug]) {
-          if (k) _whaleByKey.set(String(k).toLowerCase(), wh);
+        for (const k of [sm.market_id, sm.conditionId, sm.slug, sm.question]) {
+          if (k) _whaleByKey.set(String(k).toLowerCase().trim(), wh);
         }
+      }
+    } catch (e) { /* enrichment is additive — never fail the fetch on it */ }
+
+    // Fallback: index live whale positions directly off `_whaleWatchCache`.
+    // Screener is a 5–95% price-culled slice of ~100 markets; /markets holds
+    // 71 across categories and most of them never appear in that slice —
+    // which is why whale_count stayed 0 on every finance row even after the
+    // market_id key-mapping fix. This path does not depend on that overlap.
+    // Accumulate first, then fill only keys screener left empty — never add
+    // on top of a screener count (that would double-count the same whales).
+    try {
+      const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+      const net = {};
+      for (const wp of whalePositions) {
+        const cid = wp.conditionId || null;
+        const mkt = (wp.market || wp.position || '').toLowerCase().trim();
+        if (!cid && !mkt) continue;
+        const wallet = (wp.proxyWallet || wp.trader || 'unknown').toLowerCase();
+        const nk = wallet + ':' + (cid || mkt);
+        if (!net[nk]) net[nk] = { yes: 0, no: 0, cid, mkt };
+        const side = (wp.side || 'YES').toUpperCase();
+        const cap = parseFloat(wp.size || 0);
+        if (side === 'YES' || side === 'Y') net[nk].yes += cap;
+        else net[nk].no += cap;
+      }
+      const fromWhales = {};
+      for (const n of Object.values(net)) {
+        const amt = Math.abs(n.yes - n.no);
+        if (amt < 10) continue;
+        for (const k of [n.cid, n.mkt]) {
+          if (!k) continue;
+          const key = String(k).toLowerCase().trim();
+          if (!fromWhales[key]) fromWhales[key] = { count: 0, capital: 0 };
+          fromWhales[key].count++;
+          fromWhales[key].capital += amt;
+        }
+      }
+      for (const [k, v] of Object.entries(fromWhales)) {
+        const existing = _whaleByKey.get(k);
+        if (existing && existing.whale_count) continue;
+        _whaleByKey.set(k, {
+          whale_count: v.count,
+          total_whale_capital: Math.round(v.capital),
+          edge_score: (existing && existing.edge_score) || 0,
+          depth_ratio: (existing && existing.depth_ratio) || null,
+          depth_side: (existing && existing.depth_side) || null,
+        });
       }
     } catch (e) { /* enrichment is additive — never fail the fetch on it */ }
 
@@ -20322,6 +20369,7 @@ async function fetchFinanceMarkets() {
           const vol = parseFloat(m.volumeNum || m.volume || 0);
           const wh = _whaleByKey.get(String(m.conditionId || '').toLowerCase())
                   || _whaleByKey.get(String(m.slug || '').toLowerCase())
+                  || _whaleByKey.get(String(q || '').toLowerCase().trim())
                   || {};
           let yesTokenId = null;
           try {
@@ -21035,7 +21083,7 @@ app.post('/api/admin/import-url', async (req, res) => {
         if (searchTerms) {
           const gc = new AbortController();
           const gt = setTimeout(() => gc.abort(), 5000);
-          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=3&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=3&order=volumeNum&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
             signal: gc.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
           }).finally(() => clearTimeout(gt));
           if (gRes.ok) {
@@ -21141,7 +21189,7 @@ app.post('/api/admin/import-tweet', async (req, res) => {
         if (searchTerms) {
           const ctrl = new AbortController();
           const tid = setTimeout(() => ctrl.abort(), 5000);
-          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
+          const gRes = await fetch(`https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volumeNum&ascending=false&search=${encodeURIComponent(searchTerms)}`, {
             signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
           }).finally(() => clearTimeout(tid));
           if (gRes.ok) {
@@ -22480,8 +22528,8 @@ app.get('/api/activity', async (req, res) => {
       // Use whale data for trending — much higher quality than random Gamma API results
       const [whaleRes, polyCrypto, polyPolitics] = await Promise.allSettled([
         fetchExt('https://data-api.polymarket.com/v1/leaderboard?limit=20&window=all'),
-        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
-        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volume&ascending=false&search=trump'),
+        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volumeNum&ascending=false&search=bitcoin'),
+        fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=8&order=volumeNum&ascending=false&search=trump'),
       ]);
       // Pull whale positions for the feed
       if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
@@ -22547,7 +22595,7 @@ app.get('/api/activity', async (req, res) => {
       }
       // Fallback: if no whale data, use Gamma API
       if (!activities.some(a => a.id?.startsWith('twhale_'))) {
-        const polyFallback = await fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volume&ascending=false').catch(() => null);
+        const polyFallback = await fetchExt('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volume24hr&ascending=false').catch(() => null);
         if (polyFallback?.ok) {
         const raw = _gammaUnwrap(await polyFallback.json());;
         const filteredPoly = (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000);
@@ -26107,7 +26155,7 @@ app.get('/api/takes/search-markets', async (req, res) => {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 6000);
         const gammaRes = await fetch(
-          `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volume&ascending=false&search=${encodeURIComponent(q)}`,
+          `https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=10&order=volumeNum&ascending=false&search=${encodeURIComponent(q)}`,
           { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }
         ).finally(() => clearTimeout(tid));
         if (gammaRes.ok) {
@@ -43370,33 +43418,25 @@ async function _buildAlphaListInner(opts = {}) {
     let binanceVolSurge = {};
     try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
-    // ⚠️ ORDER PARAM: `volumeNum`, NOT `volume`. Gamma's `volume` column is a
-    // STRING, so `order=volume` sorts it lexicographically — measured live
-    // 2026-08-26, it returned markets in the order 100, 100, 100, 100, 1000,
-    // 100, 99948… i.e. a $100 market outranking a $99,948 one. The "we sort
-    // client-side anyway so the server sort just needs to be valid" reasoning
-    // that used to sit here is wrong: the server sort decides WHICH markets we
-    // ever see, and re-sorting 100 near-random markets does not recover the
-    // ones that were never fetched. Downstream effect, measured on production
-    // the same day: the $10k 24h-volume floor below left **9 markets** in
-    // `_screenerCache` with **zero whales matched platform-wide** — which is
-    // what /alpha-live, /api/signals, /api/alpha/top and the whale enrichment
-    // on /markets were all quietly running on.
+    // ⚠️ ORDER PARAM: `volume24hr`, NOT `volume` and NOT `volumeNum`.
+    // `volume` is a STRING — lexicographic sort, a $100 market outranks a
+    // $99,948 one. `volumeNum` is numeric but ranks by LIFETIME volume, so
+    // the top 100 are 0¢ long-shots of mega events (Ethiopia PM, LeBron 2028,
+    // "Will Jesus Christ return before 2027?"). The 5–95% price cull further
+    // down then deletes almost all of them. Measured on production 2026-08-26
+    // after the volumeNum "fix": `_screenerCache` held **10 markets**, max
+    // whale_count 1, and /markets whale enrichment stayed 0 because those 10
+    // (2028 election legs) barely overlap the liveness-ranked /markets board.
+    // `volume24hr` is the live book — Dodgers/Braves, the September FOMC, etc.
+    // Verified live the same day: top 100 by volume24hr → 36 survive 5–95%;
+    // top 100 by volumeNum → 10 survive. An April 2026 changelog claimed
+    // markets/keyset rejects volume24hr (returns 0). It does not.
     //
-    // The old comment also claimed markets/keyset rejects `volume24hr`. It does
-    // not — both `volumeNum` and `volume24hr` sort correctly there (verified
-    // live). `volumeNum` is used because it is densely populated, while gamma
-    // only stamps `volume24hr` on roughly half of rows; the client-side `_vol`
-    // sort below still applies the 24h preference within the fetched window.
-    //
-    // NOTE (not fixed here): `limit=500` is also a lie — keyset caps a page at
-    // 100 and returns a `next_cursor`. This fetches 100, not 500. Correcting
-    // the sort makes those 100 the genuine top 100, which is the change worth
-    // making on its own; paging deeper is a separate, costlier decision
-    // (enrichment + whale matching scale with it).
+    // NOTE: `limit=500` is still a lie — keyset caps a page at 100 and
+    // returns a `next_cursor`. Paging deeper is a separate cost decision.
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 20000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volumeNum&ascending=false', {
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
@@ -44773,7 +44813,7 @@ app.get("/api/alpha/fade", async (req, res) => { try { const { rows } = await po
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
-    const r = await _nodeFetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume&ascending=false', {
+    const r = await _nodeFetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=5&order=volume24hr&ascending=false', {
       signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
@@ -47021,7 +47061,7 @@ app.get('/api/high-prob', async (req, res) => {
       const fetch = _nodeFetch;
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 15000);
-      const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume&ascending=false', {
+      const r = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=500&order=volume24hr&ascending=false', {
         signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
       });
       clearTimeout(tid);
@@ -47153,7 +47193,7 @@ app.get('/api/screener/narratives', async (req, res) => {
     if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
       markets = _screenerCache.data;
     } else {
-      const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume&ascending=false', {
+      const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume24hr&ascending=false', {
         headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
         signal: AbortSignal.timeout(10000)
       });
@@ -47228,7 +47268,7 @@ app.get('/api/screener/narrative-lifecycle', async (req, res) => {
     if (!currentNarratives || !currentNarratives.length) {
       // Fetch inline if cache empty
       try {
-        const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume&ascending=false', {
+        const pmRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=300&order=volume24hr&ascending=false', {
           headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
           signal: AbortSignal.timeout(10000)
         });
@@ -53007,7 +53047,7 @@ async function snapshotPolymarketPrices() {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
+    const res = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume24hr&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
@@ -54493,7 +54533,7 @@ async function generateCrystalBallPredictions() {
       const fetch = _nodeFetch;
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 15000);
-      const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
+      const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume24hr&ascending=false', {
         signal: ctrl.signal,
         headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
       });
@@ -61102,7 +61142,7 @@ app.post('/api/tweet-brief', async (req, res) => {
 // cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
 /* DISABLED — account flagged
   try {
-    const screenerRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=100&order=volume&ascending=false', {
+    const screenerRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=100&order=volume24hr&ascending=false', {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
       signal: AbortSignal.timeout(10000)
     });
@@ -61804,7 +61844,7 @@ async function gradeExpiredPredictions() {
       };
       const [rc1, rc2] = await Promise.all([
         _gFetch('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=end_date&ascending=false').catch(() => null),
-        _gFetch('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volume&ascending=false').catch(() => null),
+        _gFetch('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volumeNum&ascending=false').catch(() => null),
       ]);
       for (const r of [rc1, rc2]) {
         if (!r || !r.ok) continue;
@@ -62700,7 +62740,7 @@ app.get('/api/events', async (req, res) => {
       try {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 10000);
-        const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume&ascending=false', {
+        const mktRes = await fetch('https://gamma-api.polymarket.com/markets/keyset?closed=false&limit=200&order=volume24hr&ascending=false', {
           signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
         });
         clearTimeout(tid);
@@ -64446,7 +64486,7 @@ async function resolveSignalOutcomes(opts = {}) {
       };
       const [r1, r2] = await Promise.all([
         _fetchClosed('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=end_date&ascending=false').catch(() => null),
-        _fetchClosed('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volume&ascending=false').catch(() => null),
+        _fetchClosed('https://gamma-api.polymarket.com/markets/keyset?closed=true&limit=200&order=volumeNum&ascending=false').catch(() => null),
       ]);
       for (const r of [r1, r2]) {
         if (!r || !r.ok) continue;

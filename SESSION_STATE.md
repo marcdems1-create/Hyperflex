@@ -49,6 +49,25 @@
 
 ## Chronological log (newest first)
 
+## 2026-08-26g (/markets whale_count still 0 — volumeNum selected dead 0¢ legs; remaining string-sort sweep)
+
+**Shipped:** cherry-picked onto current `main`. `server.js` + `lib/data-engine.js`. `node --check` both pass.
+
+**Production read before this change:** `/api/finance/markets` 71 rows, 5 categories, `nullCopy=0` (yesterday's sports-branch copy fix held). `whale_backed=0`. `/api/screener` 10 rows, max whale_count 1. Overlap with /markets: 4, none whale-backed.
+
+**Root cause:** yesterday's `order=volume` → `volumeNum` fix in `buildAlphaList` was the wrong numeric column. `volumeNum` = lifetime. Top 100 are 0¢ long-shots; the 5–95% cull leaves 10. `volume24hr` = live book, 36 survive. April 2026 note that keyset rejects `volume24hr` is stale — verified live today.
+
+**Also:** `/markets` now enriches whales from `_whaleWatchCache` directly, not only via screener overlap. Remaining 16 `markets/keyset?order=volume` callsites swept (`volume24hr` for live universe, `volumeNum` for `search=` / `closed=true`). `events?order=volume` left alone (no volumeNum, sorts numerically).
+
+**Active blockers:**
+- `limit=500` on keyset still caps at 100. Paging via `next_cursor` did not advance when passed as a query param (returned the same page). Not fixed.
+- Post-deploy: hit `/api/screener` (expect >>10 rows) and `/api/finance/markets` (expect some `whale_count>0`). Whale cache may still be empty on a fresh Railway boot until `fetchWhalePositions` finishes (~100 traders batched).
+
+**Queued:** none from this pass.
+
+**Notes for next session:**
+- Confirm whale_count on production after this lands, not against a local fixture (fixture has no `_whaleWatchCache` — that's how yesterday's silent no-op survived "verified locally").
+
 ## 2026-08-26f ("Get in the trade" CTA extended to /traders' shared trader-card component — PR #239 merged)
 
 **Trigger:** Marc, follow-up to the /feed CTA pass — "do the same for trader profile cards" (also flagged not yet seeing the /feed change live — see note below).

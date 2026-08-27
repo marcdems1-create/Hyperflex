@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-08-26 — fix(alpha): `volumeNum` selected dead 0¢ legs, so whale enrichment on /markets stayed empty (branch `main`)
+
+### fix(server.js `buildAlphaList`): `order=volumeNum` → `order=volume24hr`
+- Yesterday's string-sort fix was real (`order=volume` is lexicographic) but the replacement was the wrong numeric column. `volumeNum` ranks by **lifetime** volume. Live measurement 2026-08-26: the keyset top 100 are Ethiopia PM / "Will Jesus Christ return before 2027?" / LeBron 2028, almost all priced under 5¢. The existing 5–95% cull then deleted them. Production `/api/screener` held **10 rows, max whale_count 1**. `/api/finance/markets` still reported `whale_backed=0` of 71 because those 10 (2028 election legs) barely overlap the liveness-ranked /markets board.
+- `volume24hr` is the live book (Dodgers/Braves, September FOMC). Same measurement: top 100 → **36 survive 5–95%**. An April 2026 changelog claimed markets/keyset rejects `volume24hr` (returns 0). Verified live today: HTTP 200, 100 rows, populated `volume24hr` on every one.
+- **Don't break:** do NOT "simplify" this back to `volume` (string sort) or `volumeNum` (lifetime giants). `limit=500` is still a lie (caps at 100).
+
+### fix(server.js `fetchFinanceMarkets`): whale enrichment no longer depends on screener overlap
+- `/markets` was looking up `_screenerCache` only. Even with the key-mapping fix (`market_id` not `conditionId`), a market that isn't in the 5–95% alpha slice can never show a whale. Now also indexes `_whaleWatchCache` positions by `conditionId` and question text, filling only keys screener left empty (never double-counts).
+- Lookup also falls through to the market question, matching how `buildAlphaList` itself keys whales.
+
+### fix(server.js + lib/data-engine.js): remaining `markets/keyset?order=volume` callsites
+- Same string-sort bug, 16 more server.js callsites + `lib/data-engine.js`. Rule applied: live universe (no `search=`) → `volume24hr`; `search=` or `closed=true` → `volumeNum`.
+- **Not touched:** `events?order=volume`. The events endpoint has no `volumeNum` field (`order=volumeNum` → HTTP 422) and `volume` there sorts numerically — $1.2B Democratic nominee on top. Do not "fix" those.
+
+### Verify
+- `node --check server.js` and `lib/data-engine.js` pass. Gamma probed live for both sort keys. Production `/api/finance/markets` confirmed `nullCopy=0` and 71 rows across 5 categories from yesterday's copy fix; whale_count remains 0 until this deploy, because that was a universe problem, not a cache-TTL problem.
+
+---
+
 ## 2026-08-25 — fix(finance): `/markets` was empty because of a string sort, not a style bug; removed a fabricated resolve-rate claim (branch `main`)
 
 ### fix(server.js `fetchFinanceMarkets`): `order=volume` → `order=volumeNum`
