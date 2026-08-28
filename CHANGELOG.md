@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-08-27 — feat(markets): Yield / Alpha slider; "The read" renamed Alpha
+
+`/markets` keeps both halves. A sticky Yield | Alpha slider sits under the site nav. Picking a half puts it on top (flex `order`) and scrolls to its start. "The read" is now **Alpha** (charts + board). `#yield` / `#alpha` hashes work; `/incentives` still 301s to `#yield`.
+
+---
+
 ## 2026-08-27 — feat(markets): Yield cards lead the page, board list sits below
 
 Yield (reward cards + live book) moved from below "The board" to the top of `/markets`, right under the page header. The board list, KPIs, and charts are unchanged — just lower. `#yield` hash still works.

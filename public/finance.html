@@ -155,6 +155,48 @@
     color:var(--ink-faint);text-transform:uppercase;
   }
 
+  /* ---------- Yield / Alpha slider ---------- */
+  .half-switch{
+    position:sticky;top:var(--nav-h,56px);z-index:80;
+    padding:10px 20px;margin:4px 0 0;
+    background:rgba(11,13,18,0.92);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--border);
+  }
+  .half-switch-track{
+    position:relative;display:grid;grid-template-columns:1fr 1fr;
+    max-width:340px;margin:0 auto;
+    background:var(--surface-2);border:1px solid var(--border);
+    border-radius:100px;padding:3px;
+  }
+  .half-switch-thumb{
+    position:absolute;top:3px;bottom:3px;left:3px;
+    width:calc(50% - 3px);border-radius:100px;
+    background:var(--surface);border:1px solid var(--border);
+    box-shadow:0 1px 0 rgba(255,255,255,0.04);
+    transition:transform .22s cubic-bezier(.16,.8,.3,1);
+    pointer-events:none;
+  }
+  .shell[data-lead="alpha"] .half-switch-thumb{transform:translateX(100%);}
+  .half-switch button{
+    position:relative;z-index:1;
+    background:none;border:none;cursor:pointer;
+    font-family:var(--font-mono);font-size:0.68rem;font-weight:700;
+    letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--ink-faint);padding:9px 12px;border-radius:100px;
+  }
+  .half-switch button:hover{color:var(--ink-muted);}
+  .half-switch button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .shell[data-lead="yield"] #swYield,
+  .shell[data-lead="alpha"] #swAlpha{color:var(--ink);}
+  .halves{display:flex;flex-direction:column;}
+  #yield{order:1;}
+  #alpha{order:2;}
+  .shell[data-lead="alpha"] #yield{order:2;}
+  .shell[data-lead="alpha"] #alpha{order:1;}
+  #yield,#alpha{scroll-margin-top:calc(var(--nav-h,56px) + 58px);}
+  #alpha{padding:0 0 28px;border-bottom:1px solid var(--border);margin-bottom:8px;}
+
   /* ---------- chart cards ---------- */
   .chart-stack{display:flex;flex-direction:column;gap:12px;padding:0 20px;}
   .chart-card{
@@ -471,7 +513,7 @@
   .foot b{color:var(--ink-muted);font-weight:600;}
 
   /* ---------- yield (was /incentives) ---------- */
-  #yield{scroll-margin-top:72px;padding:8px 20px 28px;border-bottom:1px solid var(--border);margin-bottom:8px;}
+  #yield{scroll-margin-top:calc(var(--nav-h,56px) + 58px);padding:8px 20px 28px;border-bottom:1px solid var(--border);margin-bottom:8px;}
   .yield-lede{
     font-size:0.88rem;line-height:1.6;color:var(--ink-muted);
     max-width:62ch;margin:0 0 14px;
@@ -594,7 +636,7 @@
   }
 
   @media (prefers-reduced-motion: reduce){
-    .hist-bar,.mv-fill,.sheet,.sheet-backdrop,.skel{transition:none;animation:none;}
+    .hist-bar,.mv-fill,.sheet,.sheet-backdrop,.skel,.half-switch-thumb{transition:none;animation:none;}
   }
 
   /* ---------- desktop ---------- */
@@ -605,6 +647,7 @@
     .yield-kpis{grid-template-columns:repeat(3,minmax(0,1fr));padding:0;}
     .kpi-val{font-size:2rem;}
     .section-head,.chart-stack,.cat-rail,.mkt-list,#yield,.foot{padding-left:40px;padding-right:40px;}
+    .half-switch{padding-left:40px;padding-right:40px;}
     .chart-stack{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
     .chart-card.wide{grid-column:1 / -1;}
     /* The movers track is the widest thing on the page and the only chart
@@ -619,7 +662,7 @@
 </head>
 <body>
 
-<div class="shell">
+<div class="shell" data-lead="yield">
 
   <header class="page-head">
     <div class="eyebrow">Polymarket · live</div>
@@ -635,6 +678,15 @@
     </div>
   </header>
 
+  <div class="half-switch" role="tablist" aria-label="Yield or Alpha">
+    <div class="half-switch-track">
+      <span class="half-switch-thumb" aria-hidden="true"></span>
+      <button type="button" role="tab" id="swYield" data-half="yield" aria-controls="yield" aria-selected="true">Yield</button>
+      <button type="button" role="tab" id="swAlpha" data-half="alpha" aria-controls="alpha" aria-selected="false">Alpha</button>
+    </div>
+  </div>
+
+  <div class="halves">
   <section id="yield" aria-label="Yield">
     <div class="section-head">
       <h2 class="section-title">Yield</h2>
@@ -676,17 +728,18 @@
     </div>
   </section>
 
+  <section id="alpha" aria-label="Alpha">
+  <div class="section-head">
+    <h2 class="section-title">Alpha</h2>
+    <span class="section-count">Live · 10-min cache</span>
+  </div>
+
   <section class="kpi-row" id="kpiRow" aria-label="Market summary">
     <div class="kpi"><div class="kpi-val is-mute" id="kpiCount">—</div><span class="kpi-key">Markets tracked</span><div class="kpi-sub">Liquid, non-noise, across 5 categories</div></div>
     <div class="kpi"><div class="kpi-val is-mute" id="kpiVol">—</div><span class="kpi-key">24h volume</span><div class="kpi-sub">Traded across everything listed here</div></div>
     <div class="kpi"><div class="kpi-val is-mute" id="kpiMove">—</div><span class="kpi-key">Biggest 24h move</span><div class="kpi-sub" id="kpiMoveSub">Largest single reprice on the board</div></div>
     <div class="kpi"><div class="kpi-val is-mute" id="kpiWhale">—</div><span class="kpi-key">Whale-backed</span><div class="kpi-sub">Markets with tracked whales positioned</div></div>
   </section>
-
-  <div class="section-head">
-    <h2 class="section-title">The read</h2>
-    <span class="section-count">Live · 10-min cache</span>
-  </div>
 
   <div class="chart-stack">
 
@@ -741,6 +794,8 @@
 
   <div class="mkt-list" id="mktList">
     <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>
+  </div>
+  </section>
   </div>
 
   <p class="foot">
@@ -1655,16 +1710,66 @@ fetch('/api/incentives/active').then(function(r){return r.ok?r.json():null;}).th
     '</a>';
   }).join('');
 }).catch(function(){});
-
-if (location.hash === '#yield') {
-  var y = document.getElementById('yield');
-  if (y) setTimeout(function(){ y.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
-}
 })();
 
 loadMarkets();
 </script>
 
 <script src="/nav.js?v=30"></script>
+<script>
+(function(){
+  var shell = document.querySelector('.shell');
+  if (!shell) return;
+
+  function navH(){
+    var bar = document.querySelector('.topbar');
+    document.documentElement.style.setProperty('--nav-h', ((bar && bar.offsetHeight) || 56) + 'px');
+  }
+  navH();
+  window.addEventListener('resize', navH);
+
+  function readLead(){
+    var h = (location.hash || '').replace('#','');
+    if (h === 'alpha' || h === 'yield') return h;
+    try {
+      var s = sessionStorage.getItem('hfx-markets-lead');
+      if (s === 'alpha' || s === 'yield') return s;
+    } catch (e) {}
+    return 'yield';
+  }
+
+  function apply(half, scroll, writeHash){
+    if (half !== 'alpha') half = 'yield';
+    shell.setAttribute('data-lead', half);
+    var yBtn = document.getElementById('swYield');
+    var aBtn = document.getElementById('swAlpha');
+    if (yBtn) yBtn.setAttribute('aria-selected', half === 'yield' ? 'true' : 'false');
+    if (aBtn) aBtn.setAttribute('aria-selected', half === 'alpha' ? 'true' : 'false');
+    try { sessionStorage.setItem('hfx-markets-lead', half); } catch (e) {}
+    if (writeHash && history.replaceState) {
+      history.replaceState(null, '', location.pathname + location.search + '#' + half);
+    }
+    if (scroll) {
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          var el = document.getElementById(half);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    }
+  }
+
+  apply(readLead(), !!location.hash, false);
+
+  var yBtn = document.getElementById('swYield');
+  var aBtn = document.getElementById('swAlpha');
+  if (yBtn) yBtn.addEventListener('click', function(){ apply('yield', true, true); });
+  if (aBtn) aBtn.addEventListener('click', function(){ apply('alpha', true, true); });
+  window.addEventListener('hashchange', function(){
+    var h = (location.hash || '').replace('#','');
+    if (h === 'alpha' || h === 'yield') apply(h, true, false);
+  });
+})();
+</script>
 </body>
 </html>
