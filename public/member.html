@@ -90,11 +90,6 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 .flex-num.mute{background:linear-gradient(180deg,#9590B0,#6E6790);-webkit-background-clip:text;background-clip:text;color:transparent;filter:none}
 .flex-num .denom{font-size:32px;color:var(--muted);background:none;-webkit-text-fill-color:var(--muted);filter:none;margin-left:4px}
 .flex-delta{font-family:var(--mono);font-size:12px;color:var(--electric);margin-top:8px;letter-spacing:0.1em}
-.whale-badge{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;border-radius:8px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);align-self:flex-end}
-.whale-badge-label{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:0.18em;color:#a855f7;text-transform:uppercase}
-.whale-badge-num{font-family:var(--mono);font-size:16px;font-weight:800;color:#e0c7fa;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
-.whale-badge-meta{font-family:var(--mono);font-size:9px;color:#a855f7;letter-spacing:0.06em;opacity:0.78}
-@media(max-width:720px){.whale-badge{align-self:flex-start;margin-top:10px}}
 .flex-delta.muted{color:var(--muted)}
 /* Action row in hero */
 .hero-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase}
@@ -315,7 +310,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 3
 <body>
 <div class="grain"></div>
 <div id="nav-root"></div>
-<script src="/nav.js?v=28"></script>
+<script src="/nav.js?v=29"></script>
 <div class="page" id="page">
   <div class="loading">Loading profile...</div>
 </div>
@@ -443,28 +438,13 @@ function renderFlexScoreCard() {
     }
   }
 
-  // Whale Score badge. Conditional render — only for wallets with an
-  // actual flex_score_90d value (whale-imported or actively-trading).
-  // Distinct visual treatment (purple) so it can't be confused with the
-  // gold Flex Score hero. Decision #1 Option C semantic split.
-  const whaleBadge = document.getElementById('whaleScoreBadge');
-  const whaleNum   = document.getElementById('whaleScoreNum');
-  const whaleMeta  = document.getElementById('whaleScoreMeta');
-  if (whaleBadge && whaleNum) {
-    const ws  = p.flex_score_90d != null ? Number(p.flex_score_90d) : null;
-    const wsa = p.flex_score_alltime != null ? Number(p.flex_score_alltime) : null;
-    const displayScore = ws != null && ws > 0 ? ws : (wsa != null && wsa > 0 ? wsa : null);
-    if (displayScore != null) {
-      whaleNum.textContent = Math.round(displayScore);
-      if (whaleMeta) {
-        const rankPart = (p.whale_rank != null && p.whale_rank > 0) ? `· rank #${p.whale_rank}` : '';
-        whaleMeta.textContent = rankPart || (p.is_whale ? '· top tier' : '· capital flow');
-      }
-      whaleBadge.style.display = '';
-    } else {
-      whaleBadge.style.display = 'none';
-    }
-  }
+  // Whale Score badge was removed from this profile. flex_score_90d is a
+  // contended legacy column (whale-import PnL proxy AND 90d Brier both
+  // write it), so neither "capital flow" nor "recent calibration" is a
+  // true label for every row. Canonical /@handle profile never showed it;
+  // /predictors dropped the whale tab for the same reason (2026-08-08).
+  // Whale identity still surfaces via the avatar treatment + whale_rank
+  // in the name line when is_whale is actually true.
 
   // Render the 5-component breakdown into the Track Record tab so visitors
   // who care about composition can see it without crowding the hero.
@@ -490,7 +470,7 @@ function renderFlexScoreCard() {
   const buildingNote = !qualifies ? `
     <div class="flex-building-note">
       <strong>Building</strong>
-      Score unlocks at 5 settled events — ${Math.max(0, 5 - settled)} to go. Sample size below that makes the number a lie.
+      Low sample. Leaderboard ranking unlocks at 5 settled events — ${Math.max(0, 5 - settled)} to go. The score above is live; treat it as a low-confidence read until then.
     </div>` : '';
 
   const host = document.createElement('div');
@@ -971,10 +951,9 @@ async function load() {
       return;
     }
 
-    // Surface the merged user+stats payload for renderFlexScoreCard and
-    // the WHALE SCORE badge — both read window._profilePayload. Was only
-    // populated for /@handle URLs before; /m/:userId visitors silently
-    // missed the FLEX hero render and Whale badge.
+    // Surface the merged user+stats payload for renderFlexScoreCard.
+    // Was only populated for /@handle URLs before; /m/:userId visitors
+    // silently missed the FLEX hero render.
     window._profilePayload = Object.assign({}, user, stats);
     const pStats = polymarket_stats || { total_trades:0, open_positions:0, closed_wins:0, closed_losses:0, volume_usd:0, pnl_usd:0, win_rate:0 };
     const pTrades = recent_trades || [];
@@ -1101,7 +1080,7 @@ async function load() {
     const volFmt = pStats.volume_usd >= 1000000 ? '$' + (pStats.volume_usd/1000000).toFixed(1) + 'M' : pStats.volume_usd >= 1000 ? '$' + Math.round(pStats.volume_usd/1000) + 'K' : '$' + Math.round(pStats.volume_usd);
     const pnlFmt = (pStats.pnl_usd >= 0 ? '+$' : '-$') + (Math.abs(pStats.pnl_usd) >= 1000 ? Math.round(Math.abs(pStats.pnl_usd)/1000) + 'K' : Math.round(Math.abs(pStats.pnl_usd)));
     const flexPointsFmt = (stats.flex_points || 0) >= 1000 ? ((stats.flex_points/1000).toFixed(1) + 'K') : (stats.flex_points || 0);
-    const flexScoreFmt = stats.flex_score_alltime != null ? stats.flex_score_alltime : stats.flex_score_90d != null ? stats.flex_score_90d : '—';
+    const flexScoreFmt = stats.flex_score != null ? stats.flex_score : '—';
 
     // ── New layout: tier slug for badge styling
     const tierSlug = (tierLabel || 'building').toLowerCase().split(/\s+/)[0];
@@ -1240,17 +1219,7 @@ async function load() {
         <div class="flex-score">
           <div class="flex-label">Flex Score<button type="button" class="flex-info-btn" aria-label="What is Flex Score?" onclick="showFlexScoreInfo()">?</button></div>
           <div id="flexScoreNum" class="flex-num ${flexScoreFmt === '—' ? 'mute' : ''}">${flexScoreFmt}<span class="denom">/100</span></div>
-          <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? ((stats.settled_predictions || 0) + ' settled · ' + Math.max(0, 25 - (stats.settled_predictions || 0)) + ' to score') : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
-          <!-- Whale Score badge — capital-flow heuristic. Decision #1
-               Option C: distinct from Flex Score, conditionally rendered.
-               Hidden by default; renderFlexScoreCard fills it for users
-               who actually have flex_score_90d (i.e. whale-imported or
-               actively-trading wallets). -->
-          <div id="whaleScoreBadge" class="whale-badge" style="display:none">
-            <span class="whale-badge-label">Whale Score</span>
-            <span class="whale-badge-num" id="whaleScoreNum">—</span>
-            <span class="whale-badge-meta" id="whaleScoreMeta"></span>
-          </div>
+          <div id="flexScoreDelta" class="flex-delta ${flexScoreFmt === '—' ? 'muted' : ''}">${flexScoreFmt === '—' ? ((stats.settled_predictions || 0) + ' settled · ' + Math.max(0, 5 - (stats.settled_predictions || 0)) + ' to rank') : ((stats.settled_predictions || 0) + ' settled · ' + (stats.wins || 0) + ' correct')}</div>
           <div id="hfxCompositeBadge" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(77,159,255,.07);border:1px solid rgba(77,159,255,.22);display:none;align-items:center;gap:10px;flex-wrap:wrap;">
             <span style="font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.18em;color:#4d9fff;text-transform:uppercase;">HFX Score</span>
             <span id="hfxCompositeNum" style="font-family:var(--mono);font-size:18px;font-weight:800;color:#b3d4ff;letter-spacing:-.01em;font-variant-numeric:tabular-nums;">—</span>
@@ -2241,7 +2210,7 @@ async function openFollowersModal() {
     list.innerHTML = rows.map(function(u) {
       var name = escape(u.display_name || u.username || 'Trader');
       var handle = u.username ? '@' + escape(u.username) : (u.polymarket_address ? escape(u.polymarket_address.slice(0, 6) + '…' + u.polymarket_address.slice(-4)) : '');
-      var flex = u.flex_score_90d != null ? u.flex_score_90d : null;
+      var flex = u.flex_score != null ? u.flex_score : null;
       var initial = (u.display_name || u.username || '?')[0].toUpperCase();
       var when = '';
       try {

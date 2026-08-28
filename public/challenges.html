@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Challenges — HYPERFLEX</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
-<script src="/nav.js" defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="/nav.js?v=30" defer></script>
 <style>
 :root {
   --bg: #0d0d10;
@@ -28,22 +28,140 @@ body {
   font-family: 'Inter', -apple-system, sans-serif;
   font-size: 14px; line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 50% 40% at 8% 0%, rgba(255,77,106,0.16), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 92% 8%, rgba(168,85,247,0.12), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(0,230,138,0.05), transparent 70%);
 }
 a { color: var(--purple); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.wrap { max-width: 760px; margin: 0 auto; padding: 80px 24px 80px; }
-.head {
-  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+.wrap { position: relative; z-index: 1; max-width: 920px; margin: 0 auto; padding: 28px 24px 80px; }
+
+.arena {
+  position: relative;
+  border-radius: 20px;
+  padding: 36px 32px 32px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255,77,106,0.22);
+  background:
+    radial-gradient(90% 80% at 0% 0%, rgba(255,77,106,0.18), transparent 55%),
+    radial-gradient(80% 70% at 100% 100%, rgba(77,159,255,0.10), transparent 55%),
+    linear-gradient(180deg, #16080c, #0e0e15);
 }
-.head-eyebrow {
+.arena::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
+  background-size: 220% 220%;
+  animation: arena-sheen 7s ease-in-out infinite;
+}
+@keyframes arena-sheen {
+  0%, 100% { background-position: 120% 0; }
+  50% { background-position: -20% 100%; }
+}
+.arena-kicker {
+  display: inline-flex; align-items: center; gap: 8px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.14em;
-  color: var(--red); text-transform: uppercase;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--red); margin-bottom: 12px;
 }
-.head h1 {
-  margin: 4px 0 0; font-size: 26px; font-weight: 900;
-  letter-spacing: -0.02em;
+.arena-kicker .live {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
+  animation: live-ping 1.6s ease-out infinite;
+}
+@keyframes live-ping {
+  0% { box-shadow: 0 0 0 0 rgba(255,77,106,0.55); }
+  70% { box-shadow: 0 0 0 10px rgba(255,77,106,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,77,106,0); }
+}
+.arena h1 {
+  font-family: 'Anton', sans-serif; font-weight: 400;
+  font-size: clamp(42px, 8vw, 72px); line-height: 0.92;
+  letter-spacing: 0.02em; text-transform: uppercase;
+  margin: 0 0 10px; color: #fff;
+}
+.arena h1 em {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic; font-weight: 400; text-transform: none;
+  color: var(--red); letter-spacing: 0;
+}
+.arena-sub {
+  max-width: 520px; font-size: 15px; line-height: 1.55;
+  color: rgba(240,240,245,0.62); margin-bottom: 18px;
+}
+.arena-sub b { color: #fff; font-weight: 700; }
+.arena-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 22px; border-radius: 10px;
+  background: var(--red); color: #fff; text-decoration: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 0 28px rgba(255,77,106,0.35);
+  animation: cta-pulse 2.4s ease-in-out infinite;
+}
+.arena-cta:hover { text-decoration: none; filter: brightness(1.08); }
+@keyframes cta-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(255,77,106,0.28); }
+  50% { box-shadow: 0 0 36px rgba(255,77,106,0.55); }
+}
+.arena-vs {
+  position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center;
+  pointer-events: none;
+}
+.vs-orb {
+  width: 88px; height: 88px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Anton', sans-serif; font-size: 28px; color: #fff;
+  border: 2px solid rgba(255,255,255,0.18);
+}
+.vs-orb.a {
+  background: radial-gradient(circle at 35% 30%, #ff8aa0, #ff4d6a 55%, #8a1028);
+  animation: orb-a 2.8s ease-in-out infinite;
+  z-index: 1;
+}
+.vs-orb.b {
+  background: radial-gradient(circle at 35% 30%, #7ec8ff, #4d9fff 55%, #1a4a8a);
+  animation: orb-b 2.8s ease-in-out infinite;
+  margin-left: -18px;
+  z-index: 1;
+}
+.vs-mark {
+  width: 42px; height: 42px; border-radius: 50%;
+  margin-left: -14px; margin-right: -14px;
+  background: #0e0e15; border: 2px solid rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Anton', sans-serif; font-size: 14px; color: #fff;
+  z-index: 2; letter-spacing: 0.04em;
+}
+@keyframes orb-a {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(6px); }
+}
+@keyframes orb-b {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-6px); }
+}
+.arena-chips {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
+}
+.arena-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 6px 10px; border-radius: 100px;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(240,240,245,0.7);
+  background: rgba(0,0,0,0.25);
+}
+.arena-chip b { color: #fff; }
+@media (max-width: 720px) {
+  .arena { padding: 28px 18px 24px; }
+  .arena-vs { display: none; }
 }
 .tabs {
   display: flex; gap: 6px; margin-bottom: 18px;
@@ -372,12 +490,11 @@ a:hover { text-decoration: underline; }
    by. Pure stimulant: the page reads as "in motion" before you've done
    anything, same job a scores ticker does on a sports site. ── */
 .ticker-wrap {
+  position: relative; z-index: 1;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,77,106,0.05), transparent);
+  background: linear-gradient(180deg, rgba(255,77,106,0.07), transparent);
   overflow: hidden;
-  display: none;
 }
-.ticker-wrap.has-items { display: block; }
 .ticker-inner {
   display: flex;
   align-items: center;
@@ -444,14 +561,24 @@ a:hover { text-decoration: underline; }
 }
 .duelist-card {
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,77,106,0.07), var(--surface));
+  border: 1px solid rgba(255,77,106,0.16);
   border-radius: 14px;
   padding: 16px 14px;
   text-align: center;
-  transition: border-color .15s, transform .15s;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.duelist-card:hover { border-color: rgba(168,85,247,0.35); transform: translateY(-2px); }
+.duelist-card:hover {
+  border-color: rgba(255,77,106,0.45);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -16px rgba(255,77,106,0.45);
+}
+.duelist-card::before {
+  content: 'VS';
+  position: absolute; top: 10px; right: 10px;
+  font-family: 'Anton', sans-serif; font-size: 11px;
+  color: rgba(255,77,106,0.45); letter-spacing: 0.08em;
+}
 .duelist-avatar {
   width: 44px; height: 44px; border-radius: 50%;
   margin: 0 auto 10px;
@@ -482,15 +609,14 @@ a:hover { text-decoration: underline; }
 .duelist-stats .ds-num { color: var(--green); font-weight: 800; }
 .duelist-stats .ds-lbl { color: var(--text-faint); }
 .duelist-btn {
-  width: 100%; padding: 8px 0; border-radius: 8px;
-  background: rgba(255,77,106,0.1); color: var(--red);
-  border: 1px solid rgba(255,77,106,0.28);
+  width: 100%; padding: 10px 0; border-radius: 8px;
+  background: var(--red); color: #fff;
+  border: 1px solid var(--red);
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.1em;
   text-transform: uppercase; cursor: pointer;
-  transition: background .15s;
 }
-.duelist-btn:hover { background: rgba(255,77,106,0.2); }
+.duelist-btn:hover { filter: brightness(1.1); }
 .discover-more {
   display: flex; align-items: center; justify-content: center;
   border: 1px dashed var(--border); border-radius: 14px;
@@ -570,6 +696,10 @@ a:hover { text-decoration: underline; }
 .cx-btn-cancel { padding: 8px 16px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; }
 .cx-btn-post { padding: 8px 18px; border-radius: 8px; background: var(--red); border: 1px solid var(--red); color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; }
 .cx-btn-post:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .arena::after, .arena-cta, .arena-kicker .live, .vs-orb.a, .vs-orb.b,
+  .ticker-track, .ticker-dot, .matchup.accepted { animation: none !important; }
+}
 </style>
 </head>
 <body>
@@ -577,18 +707,29 @@ a:hover { text-decoration: underline; }
 <div class="ticker-wrap" id="tickerWrap">
   <div class="ticker-inner">
     <div class="ticker-label"><span class="ticker-dot"></span>Live duels</div>
-    <div class="ticker-track" id="tickerTrack"></div>
+    <div class="ticker-track" id="tickerTrack">
+      <span class="ticker-item">Waiting for the next call-out — be first.</span>
+    </div>
   </div>
 </div>
 
 <div class="wrap">
-  <div class="head">
-    <div>
-      <div class="head-eyebrow">⚔ HYPERFLEX · Challenges</div>
-      <h1>Who's betting against you</h1>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-top:6px">Pick a target. Take the other side. Winner's record grows, loser's doesn't.</div>
+  <section class="arena">
+    <div class="arena-kicker"><span class="live"></span> Public · Staked · On the record</div>
+    <h1>Call them <em>out</em></h1>
+    <p class="arena-sub">Disagree with a trader. Stake FLEX. <b>Winner takes the pot and the W.</b> Loser eats the L in public. Everyone watches.</p>
+    <a href="#targets" class="arena-cta">Find someone to challenge →</a>
+    <div class="arena-chips">
+      <span class="arena-chip"><b>AGREE / DISAGREE</b> — pick a side</span>
+      <span class="arena-chip"><b>FLEX</b> — winner takes both stakes</span>
+      <span class="arena-chip"><b>7 days</b> — they answer or it expires</span>
     </div>
-  </div>
+    <div class="arena-vs" aria-hidden="true">
+      <div class="vs-orb a">YOU</div>
+      <div class="vs-mark">VS</div>
+      <div class="vs-orb b">THEM</div>
+    </div>
+  </section>
 
   <a href="/challenges/nba" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:16px;background:linear-gradient(180deg,rgba(0,230,138,0.06),rgba(22,22,31,0.85));border:1px solid rgba(0,230,138,0.28);border-radius:12px;text-decoration:none;color:inherit;transition:border-color .15s">
     <span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:0.12em;color:var(--green);text-transform:uppercase;padding:4px 8px;background:rgba(0,230,138,0.12);border-radius:5px">NBA · Today</span>
@@ -608,9 +749,9 @@ a:hover { text-decoration: underline; }
       <div class="pub-stat gold"><div class="pub-stat-label">FLEX in play</div><div class="pub-stat-val" id="psStake">—</div></div>
     </div>
 
-    <div class="discover-section" id="discoverSection" style="display:none">
+    <div class="discover-section" id="discoverSection">
       <div class="section-head">
-        <div class="section-title">Pick a target</div>
+        <div class="section-title" id="targets">Pick a target</div>
         <a href="/predictors" class="section-sub" style="color:var(--text-faint)">Full leaderboard →</a>
       </div>
       <div class="discover-grid" id="discoverGrid">
@@ -639,14 +780,14 @@ a:hover { text-decoration: underline; }
 
   <div id="authGate" style="display:none">
     <div class="mech">
-      <div class="mech-line"><span class="mech-num">01</span><span><b>Pick a market and a side.</b> Anyone with a posted take is a target.</span></div>
-      <div class="mech-line"><span class="mech-num">02</span><span><b>Stake FLEX, write the thesis.</b> Up to 100 FLEX per challenge.</span></div>
-      <div class="mech-line"><span class="mech-num">03</span><span><b>Resolution settles automatically.</b> Winner's W-L lands on the public leaderboard.</span></div>
+      <div class="mech-line"><span class="mech-num">01</span><span><b>Call them out in public.</b> Pick a trader, pick a side, write why they're wrong.</span></div>
+      <div class="mech-line"><span class="mech-num">02</span><span><b>Stake FLEX if you mean it.</b> They match to accept. Winner takes both.</span></div>
+      <div class="mech-line"><span class="mech-num">03</span><span><b>The market settles it.</b> W-L hits the record. No screenshots, no spin.</span></div>
     </div>
 
     <div class="pub-cta">
-      <div class="pub-cta-text"><b>Track record gated.</b> An account is required to challenge or respond.</div>
-      <a href="/creator/login?return=/challenges" class="btn">Sign in →</a>
+      <div class="pub-cta-text"><b>Your record is the bait.</b> Sign in and throw the first challenge.</div>
+      <a href="/creator/login?return=/challenges" class="btn accept">Challenge someone →</a>
     </div>
   </div>
 
@@ -784,7 +925,7 @@ function render() {
     var dirCopy = _dir === 'incoming' ? 'Nobody has challenged you yet'
                 : _dir === 'outgoing' ? 'You haven\'t challenged anyone yet'
                 : 'No challenges';
-    list.innerHTML = '<div class="empty"><div class="icon">⚔️</div><div class="head">' + dirCopy + '</div><p>Challenges appear here once someone posts one. Head to a predictor\'s profile to start one.</p></div>';
+    list.innerHTML = '<div class="empty"><div class="icon">⚔️</div><div class="head">' + dirCopy + '</div><p>The board is empty. <a href="#targets" style="color:var(--red)">Pick a target below</a> and post the first challenge.</p></div>';
     return;
   }
   list.innerHTML = _data.map(c => renderCard(c)).join('');
@@ -990,7 +1131,10 @@ function _renderPublicLive(rows) {
 function _renderTicker(rows) {
   var wrap = document.getElementById('tickerWrap');
   var track = document.getElementById('tickerTrack');
-  if (!rows || rows.length < 2) { wrap.classList.remove('has-items'); return; }
+  if (!rows || rows.length < 1) {
+    track.innerHTML = '<span class="ticker-item">No live duels yet — <b>be the first call-out</b></span>';
+    return;
+  }
   var items = rows.slice(0, 12).map(function(c) {
     var a = c.challenger || {}, b = c.challenged || {};
     var aSide = (c.challenger_side || '').toUpperCase();
@@ -1025,15 +1169,15 @@ function _initialLetter(name) {
 async function loadDiscover() {
   var grid = document.getElementById('discoverGrid');
   var section = document.getElementById('discoverSection');
+  section.style.display = '';
   try {
     var r = await fetch('/api/predictors/leaderboard?mode=roi&window=all&limit=8');
-    if (!r.ok) { section.style.display = 'none'; return; }
+    if (!r.ok) throw new Error('leaderboard ' + r.status);
     var rows = await r.json();
-    if (!rows || !rows.length) { section.style.display = 'none'; return; }
-    section.style.display = '';
+    if (!rows || !rows.length) throw new Error('empty');
     grid.innerHTML = rows.map(_duelistCard).join('');
   } catch (e) {
-    section.style.display = 'none';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:28px 16px"><div class="head">Targets didn\'t load</div><p><a href="javascript:void 0" onclick="loadDiscover();return false" style="color:var(--red)">Retry</a> or open the <a href="/predictors" style="color:var(--red)">leaderboard</a>.</p></div>';
   }
 }
 
@@ -1050,7 +1194,7 @@ function _duelistCard(r) {
       (handle ? '<div class="duelist-handle">' + esc(handle) + '</div>' : '') +
     '</a>' +
     '<div class="duelist-stats"><span class="ds-num">' + esc(score) + '</span><span class="ds-lbl">n=' + (r.n || 0) + '</span></div>' +
-    '<button class="duelist-btn" onclick="startChallenge(\'' + esc(id) + '\',\'' + esc(name).replace(/'/g, "\\'") + '\',\'' + esc(handle) + '\')">Challenge →</button>' +
+    '<button class="duelist-btn" onclick="startChallenge(\'' + esc(id) + '\',\'' + esc(name).replace(/'/g, "\\'") + '\',\'' + esc(handle) + '\')">Challenge them →</button>' +
   '</div>';
 }
 

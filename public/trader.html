@@ -177,7 +177,7 @@ a:hover { text-decoration: underline; }
 <body>
 
 <div id="nav-root"></div>
-<script src="/nav.js?v=28"></script>
+<script src="/nav.js?v=29"></script>
 
 <div id="root"><div class="loading-state">LOADING TRADER PROFILE…</div></div>
 
@@ -256,7 +256,7 @@ a:hover { text-decoration: underline; }
       var clv = d.clv || {};
       var stats = d.stats || {};
       var theses = d.theses || { resolved:[], open:[] };
-      var flexScore = parseFloat(d.flex_score) || 0;
+      var flexScore = d.flex_score != null ? parseFloat(d.flex_score) : null;
       var cls = clvClass(clv.classification);
       var avgClv = clv.avg_clv;
       var avgClvStr = avgClv != null
@@ -290,7 +290,7 @@ a:hover { text-decoration: underline; }
         + '</div>'
         + '<div class="strip-sep"></div>'
         + '<div class="strip-stat">'
-          + '<div class="strip-val">' + flexScore.toFixed(2) + '</div>'
+          + '<div class="strip-val">' + (flexScore != null && Number.isFinite(flexScore) ? flexScore.toFixed(0) : '—') + '</div>'
           + '<div class="strip-label">FLEX SCORE</div>'
         + '</div>'
       + '</div>';

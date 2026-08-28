@@ -26526,13 +26526,16 @@ app.post('/api/messages/conversations/:id', requireAuth, async (req, res) => {
 // GET /api/challenge/current — active challenge + user picks + leaderboard
 app.get('/api/challenge/current', async function(req, res) {
   try {
-    const result = await pool.query(
-      "SELECT * FROM weekly_challenges WHERE status = 'active' ORDER BY week_start DESC LIMIT 1"
+    if (!pool) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
+    const rows = await dbQuery(
+      "SELECT * FROM weekly_challenges WHERE status = 'active' ORDER BY week_start DESC LIMIT 1",
+      [],
+      4000
     );
 
-    if (!result.rows.length) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
+    if (!rows.length) return res.json({ challenge: null, leaderboard: [], userPicks: null, participantCount: 0 });
 
-    const ch = result.rows[0];
+    const ch = rows[0];
 
     // Parse markets — JSONB may come back as string or object
     const markets = typeof ch.markets === 'string'
@@ -26553,15 +26556,16 @@ app.get('/api/challenge/current', async function(req, res) {
     });
 
     // Leaderboard top 20
-    const lb = await pool.query(
+    const lb = await dbQuery(
       `SELECT cp.rank, cp.score, cp.picks, u.username, u.display_name, u.avatar_url
        FROM challenge_picks cp
        JOIN users u ON cp.user_id = u.id
        WHERE cp.challenge_id = $1 AND cp.completed = true
        ORDER BY cp.score DESC LIMIT 20`,
-      [ch.id]
+      [ch.id],
+      4000
     );
-    const leaderboard = lb.rows || [];
+    const leaderboard = lb || [];
 
     // User picks if authed
     let userPicks = null;
@@ -26571,11 +26575,12 @@ app.get('/api/challenge/current', async function(req, res) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const uid = decoded.userId || decoded.id;
-        const up = await pool.query(
+        const up = await dbQuery(
           'SELECT * FROM challenge_picks WHERE challenge_id = $1 AND user_id = $2',
-          [ch.id, uid]
+          [ch.id, uid],
+          4000
         );
-        userPicks = up.rows[0] || null;
+        userPicks = (up && up[0]) || null;
         if (userPicks && typeof userPicks.picks === 'string') {
           userPicks.picks = JSON.parse(userPicks.picks);
         }
@@ -26590,7 +26595,7 @@ app.get('/api/challenge/current', async function(req, res) {
     });
   } catch (e) {
     console.error('[challenge/current]', e.message, e.stack);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ error: e.message, unavailable: true, challenge: null });
   }
 });
 
@@ -26606,9 +26611,9 @@ app.post('/api/challenge/picks', requireAuth, async function(req, res) {
       "SELECT * FROM weekly_challenges WHERE id = $1 AND status = 'active'",
       [challenge_id]
     );
-    if (!challengeRes.rows.length) return res.status(404).json({ error: 'Challenge not found or not active' });
+    if (!challengeRes.length) return res.status(404).json({ error: 'Challenge not found or not active' });
 
-    const ch = challengeRes.rows[0];
+    const ch = challengeRes[0];
     const markets = Array.isArray(ch.markets) ? ch.markets : JSON.parse(ch.markets || '[]');
     const validSlugs = new Set(markets.map(function(m) { return m.slug; }));
 

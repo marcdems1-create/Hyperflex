@@ -200,10 +200,10 @@ async function load() {
                       : null;
     var primarySample = (hfxWinPct != null && s.settled_predictions >= 5) ? s.settled_predictions : allSettled;
 
-    // FLEX SCORE — calibration path per Decision #1 Option C.
-    // Use s.flex_score (the cron-written value) as primary; fall back to
-    // flex_score_alltime when the 25-event gate hasn't been passed yet.
-    // Never fall back to flex_score_90d (WHALE SCORE) — separate signal.
+    // FLEX SCORE — unified 5-component rating (lib/flex-score.js).
+    // Use s.flex_score as primary; fall back to flex_score_alltime only
+    // when the unified score hasn't been written yet. Never fall back to
+    // flex_score_90d — contended legacy column, not Flex Score.
     var flexScore = s.flex_score != null ? s.flex_score : s.flex_score_alltime;
 
     // Tier — same thresholds as lib/flex-score.js tierForScore().

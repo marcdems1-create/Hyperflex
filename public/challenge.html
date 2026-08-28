@@ -366,7 +366,13 @@ a { color: var(--blue); text-decoration: none; }
   padding: 0 24px;
 }
 .ch-no-challenge h2 { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
-.ch-no-challenge p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.ch-no-challenge p { font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.6; }
+.ch-no-challenge a {
+  display: inline-block; margin-top: 18px; padding: 10px 20px;
+  background: var(--green); color: #000; border-radius: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-decoration: none;
+}
 
 /* ── RESULTS / WINNER CARD ── */
 .winner-card {
@@ -446,7 +452,7 @@ a { color: var(--blue); text-decoration: none; }
 </head>
 <body>
 <div id="nav-root"></div>
-<script src="/nav.js?v=28"></script>
+<script src="/nav.js?v=29"></script>
 
 <div id="chMain">
   <div class="ch-loading">Loading challenge…</div>
@@ -577,7 +583,7 @@ function render() {
   var ch = _challenge;
   if (!ch) {
     document.getElementById('chMain').innerHTML =
-      '<div class="ch-no-challenge"><h2>No active challenge</h2><p>The next challenge drops Monday 9am ET. Check back soon.</p></div>';
+      '<div class="ch-no-challenge"><h2>No weekly pick\'em right now</h2><p>The Monday slate isn\'t up. Challenge a trader head-to-head in the meantime — agree or disagree, stake FLEX, winner takes the pot.</p><a href="/challenges">Who\'s betting against you →</a></div>';
     return;
   }
 
@@ -755,8 +761,20 @@ async function loadChallenge() {
   try {
     var headers = {};
     if (_token) headers['Authorization'] = 'Bearer ' + _token;
-    var resp = await fetch('/api/challenge/current', { headers: headers });
-    var data = await resp.json();
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var abortTimer = ctrl ? setTimeout(function() { ctrl.abort(); }, 8000) : null;
+    var resp = await fetch('/api/challenge/current', ctrl ? { headers: headers, signal: ctrl.signal } : { headers: headers });
+    if (abortTimer) clearTimeout(abortTimer);
+    var data = {};
+    try { data = await resp.json(); } catch (_) {}
+    // A 5xx/timeout used to land here as {error} with no challenge field,
+    // which render() treated as "No active challenge". That's the wait-then-
+    // empty state on production — the DB timed out, the page lied.
+    if (!resp.ok || data.unavailable) {
+      document.getElementById('chMain').innerHTML =
+        '<div class="ch-no-challenge"><h2>Couldn\'t load the weekly slate</h2><p>The request timed out. Head-to-head is up in the meantime — agree or disagree, stake FLEX.</p><a href="/challenges">Who\'s betting against you →</a></div>';
+      return;
+    }
     _challenge = data.challenge;
     _userPicks = data.userPicks;
     _leaderboard = data.leaderboard || [];
@@ -764,7 +782,7 @@ async function loadChallenge() {
     render();
   } catch (e) {
     document.getElementById('chMain').innerHTML =
-      '<div class="ch-loading">Failed to load challenge. <a href="/challenge">Reload</a></div>';
+      '<div class="ch-no-challenge"><h2>Couldn\'t load the weekly slate</h2><p>The request timed out. Head-to-head is up in the meantime — agree or disagree, stake FLEX.</p><a href="/challenges">Who\'s betting against you →</a></div>';
   }
 }
 

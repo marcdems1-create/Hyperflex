@@ -401,7 +401,7 @@
     { href: '/live', label: '● Live', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
-    { href: '/challenge', label: 'Challenge' },
+    { href: '/challenges', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
     { href: '/markets', label: 'Markets' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
@@ -456,7 +456,7 @@
   };
   // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
-    { href: '/challenges', label: '⚔ Challenges', gold: true },
+    { href: '/challenge', label: '◎ Weekly pick\'em' },
     { href: '/brief', label: '🧠 AI Brief', gold: true },
     { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/methodology', label: '✓ Track Record', gold: true },
