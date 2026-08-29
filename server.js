@@ -823,6 +823,14 @@ app.get('/mentions', (req, res) => res.redirect(301, '/markets'));
 app.get('/incentives', (req, res) => res.redirect(301, '/markets#yield'));
 app.get('/incentives.html', (req, res) => res.redirect(301, '/markets#yield'));
 
+// LP-farming discovery screener — read-only page ranking reward-eligible
+// markets by estimated daily yield. Above static so the pretty URL wins.
+app.get('/lp-rewards', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'lp-rewards.html'));
+});
+app.get('/lp-rewards.html', (req, res) => res.redirect(301, '/lp-rewards'));
+
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
     // Prevent caching of HTML and JS files so users always get latest version
@@ -51828,6 +51836,7 @@ app.get('/api/member/:userId/suggested-markets', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════
 let _ecosystemStatsCache = null;
 let _ecosystemRewardsCache = null;
+let _lpRewardsCache = null;
 
 app.get('/api/ecosystem/stats', async (req, res) => {
   try {
@@ -52077,6 +52086,193 @@ app.get('/api/ecosystem/rewards', async (req, res) => {
     console.error('[ecosystem/rewards]', err.message);
     if (_ecosystemRewardsCache) return res.json(_ecosystemRewardsCache.data);
     res.status(502).json({ error: 'Failed to fetch reward markets', detail: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// LP-FARMING DISCOVERY SCREENER — /api/lp-rewards (READ-ONLY)
+//
+// Surfaces every currently-tradeable Polymarket market with an ACTIVE
+// liquidity-rewards program, enriched with live order-book depth *inside the
+// reward band* and an estimated daily yield per $100 of working capital, so a
+// maker can rank markets by where their capital actually earns.
+//
+// Data sourcing (confirmed live against Polymarket, 2026-08):
+//   - Gamma /markets exposes, per market: clobRewards[] (rewardsDailyRate =
+//     the daily USDC pool), rewardsMaxSpread (the band half-width in cents),
+//     rewardsMinSize (min qualifying order), bestBid/bestAsk, outcomePrices,
+//     clobTokenIds. Reuses _extractMarketRewards() (same parser the
+//     /incentives page uses) so the reward numbers stay consistent.
+//   - CLOB /book?token_id= gives the live resting orders; we sum the size*price
+//     of levels that fall inside [mid-band, mid+band] on each side to get the
+//     real in-band depth (the competition your order dilutes into).
+//
+// Honest-estimate note: Polymarket's exact reward-scoring function (two-sided
+// Qmin weighting, spread-proximity scoring, in-game multipliers) is NOT fully
+// published, so the per-$100 figure is a first-order ESTIMATE:
+//     est_yield_per_100 = daily_pool * 100 / (in_band_depth_usd + 100)
+// i.e. your $100 earns a pro-rata share of the pool against existing in-band
+// liquidity. It is labelled as an estimate everywhere it is shown. When the
+// book can't be read, depth and yield are returned as null (never faked).
+//
+// STRICTLY read-only: no order placement, no wallet access, no writes.
+app.get('/api/lp-rewards', async (req, res) => {
+  try {
+    if (_lpRewardsCache && (Date.now() - _lpRewardsCache.ts < 5 * 60 * 1000)) {
+      return res.json(_lpRewardsCache.data);
+    }
+    const fetch = _nodeFetch;
+
+    // 1. Scan the liquid, tradeable universe (active + open, by 24h volume)
+    //    then keep only markets with a live reward program. Illiquid/dead
+    //    markets aren't worth farming, so volume-ordering is the right
+    //    discovery axis. Gamma /markets caps a page at 100 rows regardless
+    //    of `limit`, but `offset` advances reliably (keyset cursors here
+    //    repeat pages), so paginate by offset in steps of 100.
+    const scanned = [];
+    const PAGE = 100, PAGES = 8;
+    for (let page = 0; page < PAGES; page++) {
+      const url = 'https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=' + PAGE
+        + '&offset=' + (page * PAGE) + '&order=volume24hr&ascending=false';
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 15000);
+      let body;
+      try {
+        const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+        clearTimeout(tid);
+        if (!r.ok) break;
+        body = await r.json();
+      } catch (e) { clearTimeout(tid); break; }
+      const rows = _gammaUnwrap(body);
+      if (!rows.length) break;
+      scanned.push(...rows);
+      if (rows.length < PAGE) break; // last page
+    }
+
+    // 2. Keep markets with a positive daily reward rate; pull the numbers the
+    //    screener needs. Missing spread/min-size stays null (never coerced to
+    //    0 — a zero-width band is a lie, per the /incentives card lesson).
+    //    Dedupe by YES token id — the same market can surface more than once
+    //    across the volume-ordered scan.
+    const eligible = [];
+    const seenTokens = new Set();
+    for (const m of scanned) {
+      if (!m || !m.question) continue;
+      const { dailyRate, maxSpread, minSize } = _extractMarketRewards(m);
+      if (!(dailyRate > 0)) continue;
+      let yesPrice = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+      } catch {}
+      const bestBid = m.bestBid != null ? parseFloat(m.bestBid) : null;
+      const bestAsk = m.bestAsk != null ? parseFloat(m.bestAsk) : null;
+      let tokenId = null;
+      try {
+        let raw = m.clobTokenIds;
+        if (typeof raw === 'string') raw = JSON.parse(raw);
+        if (Array.isArray(raw) && raw.length) tokenId = String(raw[0]);
+      } catch {}
+      const dedupKey = tokenId || (m.conditionId + '|' + (m.groupItemTitle || ''));
+      if (seenTokens.has(dedupKey)) continue;
+      seenTokens.add(dedupKey);
+      const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || m.slug || '';
+      eligible.push({
+        question: m.question,
+        // Outcome label for multi-outcome (neg-risk) events, where several
+        // rows share one question but are distinct books/programs. Lets the
+        // UI disambiguate instead of showing the same title N times.
+        group_item: m.groupItemTitle || null,
+        yes_price: yesPrice,
+        best_bid: bestBid,
+        best_ask: bestAsk,
+        band_c: maxSpread || null,
+        min_size: minSize || null,
+        daily_pool: dailyRate,
+        volume_24h: parseFloat(m.volume24hr || m.volume_24hr || 0),
+        liquidity: parseFloat(m.liquidityNum || m.liquidity || 0),
+        end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
+        slug: eventSlug,
+        url: eventSlug ? pRef('https://polymarket.com/event/' + eventSlug) : pRef('https://polymarket.com'),
+        token_id: tokenId,
+        in_band_depth_usd: null,
+        est_yield_per_100: null,
+        book_ok: false
+      });
+    }
+
+    // 3. Walk the live CLOB book for the top programs (by daily pool) to
+    //    measure real in-band depth. Bounded + concurrency-limited to keep
+    //    upstream load sane; markets beyond the cap keep null depth/yield.
+    const WALK_CAP = 300, CONCURRENCY = 8;
+    const toWalk = eligible
+      .filter(e => e.token_id)
+      .sort((a, b) => (b.daily_pool || 0) - (a.daily_pool || 0))
+      .slice(0, WALK_CAP);
+
+    async function walkOne(e) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 6000);
+        const r = await fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(e.token_id), {
+          signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        clearTimeout(tid);
+        if (!r.ok) return;
+        const b = await r.json();
+        const bids = (b.bids || []).map(x => ({ p: parseFloat(x.price), s: parseFloat(x.size) })).filter(x => x.s > 0);
+        const asks = (b.asks || []).map(x => ({ p: parseFloat(x.price), s: parseFloat(x.size) })).filter(x => x.s > 0);
+        if (!bids.length && !asks.length) return;
+        const bb = bids.length ? Math.max(...bids.map(x => x.p)) : e.best_bid;
+        const ba = asks.length ? Math.min(...asks.map(x => x.p)) : e.best_ask;
+        if (bb == null || ba == null) return;
+        const mid = (bb + ba) / 2;
+        // Band half-width in price units. If Polymarket didn't publish a
+        // band, fall back to the current spread so depth is still meaningful.
+        const band = (e.band_c && e.band_c > 0) ? e.band_c / 100 : Math.max(ba - bb, 0.01);
+        const bidUsd = bids.filter(x => x.p >= mid - band).reduce((s, x) => s + x.s * x.p, 0);
+        const askUsd = asks.filter(x => x.p <= mid + band).reduce((s, x) => s + x.s * x.p, 0);
+        const inBand = bidUsd + askUsd;
+        e.best_bid = bb; e.best_ask = ba;
+        e.in_band_depth_usd = Math.round(inBand);
+        // First-order pro-rata yield estimate (see route header note).
+        const y = e.daily_pool * 100 / (inBand + 100);
+        e.est_yield_per_100 = Math.round(Math.min(y, e.daily_pool) * 100) / 100;
+        e.book_ok = true;
+      } catch { /* leave null — never fabricate depth */ }
+    }
+
+    for (let i = 0; i < toWalk.length; i += CONCURRENCY) {
+      await Promise.all(toWalk.slice(i, i + CONCURRENCY).map(walkOne));
+    }
+
+    // 4. Rank by estimated yield desc; rows without a readable book sort last
+    //    (by daily pool) rather than being dropped — they're still eligible.
+    eligible.sort((a, b) => {
+      const ay = a.est_yield_per_100, by = b.est_yield_per_100;
+      if (ay != null && by != null) return by - ay;
+      if (ay != null) return -1;
+      if (by != null) return 1;
+      return (b.daily_pool || 0) - (a.daily_pool || 0);
+    });
+
+    const result = {
+      markets: eligible,
+      count: eligible.length,
+      markets_paying: eligible.length,
+      best_daily_rate: eligible.reduce((mx, r) => Math.max(mx, r.daily_pool || 0), 0) || null,
+      total_daily_pool: eligible.reduce((s, r) => s + (r.daily_pool || 0), 0) || null,
+      books_read: eligible.filter(r => r.book_ok).length,
+      scanned: scanned.length,
+      yield_formula: 'daily_pool * 100 / (in_band_depth_usd + 100)  — first-order estimate',
+      updated_at: new Date().toISOString()
+    };
+    _lpRewardsCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[lp-rewards]', err.message);
+    if (_lpRewardsCache) return res.json(_lpRewardsCache.data);
+    res.status(502).json({ error: 'Failed to build LP-rewards screener', detail: err.message });
   }
 });
 

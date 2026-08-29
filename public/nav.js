@@ -404,6 +404,7 @@
     { href: '/challenges', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
     { href: '/markets', label: 'Markets' },
+    { href: '/lp-rewards', label: 'LP Rewards' },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
