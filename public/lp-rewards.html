@@ -170,6 +170,17 @@
 <script>
 var STATE = { data: [], sortKey: 'yield', sortDir: -1 };
 
+// Deep-linkable state: ?sort=pool|yield|depth|band|price  ?dir=asc|desc
+// ?floor=<n>  ?all=1 (disable the floor filter). Lets a specific screener
+// view be shared or bookmarked.
+(function(){
+  var q = new URLSearchParams(location.search);
+  var s = q.get('sort'); if(['pool','yield','depth','band','price'].indexOf(s)>=0) STATE.sortKey = s;
+  if(q.get('dir')==='asc') STATE.sortDir = 1;
+  STATE._initFloor = q.get('floor');
+  STATE._initAll = q.get('all')==='1';
+})();
+
 function fmtUsd(n, dp){ if(n==null||isNaN(n)) return '—'; dp = dp==null?0:dp; return '$' + Number(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
 function fmtRate(n){ if(n==null) return '—'; if(n>=1000) return '$' + (n/1000).toFixed(n>=10000?0:1) + 'k'; return '$' + Number(n).toLocaleString(undefined,{maximumFractionDigits:0}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -292,6 +303,10 @@ document.querySelector('table.scr thead').addEventListener('click', function(e){
 });
 document.getElementById('floorToggle').addEventListener('change', render);
 document.getElementById('floorVal').addEventListener('input', render);
+
+// Apply any deep-linked filter state before first paint.
+if(STATE._initFloor != null && STATE._initFloor !== '') document.getElementById('floorVal').value = STATE._initFloor;
+if(STATE._initAll) document.getElementById('floorToggle').checked = false;
 
 load();
 setInterval(load, 5*60*1000);
