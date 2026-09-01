@@ -10,7 +10,9 @@
     "test:homepage": "node test/homepage.test.js",
     "test:homepage:live": "node test/homepage-live.test.js",
     "test:homepage:deep": "node test/homepage-deep.test.js",
-    "test:yield:live": "node test/yield-live.test.js"
+    "test:yield:live": "node test/yield-live.test.js",
+    "test:pg-query": "node test/pg-query.test.js",
+    "test:stale-payload": "node test/stale-payload.test.js"
   },
   "keywords": [],
   "author": "",

@@ -1674,9 +1674,19 @@ function cardArticleHtml(card, isHero, rank){
   return html;
 }
 
+function fetchJson(url, ms){
+  var ctrl = new AbortController();
+  var t = setTimeout(function(){ ctrl.abort(); }, ms || 8000);
+  return fetch(url, { signal: ctrl.signal }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(d){
+      if (!r.ok || (d && d.unavailable)) throw new Error((d && d.error) || ('http ' + r.status));
+      return d;
+    });
+  }).finally(function(){ clearTimeout(t); });
+}
+
 function loadTopTrader(){
-  fetch('/api/kings')
-    .then(function(r){ return r.ok ? r.json() : null; })
+  fetchJson('/api/kings')
     .then(function(d){
       var wrap = document.getElementById('topTraderWrap');
       var overall = (d && d.overall) || [];
@@ -1690,7 +1700,8 @@ function loadTopTrader(){
     })
     .catch(function(){
       var wrap = document.getElementById('topTraderWrap');
-      if (wrap) wrap.innerHTML = '<p class="hero-empty">Could not load the current #1.</p>';
+      if (wrap && wrap.querySelector('article, .trader-card')) return;
+      if (wrap) wrap.innerHTML = '<p class="hero-empty">Couldn\'t load the current #1. Refresh in a moment.</p>';
     });
 }
 loadTopTrader();
@@ -1708,8 +1719,7 @@ var CATS = [
   { key: 'sports', wrapId: 'railSports', countId: 'countSports' }
 ];
 function loadCategory(cat){
-  fetch('/api/category-leaderboard?category=' + cat.key + '&limit=6')
-    .then(function(r){ return r.ok ? r.json() : null; })
+  fetchJson('/api/category-leaderboard?category=' + cat.key + '&limit=6')
     .then(function(d){
       var cards = (d && d.cards) || [];
       var wrap = document.getElementById(cat.wrapId);
@@ -1725,7 +1735,8 @@ function loadCategory(cat){
     })
     .catch(function(){
       var wrap = document.getElementById(cat.wrapId);
-      if (wrap) wrap.innerHTML = '<p class="rail-empty">Could not load this category.</p>';
+      if (wrap && wrap.querySelector('article, .trader-card')) return;
+      if (wrap) wrap.innerHTML = '<p class="rail-empty">Couldn\'t load this category. Refresh in a moment.</p>';
     });
 }
 CATS.forEach(loadCategory);
@@ -1862,8 +1873,7 @@ function callCardHtml(c){
 }
 
 function loadLiveCalls(){
-  fetch('/api/live-calls')
-    .then(function(r){ return r.ok ? r.json() : null; })
+  fetchJson('/api/live-calls')
     .then(function(d){
       var rail = document.getElementById('callsRail');
       var calls = (d && d.calls) || [];
@@ -1887,7 +1897,8 @@ function loadLiveCalls(){
     })
     .catch(function(){
       var rail = document.getElementById('callsRail');
-      if (rail) rail.innerHTML = '<p class="rail-empty">Could not load live calls.</p>';
+      if (rail && rail.querySelector('article, .call-card')) return;
+      if (rail) rail.innerHTML = '<p class="rail-empty">Couldn\'t load live calls. Refresh in a moment.</p>';
     });
 }
 loadLiveCalls();
@@ -2150,10 +2161,9 @@ document.querySelectorAll('.chart-toggle').forEach(function(btn){
 });
 
 function loadBoardStats(){
-  fetch('/api/board-stats')
-    .then(function(r){ return r.ok ? r.json() : null; })
+  fetchJson('/api/board-stats')
     .then(function(d){
-      if (!d) throw new Error('no data');
+      if (!d || !d.totals) throw new Error('no data');
       renderKpis(d.totals || {});
       renderCapitalDonut(d.categories, d.uncategorized);
       renderWinLoss(d.categories);
@@ -2168,9 +2178,11 @@ function loadBoardStats(){
       }
     })
     .catch(function(){
+      var kpi = document.getElementById('kpiRow');
+      if (kpi && kpi.querySelector('.kpi-val:not(.is-mute)')) return;
       ['capitalChart', 'winLossChart', 'scoreChart', 'splitChart'].forEach(function(id){
         var el = document.getElementById(id);
-        if (el) el.innerHTML = '<p class="chart-empty">Could not load board figures.</p>';
+        if (el) el.innerHTML = '<p class="chart-empty">Couldn\'t load board figures. Refresh in a moment.</p>';
       });
     });
 }

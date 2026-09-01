@@ -150,6 +150,8 @@ const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
 const alphaEngine = require('./lib/alpha-engine');
 const { createWeeklyChallenge, scoreAndResolveChallenge } = require('./lib/challenge-engine');
+const { makeDbQuery } = require('./lib/pg-query');
+const { createStaleStore } = require('./lib/stale-payload');
 const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
 const mentionSync = require('./lib/mention-sync');
@@ -935,6 +937,17 @@ const pool = process.env.DATABASE_URL
 if (pool) {
   console.log('[boot] Postgres pool created via DATABASE_URL (direct connection)');
   pool.on('error', (err) => console.error('[pg pool error]', err.message));
+  // Surface a wedged pool in logs before the homepage goes blank. waitingCount
+  // > 0 for more than a tick means every client is checked out — historically
+  // a leak, not load.
+  setInterval(() => {
+    const { totalCount, idleCount, waitingCount } = pool;
+    if (waitingCount > 0 || totalCount >= (pool.options.max || 25) - 2) {
+      console.warn('[pg-pool]', JSON.stringify({
+        totalCount, idleCount, waitingCount, max: pool.options.max,
+      }));
+    }
+  }, 15000).unref();
 } else {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
@@ -1095,22 +1108,14 @@ const _realSupabase = _supaCanInit
     )
   : null;
 
-// Helper: run a query via direct Postgres
+// Helper: run a query via direct Postgres.
+// NEVER race pool.connect() against a timer without reaping the loser —
+// that leak wedges the pool (homepage 500s, /health still 200) until
+// Railway recycles the process. See lib/pg-query.js.
+let _dbQueryImpl;
 async function dbQuery(text, params = [], timeoutMs = 15000) {
-  if (!pool) throw new Error('No database pool');
-  const client = await Promise.race([
-    pool.connect(),
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery connect timeout: ${text.slice(0, 60)}`)), timeoutMs))
-  ]);
-  try {
-    const result = await Promise.race([
-      client.query(text, params),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery query timeout: ${text.slice(0, 60)}`)), timeoutMs))
-    ]);
-    return result.rows;
-  } finally {
-    client.release();
-  }
+  if (!_dbQueryImpl) _dbQueryImpl = makeDbQuery(() => pool);
+  return _dbQueryImpl(text, params, timeoutMs);
 }
 
 // ── SUPABASE PROXY ──────────────────────────────────────────────────────────
@@ -1510,30 +1515,52 @@ app.get('/api/health', async (req, res) => {
     has_pool: !!pool,
     timestamp: new Date().toISOString()
   };
-  // Test 1: Direct Postgres pool (the fix)
   if (pool) {
+    checks.pg_pool = {
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+      max: pool.options.max,
+    };
+  }
+  // Parallel, cheap, fail-fast. SELECT count(*) FROM users used to hold a
+  // client for seconds on a large table and this endpoint ran pg then
+  // supabase sequentially (10s) — long enough for a platform healthcheck
+  // to kill the box.
+  const pgCheck = (async () => {
+    if (!pool) return;
+    const start = Date.now();
     try {
-      const start = Date.now();
-      const r = await Promise.race([
-        pool.query('SELECT count(*) as c FROM users'),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('pg_timeout_5s')), 5000))
+      await Promise.race([
+        pool.query('SELECT 1'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('pg_timeout_2s')), 2000))
       ]);
       checks.pg_ms = Date.now() - start;
       checks.pg_ok = true;
-      checks.pg_users = parseInt(r.rows[0]?.c || 0);
-    } catch (e) { checks.pg_ok = false; checks.pg_error = e.message; }
-  }
-  // Test 2: Supabase JS client (likely still broken)
-  try {
+    } catch (e) {
+      checks.pg_ok = false;
+      checks.pg_error = e.message;
+      checks.pg_ms = Date.now() - start;
+    }
+  })();
+  const sbCheck = (async () => {
     const start = Date.now();
-    const { data, error } = await Promise.race([
-      supabase.from('creator_settings').select('slug').limit(1),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('supabase_timeout_5s')), 5000))
-    ]);
-    checks.supabase_ms = Date.now() - start;
-    checks.supabase_ok = !error;
-    if (error) checks.supabase_error = error.message;
-  } catch (e) { checks.supabase_ok = false; checks.supabase_error = e.message; }
+    try {
+      const { error } = await Promise.race([
+        supabase.from('creator_settings').select('slug').limit(1),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('supabase_timeout_2s')), 2000))
+      ]);
+      checks.supabase_ms = Date.now() - start;
+      checks.supabase_ok = !error;
+      if (error) checks.supabase_error = error.message;
+    } catch (e) {
+      checks.supabase_ok = false;
+      checks.supabase_error = e.message;
+      checks.supabase_ms = Date.now() - start;
+    }
+  })();
+  await Promise.all([pgCheck, sbCheck]);
+  if (checks.pg_ok === false) checks.status = 'degraded';
   res.json(checks);
 });
 
@@ -12548,6 +12575,7 @@ const ROI_MIN_N_FLOOR = 10;
 // run carries it — see the /api/kings gate. Only affects promotion.
 const CATEGORY_KING_MIN_N = 20;
 const _roiLbCache = new Map(); // `${window}:${minN}` -> { data, ts }
+const _roiLbInflight = new Map();
 
 // ── Record-integrity gate (anti-farming) ────────────────────────────────────
 // Open risk flagged in CLAUDE.md since the participant-first pivot: default-on
@@ -12849,14 +12877,34 @@ async function _computeRoiLeaderboard(window, minN) {
 async function _getCachedDurableLeaderboard() {
   const _ck = `all:${ROI_MIN_N_FLOOR}`;
   let _cached = _roiLbCache.get(_ck);
-  if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
-    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
-    if (computed) {
-      _cached = { data: computed.rows, heldData: computed.heldRows || [], popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
-      _roiLbCache.set(_ck, _cached);
-    }
+  if (_cached && Date.now() - _cached.ts < 120 * 1000) return _cached.data;
+
+  if (!_roiLbInflight.has(_ck)) {
+    _roiLbInflight.set(_ck, _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR)
+      .then((computed) => {
+        if (computed) {
+          _cached = { data: computed.rows, heldData: computed.heldRows || [], popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
+          _roiLbCache.set(_ck, _cached);
+        }
+        return computed;
+      })
+      .finally(() => _roiLbInflight.delete(_ck)));
   }
+
+  // Last-good while a refresh is running — never make a page wait on this.
+  _cached = _roiLbCache.get(_ck);
+  if (_cached) return _cached.data;
+
+  const computed = await _roiLbInflight.get(_ck);
+  _cached = _roiLbCache.get(_ck);
   return _cached ? _cached.data : [];
+}
+
+async function _getCachedRoiComputed() {
+  await _getCachedDurableLeaderboard();
+  const cached = _roiLbCache.get(`all:${ROI_MIN_N_FLOOR}`);
+  if (!cached) return null;
+  return { rows: cached.data || [], heldRows: cached.heldData || [], popWeightedRoi: cached.popWeightedRoi };
 }
 
 // Sibling read of the SAME cache entry, for wallets the anti-farming
@@ -12870,13 +12918,11 @@ async function _getCachedDurableLeaderboard() {
 async function _getCachedHeldWallets() {
   const _ck = `all:${ROI_MIN_N_FLOOR}`;
   let _cached = _roiLbCache.get(_ck);
-  if (!_cached || Date.now() - _cached.ts >= 120 * 1000) {
-    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null);
-    if (computed) {
-      _cached = { data: computed.rows, heldData: computed.heldRows || [], popWeightedRoi: computed.popWeightedRoi, ts: Date.now() };
-      _roiLbCache.set(_ck, _cached);
-    }
-  }
+  if (_cached && Date.now() - _cached.ts < 120 * 1000) return _cached.heldData || [];
+  // Share the same inflight as the main board so a miss doesn't fire the
+  // GROUPING SETS query twice (once for verified, once for held).
+  await _getCachedDurableLeaderboard().catch(() => []);
+  _cached = _roiLbCache.get(_ck);
   return _cached ? (_cached.heldData || []) : [];
 }
 
@@ -13498,6 +13544,34 @@ async function _computeCategoryRoiLeaderboards() {
   return result;
 }
 
+// One durable-trade table scan feeds /api/kings, /api/board-stats, and four
+// /api/category-leaderboard rails. Without this, a single homepage load
+// stampedes the same query 6 times and can exhaust the pool on its own.
+let _catRoiCache = { ts: 0, data: null, inflight: null };
+const CAT_ROI_TTL_MS = 120 * 1000;
+async function _getCachedCategoryRoiLeaderboards() {
+  if (_catRoiCache.data && Date.now() - _catRoiCache.ts < CAT_ROI_TTL_MS) return _catRoiCache.data;
+  if (!_catRoiCache.inflight) {
+    _catRoiCache.inflight = _computeCategoryRoiLeaderboards()
+      .then((d) => {
+        if (d != null) { _catRoiCache.data = d; _catRoiCache.ts = Date.now(); }
+        return d != null ? d : _catRoiCache.data;
+      })
+      .finally(() => { _catRoiCache.inflight = null; });
+  }
+  if (_catRoiCache.data) return _catRoiCache.data;
+  return _catRoiCache.inflight;
+}
+
+// Last-good JSON for the homepage's four public payloads. Fresh for 2 min;
+// after that we still serve the last successful payload while a refresh
+// runs. Survives a Postgres blip. Snapshot file covers process restarts
+// on the same box; a new Railway deploy starts empty and refills once.
+const homepageStore = createStaleStore({
+  ttlMs: 120 * 1000,
+  file: path.join(require('os').tmpdir(), 'hfx-homepage-snapshot.json'),
+});
+
 // 3-min cache, keyed by the request's own params — this endpoint now makes
 // one live gamma lookup per distinct evidence market (to decide whether its
 // "get in this trade" CTA can render), same reasoning as
@@ -13562,76 +13636,57 @@ app.get('/api/trader-cards', async (req, res) => {
 // Zero Anthropic calls, zero new scoring math — same single source of truth
 // as every other trader surface.
 app.get('/api/kings', async (req, res) => {
+  const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
+  const kingMinN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.king_min_n, 10) || CATEGORY_KING_MIN_N);
+  const cacheKey = 'kings:' + minDepth + ':' + kingMinN;
   try {
-    if (!pool) return res.json({ overall: [], categories: [] });
+    const result = await homepageStore.resolve(cacheKey, async () => {
+      if (!pool) return { overall: [], categories: [] };
 
-    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
-    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
-    const overall = computed.rows.length ? await _buildTraderCards(computed.rows.slice(0, 1)) : [];
+      const computed = await _getCachedRoiComputed();
+      if (computed == null) throw new Error('roi leaderboard query failed');
+      const overall = computed.rows.length ? await _buildTraderCards(computed.rows.slice(0, 1)) : [];
 
-    const byCategory = await _computeCategoryRoiLeaderboards();
-    const categories = [];
-    if (byCategory) {
-      const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' Leader';
-      // Show EVERY category with a real king, not a hardcoded top-3 — the
-      // homepage brief is "winning traders in every category". The `.slice(0,3)`
-      // cap this replaces meant macro/commodities/crypto/tech kings existed in
-      // the data and were computed on every request but never rendered.
-      // `?min_depth=` lets the bar be tuned without a deploy; default stays at
-      // the 5-qualifying-wallet eyeball threshold used by the category report,
-      // so a category with one lucky wallet can't crown anyone.
-      // 'other' stays excluded — it's the classifier's residual bucket, not a
-      // category, so an "Other Leader" is meaningless (same reason it's excluded
-      // from the similar-trader matcher).
-      const minDepth = Math.max(1, parseInt(req.query.min_depth, 10) || 5);
-      // The king's OWN n in the category must clear a higher bar than the
-      // global n>=10 ranking floor. Crowning "crypto king" off 10 trades at
-      // 100% win rate (YOURSOUL, 2026-07-29) is a lucky-sliver promotion:
-      // the whole moat is that a showcased trader's record is real, and 10
-      // cherry-picked trades is exactly what the CLAUDE.md gaming-risk note
-      // warns about. This gates promotion only — the category leaderboard
-      // computation and the n>=10 board membership are untouched. Tunable
-      // via ?king_min_n= for auditing.
-      const kingMinN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.king_min_n, 10) || CATEGORY_KING_MIN_N);
-      const viable = Object.entries(byCategory)
-        .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth
-          && c.leaderboard[0] && c.leaderboard[0].n >= kingMinN)
-        .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
+      const byCategory = await _getCachedCategoryRoiLeaderboards();
+      const categories = [];
+      if (byCategory) {
+        const labelFor = (cat) => cat.charAt(0).toUpperCase() + cat.slice(1) + ' Leader';
+        const viable = Object.entries(byCategory)
+          .filter(([cat, c]) => cat !== 'other' && c.qualifying_count >= minDepth
+            && c.leaderboard[0] && c.leaderboard[0].n >= kingMinN)
+          .sort((a, b) => b[1].qualifying_count - a[1].qualifying_count);
 
-      // Enrich each category king with the wallet-level style flag so a
-      // category tile can't show a win rate naked either (rule 3), same as
-      // the overall king above. One _buildTraderCards call over all the #1
-      // user_ids; exit style is a wallet trait, not category-specific, so
-      // the wallet-wide computation is the right one. Non-fatal — a card
-      // without the flag is still fine, just less informative.
-      const kingRows = viable.map(([, c]) => c.leaderboard[0]);
-      let flagByUser = new Map();
-      try {
-        const kingCards = await _buildTraderCards(kingRows);
-        if (kingCards) for (const kc of kingCards) if (kc.style_flag) flagByUser.set(kc.user_id, { style_flag: kc.style_flag, sold_early_pct: kc.sold_early_pct });
-      } catch (e) { console.warn('[kings] style-flag enrich failed:', e.message); }
+        const kingRows = viable.map(([, c]) => c.leaderboard[0]);
+        let flagByUser = new Map();
+        try {
+          const kingCards = await _buildTraderCards(kingRows);
+          if (kingCards) for (const kc of kingCards) if (kc.style_flag) flagByUser.set(kc.user_id, { style_flag: kc.style_flag, sold_early_pct: kc.sold_early_pct });
+        } catch (e) { console.warn('[kings] style-flag enrich failed:', e.message); }
 
-      for (const [cat, c] of viable) {
-        const r = c.leaderboard[0];
-        const enrich = flagByUser.get(r.user_id) || {};
-        categories.push({
-          category: cat,
-          label: labelFor(cat),
-          qualifying_count: c.qualifying_count,
-          card: {
-            user_id: r.user_id, display_name: r.display_name, username: r.username,
-            polymarket_address: r.polymarket_address, n: r.n, wins: r.wins, losses: r.losses,
-            win_rate_pct: r.win_rate_pct, score_pct: r.score_pct, scope_label: r.scope_label,
-            style_flag: enrich.style_flag || null, sold_early_pct: enrich.sold_early_pct != null ? enrich.sold_early_pct : null,
-          },
-        });
+        for (const [cat, c] of viable) {
+          const r = c.leaderboard[0];
+          const enrich = flagByUser.get(r.user_id) || {};
+          categories.push({
+            category: cat,
+            label: labelFor(cat),
+            qualifying_count: c.qualifying_count,
+            card: {
+              user_id: r.user_id, display_name: r.display_name, username: r.username,
+              polymarket_address: r.polymarket_address, n: r.n, wins: r.wins, losses: r.losses,
+              win_rate_pct: r.win_rate_pct, score_pct: r.score_pct, scope_label: r.scope_label,
+              style_flag: enrich.style_flag || null, sold_early_pct: enrich.sold_early_pct != null ? enrich.sold_early_pct : null,
+            },
+          });
+        }
       }
-    }
 
-    res.json({ overall: overall || [], categories });
+      return { overall: overall || [], categories };
+    });
+    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
+    res.json(result.data);
   } catch (e) {
     console.error('[kings]', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ unavailable: true, error: e.message, overall: [], categories: [] });
   }
 });
 
@@ -13649,136 +13704,117 @@ app.get('/api/kings', async (req, res) => {
 // the chart — a scoreboard that only plots wins is the thing this product
 // exists to replace.
 let _boardStatsCache = null;
-const BOARD_STATS_TTL_MS = 5 * 60 * 1000; // matches the homepage's own 3-min poll comfortably
+const BOARD_STATS_TTL_MS = 5 * 60 * 1000; // unused; homepageStore is the real cache. kept so a revert is one-line.
 
 app.get('/api/board-stats', async (req, res) => {
   try {
-    if (!pool) return res.status(503).json({ error: 'unavailable' });
-    if (_boardStatsCache && Date.now() - _boardStatsCache.ts < BOARD_STATS_TTL_MS) {
-      return res.json(_boardStatsCache.data);
-    }
+    const result = await homepageStore.resolve('board-stats', async () => {
+      if (!pool) throw new Error('unavailable');
 
-    const [board, byCategory, durableRows, totalsRows] = await Promise.all([
-      _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).catch(() => null),
-      _computeCategoryRoiLeaderboards().catch(() => null),
-      dbQuery(`
-        SELECT market_question, entry_cost_usd, realized_pnl, closed_at
-        FROM realized_trades
-        WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL
-          AND closed_at IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
-      `).catch(e => { console.warn('[board-stats] durable fetch:', e.message); return null; }),
-      dbQuery(`
-        SELECT COUNT(*)::int AS graded_trades,
-               COUNT(DISTINCT user_id)::int AS wallets_tracked,
-               COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable_trades
-        FROM realized_trades WHERE closed_at IS NOT NULL
-      `).catch(() => null),
-    ]);
-    if (durableRows == null) return res.status(500).json({ error: 'durable trade query failed' });
+      const [board, byCategory, durableRows, totalsRows] = await Promise.all([
+        _getCachedRoiComputed().catch(() => null),
+        _getCachedCategoryRoiLeaderboards().catch(() => null),
+        dbQuery(`
+          SELECT market_question, entry_cost_usd, realized_pnl, closed_at
+          FROM realized_trades
+          WHERE market_durability = 'durable' AND realized_pnl IS NOT NULL
+            AND closed_at IS NOT NULL AND entry_cost_usd IS NOT NULL AND entry_cost_usd > 0
+        `).catch(e => { console.warn('[board-stats] durable fetch:', e.message); return null; }),
+        dbQuery(`
+          SELECT COUNT(*)::int AS graded_trades,
+                 COUNT(DISTINCT user_id)::int AS wallets_tracked,
+                 COUNT(*) FILTER (WHERE market_durability = 'durable')::int AS durable_trades
+          FROM realized_trades WHERE closed_at IS NOT NULL
+        `).catch(() => null),
+      ]);
+      if (durableRows == null) throw new Error('durable trade query failed');
 
-    // ── per-category rollup over every durable trade (not just ranked
-    // wallets') so a category's real depth isn't understated by a thin
-    // qualifying set — same choice /api/feed/category-wins makes for its
-    // liquidity figure, and the same documented caveat: this is capital
-    // OUR tracked wallets deployed, not Polymarket's own category volume.
-    const catAgg = new Map();
-    let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
-    let uncategorizedCapital = 0, uncategorizedTrades = 0;
-    let firstClose = null, lastClose = null;
+      const catAgg = new Map();
+      let wins = 0, losses = 0, pushes = 0, capitalUsd = 0;
+      let uncategorizedCapital = 0, uncategorizedTrades = 0;
+      let firstClose = null, lastClose = null;
 
-    for (const t of durableRows) {
-      const pnl = Number(t.realized_pnl);
-      const cost = Number(t.entry_cost_usd);
-      capitalUsd += cost;
-      if (pnl > 0) wins++; else if (pnl < 0) losses++; else pushes++;
+      for (const t of durableRows) {
+        const pnl = Number(t.realized_pnl);
+        const cost = Number(t.entry_cost_usd);
+        capitalUsd += cost;
+        if (pnl > 0) wins++; else if (pnl < 0) losses++; else pushes++;
 
-      const ms = new Date(t.closed_at).getTime();
-      if (!Number.isNaN(ms)) {
-        if (firstClose == null || ms < firstClose) firstClose = ms;
-        if (lastClose == null || ms > lastClose) lastClose = ms;
+        const ms = new Date(t.closed_at).getTime();
+        if (!Number.isNaN(ms)) {
+          if (firstClose == null || ms < firstClose) firstClose = ms;
+          if (lastClose == null || ms > lastClose) lastClose = ms;
+        }
+
+        const category = classifyCardCategory(t.market_question);
+        if (category === 'other') {
+          uncategorizedCapital += cost;
+          uncategorizedTrades++;
+          continue;
+        }
+        if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
+        const c = catAgg.get(category);
+        c.trades++; c.capital += cost;
+        if (pnl > 0) c.wins++; else if (pnl < 0) c.losses++;
       }
 
-      const category = classifyCardCategory(t.market_question);
-      if (category === 'other') {
-        // The classifier's residual bucket. It is NOT a category (same
-        // exclusion /api/kings makes), so it never gets a leaderboard or a
-        // win-rate row — but its capital is real and must be reported, or a
-        // share-of-capital chart silently drops it. Measured 2026-08-20:
-        // $25.1M of $163M, 15% of the board. A donut summing to 85% of the
-        // headline "capital graded" figure is a number that contradicts the
-        // tile directly above it.
-        uncategorizedCapital += cost;
-        uncategorizedTrades++;
-        continue;
+      const categories = [...catAgg.entries()]
+        .map(([category, c]) => ({
+          category,
+          label: category.charAt(0).toUpperCase() + category.slice(1),
+          trades: c.trades,
+          wins: c.wins,
+          losses: c.losses,
+          win_rate_pct: (c.wins + c.losses) > 0 ? Math.round((c.wins / (c.wins + c.losses)) * 1000) / 10 : null,
+          capital_usd: Math.round(c.capital),
+          ranked_wallets: (byCategory && byCategory[category]) ? byCategory[category].qualifying_count : null,
+        }))
+        .sort((a, b) => b.capital_usd - a.capital_usd);
+
+      const rankedRows = board ? board.rows : [];
+      const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
+        label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
+      }));
+      let unscored = 0, profitableWallets = 0, losingWallets = 0;
+      for (const r of rankedRows) {
+        if (r.flex_score == null) unscored++;
+        else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
+        if (r.raw_weighted_roi_pct != null) {
+          if (r.raw_weighted_roi_pct > 0) profitableWallets++;
+          else if (r.raw_weighted_roi_pct < 0) losingWallets++;
+        }
       }
-      if (!catAgg.has(category)) catAgg.set(category, { trades: 0, wins: 0, losses: 0, capital: 0 });
-      const c = catAgg.get(category);
-      c.trades++; c.capital += cost;
-      if (pnl > 0) c.wins++; else if (pnl < 0) c.losses++;
-    }
 
-    const categories = [...catAgg.entries()]
-      .map(([category, c]) => ({
-        category,
-        label: category.charAt(0).toUpperCase() + category.slice(1),
-        trades: c.trades,
-        wins: c.wins,
-        losses: c.losses,
-        // Win rate is over decided trades only (wins+losses); a push is not
-        // a graded outcome and must not dilute the denominator.
-        win_rate_pct: (c.wins + c.losses) > 0 ? Math.round((c.wins / (c.wins + c.losses)) * 1000) / 10 : null,
-        capital_usd: Math.round(c.capital),
-        ranked_wallets: (byCategory && byCategory[category]) ? byCategory[category].qualifying_count : null,
-      }))
-      .sort((a, b) => b.capital_usd - a.capital_usd);
-
-    // ── Flex Score distribution across the ranked board, in tens. A wallet
-    // on the board with no flex_score yet is counted separately rather than
-    // bucketed at zero, which would invent a rating it doesn't have.
-    const rankedRows = board ? board.rows : [];
-    const scoreBuckets = Array.from({ length: 10 }, (_, i) => ({
-      label: (i * 10) + '–' + (i * 10 + 9), min: i * 10, max: i * 10 + 9, count: 0,
-    }));
-    let unscored = 0, profitableWallets = 0, losingWallets = 0;
-    for (const r of rankedRows) {
-      if (r.flex_score == null) unscored++;
-      else scoreBuckets[Math.min(9, Math.max(0, Math.floor(r.flex_score / 10)))].count++;
-      if (r.raw_weighted_roi_pct != null) {
-        if (r.raw_weighted_roi_pct > 0) profitableWallets++;
-        else if (r.raw_weighted_roi_pct < 0) losingWallets++;
-      }
-    }
-
-    const totals = totalsRows && totalsRows[0] ? totalsRows[0] : {};
-    const data = {
-      totals: {
-        ranked_wallets: board ? rankedRows.length : null,
-        minimum_trades_to_rank: ROI_MIN_N_FLOOR,
-        wallets_tracked: totals.wallets_tracked ?? null,
-        graded_trades: totals.graded_trades ?? null,
-        durable_trades: totals.durable_trades ?? null,
-        scored_trades: durableRows.length,
-        wins, losses, pushes,
-        win_rate_pct: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 1000) / 10 : null,
-        capital_usd: Math.round(capitalUsd),
-        first_resolution_at: firstClose ? new Date(firstClose).toISOString() : null,
-        last_resolution_at: lastClose ? new Date(lastClose).toISOString() : null,
-      },
-      categories,
-      // Reported so the capital-share chart can account for 100% of the
-      // graded capital rather than silently dropping the residual.
-      uncategorized: { capital_usd: Math.round(uncategorizedCapital), trades: uncategorizedTrades },
-      score_distribution: { buckets: scoreBuckets, unscored },
-      wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
-      scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',
-      updated_at: new Date().toISOString(),
-    };
-
-    _boardStatsCache = { ts: Date.now(), data };
-    res.json(data);
+      const totals = totalsRows && totalsRows[0] ? totalsRows[0] : {};
+      const data = {
+        totals: {
+          ranked_wallets: board ? rankedRows.length : null,
+          minimum_trades_to_rank: ROI_MIN_N_FLOOR,
+          wallets_tracked: totals.wallets_tracked ?? null,
+          graded_trades: totals.graded_trades ?? null,
+          durable_trades: totals.durable_trades ?? null,
+          scored_trades: durableRows.length,
+          wins, losses, pushes,
+          win_rate_pct: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 1000) / 10 : null,
+          capital_usd: Math.round(capitalUsd),
+          first_resolution_at: firstClose ? new Date(firstClose).toISOString() : null,
+          last_resolution_at: lastClose ? new Date(lastClose).toISOString() : null,
+        },
+        categories,
+        uncategorized: { capital_usd: Math.round(uncategorizedCapital), trades: uncategorizedTrades },
+        score_distribution: { buckets: scoreBuckets, unscored },
+        wallet_roi_split: { profitable: profitableWallets, losing: losingWallets },
+        scope_note: 'Durable markets only — those resolving weeks or months out, which can be independently verified against market settlement. Ephemeral markets are tracked but never scored.',
+        updated_at: new Date().toISOString(),
+      };
+      _boardStatsCache = { ts: Date.now(), data };
+      return data;
+    });
+    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
+    res.json(result.data);
   } catch (e) {
     console.error('[board-stats]', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ unavailable: true, error: e.message });
   }
 });
 
@@ -13855,17 +13891,15 @@ const LIVE_CALLS_MIN_WIN_RATE = 55;
 
 app.get('/api/live-calls', async (req, res) => {
   try {
-    if (!pool) return res.status(503).json({ error: 'unavailable' });
-    if (_liveCallsCache && Date.now() - _liveCallsCache.ts < LIVE_CALLS_TTL_MS) {
-      return res.json(_liveCallsCache.data);
-    }
+    const result = await homepageStore.resolve('live-calls', async () => {
+    if (!pool) throw new Error('unavailable');
 
-    const computed = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
-    if (computed == null) return res.status(500).json({ error: 'roi leaderboard query failed' });
-    if (!computed.rows.length) return res.json({ calls: [], updated_at: new Date().toISOString() });
+    const computed = await _getCachedRoiComputed();
+    if (computed == null) throw new Error('roi leaderboard query failed');
+    if (!computed.rows.length) return { calls: [], updated_at: new Date().toISOString() };
 
     const cards = await _buildTraderCards(computed.rows);
-    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+    if (cards == null) throw new Error('trader card build failed');
 
     // Highest-rated verified wallets that actually have an address to read
     // positions from. flex_score is required — see the rule-3 note above.
@@ -14020,10 +14054,13 @@ app.get('/api/live-calls', async (req, res) => {
       updated_at: new Date().toISOString(),
     };
     _liveCallsCache = { ts: Date.now(), data };
-    res.json(data);
+    return data;
+    });
+    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
+    res.json(result.data);
   } catch (e) {
     console.error('[live-calls]', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ unavailable: true, error: e.message, calls: [] });
   }
 });
 
@@ -14172,37 +14209,36 @@ app.get('/api/category-leaderboard', async (req, res) => {
     const category = String(req.query.category || '').toLowerCase();
     if (!category || category === 'other') return res.status(400).json({ error: 'invalid category' });
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
-    const cacheKey = category + '|' + limit;
-    const cached = _categoryLeaderboardCache.get(cacheKey);
-    if (cached && (Date.now() - cached.ts) < TRADER_CARDS_CACHE_MS) return res.json(cached.data);
+    const cacheKey = 'catlb:' + category + ':' + limit;
+    const result = await homepageStore.resolve(cacheKey, async () => {
+      const byCategory = await _getCachedCategoryRoiLeaderboards();
+      if (byCategory == null) throw new Error('category leaderboard query failed');
+      const cat = byCategory[category];
+      if (!cat) return { category, label: category.charAt(0).toUpperCase() + category.slice(1), qualifying_count: 0, cards: [] };
 
-    const byCategory = await _computeCategoryRoiLeaderboards();
-    if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
-    const cat = byCategory[category];
-    if (!cat) return res.json({ category, label: category.charAt(0).toUpperCase() + category.slice(1), qualifying_count: 0, cards: [] });
+      const rows = cat.leaderboard.slice(0, limit);
+      const cards = rows.length ? await _buildTraderCards(rows) : [];
+      if (cards == null) throw new Error('trader card build failed');
 
-    const rows = cat.leaderboard.slice(0, limit);
-    const cards = rows.length ? await _buildTraderCards(rows) : [];
-    if (cards == null) return res.status(500).json({ error: 'trader card build failed' });
+      await _attachTradeCta(
+        cards.filter(c => c.evidence && c.evidence.result === 'win'),
+        c => c.evidence.condition_id,
+        c => c.evidence.side,
+        (c, trade) => { c.evidence.trade = trade; }
+      );
 
-    // Same "get in this trade" enrichment as /api/trader-cards — see
-    // _attachTradeCta's own comment.
-    await _attachTradeCta(
-      cards.filter(c => c.evidence && c.evidence.result === 'win'),
-      c => c.evidence.condition_id,
-      c => c.evidence.side,
-      (c, trade) => { c.evidence.trade = trade; }
-    );
-
-    const payload = {
-      category, label: category.charAt(0).toUpperCase() + category.slice(1),
-      qualifying_count: cat.qualifying_count, cards,
-    };
-    _categoryLeaderboardCache.set(cacheKey, { data: payload, ts: Date.now() });
-    res.json(payload);
+      const payload = {
+        category, label: category.charAt(0).toUpperCase() + category.slice(1),
+        qualifying_count: cat.qualifying_count, cards,
+      };
+      _categoryLeaderboardCache.set(category + '|' + limit, { data: payload, ts: Date.now() });
+      return payload;
+    });
+    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
+    res.json(result.data);
   } catch (e) {
     console.error('[category-leaderboard]', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ unavailable: true, error: e.message, cards: [] });
   }
 });
 
@@ -14552,7 +14588,7 @@ async function computeSimilarBetterTraders(userId) {
   // Candidate pool = wallets already qualifying on the per-category durable
   // boards. Gives us both their category vector and a per-category score
   // in one pass, and inherits the boards' opt-out + eligibility discipline.
-  const boards = await _computeCategoryRoiLeaderboards();
+  const boards = await _getCachedCategoryRoiLeaderboards();
   if (!boards) return null;
 
   const cand = new Map(); // user_id -> { vec, catScore, meta }
@@ -31402,7 +31438,8 @@ app.get('/health', (req, res) => {
     twitter_bot: twitterBot,
     watchdog_restarts: _healthTimestamps.watchdogRestarts,
     recent_errors: _recentErrors.slice(-10),
-    boot_time: _healthTimestamps.boot
+    boot_time: _healthTimestamps.boot,
+    pg_pool: pool ? { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: pool.options.max } : null
   });
 });
 
@@ -67253,7 +67290,7 @@ app.get('/api/admin/verify-promoted', requireAdminSecret, async (req, res) => {
     if (board && board.rows) {
       board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, r.polymarket_address, i === 0 ? 'overall_1' : 'mover'));
     }
-    const cats = await _computeCategoryRoiLeaderboards();
+    const cats = await _getCachedCategoryRoiLeaderboards();
     if (cats) for (const [cat, c] of Object.entries(cats)) {
       if (cat === 'other') continue;
       const k = c.leaderboard && c.leaderboard[0];
@@ -67492,7 +67529,7 @@ app.get('/api/admin/verify-promoted-redeemed', requireAdminSecret, async (req, r
     const promoted = new Map();
     const add = (uid, why) => { if (!uid) return; if (!promoted.has(uid)) promoted.set(uid, []); promoted.get(uid).push(why); };
     if (board && board.rows) board.rows.slice(0, moversN).forEach((r, i) => add(r.user_id, i === 0 ? 'overall_1' : 'mover'));
-    const cats = await _computeCategoryRoiLeaderboards();
+    const cats = await _getCachedCategoryRoiLeaderboards();
     if (cats) for (const [cat, c] of Object.entries(cats)) {
       if (cat === 'other') continue;
       const k = c.leaderboard && c.leaderboard[0];
@@ -68136,7 +68173,7 @@ app.get('/api/admin/category-leaderboard-report', requireAdminSecret, async (req
   try {
     if (!pool) return res.status(503).json({ error: 'no_pool' });
     const perCategoryLimit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
-    const byCategory = await _computeCategoryRoiLeaderboards();
+    const byCategory = await _getCachedCategoryRoiLeaderboards();
     if (byCategory == null) return res.status(500).json({ error: 'category leaderboard query failed' });
 
     const summary = Object.entries(byCategory)

@@ -50,7 +50,7 @@ global.document = { getElementById: (id) => (els[id] = els[id] || mkEl(id)), que
 global.window = { matchMedia: () => ({ matches: true }) };
 global.performance = { now: () => 0 };
 global.requestAnimationFrame = (fn) => fn(0);
-global.fetch = () => Promise.resolve({ ok: false });
+global.fetch = () => Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
 global.setInterval = () => 0;
 global.fmtPlainPct = (p) => p == null ? '—' : p.toFixed(1) + '%';
 global.fmtPct = (p) => p == null ? '—' : (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%';
@@ -70,6 +70,8 @@ function throws(name, fn) {
   try { fn(); ok(name, true); }
   catch (e) { ok(name, false, 'threw: ' + e.message); }
 }
+
+ok('fetchJson helper ships on the homepage', typeof fetchJson === 'function');
 
 const T = (o = {}) => Object.assign({
   user_id: 'u1', username: 'trader', display_name: 'Trader', polymarket_address: '0xabc',
