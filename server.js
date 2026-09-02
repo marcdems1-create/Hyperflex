@@ -1,6 +1,9 @@
 // redeployed 2026-05-21
 require('dotenv').config();
 try { require('dns').setDefaultResultOrder('ipv4first'); } catch (_) {}
+const { makeDbQuery, createConnectCircuit, createPgGate, makePoolConfig, pgHostKind } = require('./lib/pg-query');
+const pgCircuit = createConnectCircuit({ failLimit: 2, openMs: 15000 });
+const pgGate = createPgGate();
 
 // ══════════════════════════════════════════════════════════════════════
 // POLYMARKET REFERRAL TAG — appends ?via=CODE to all outbound polymarket.com URLs
@@ -151,9 +154,6 @@ const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
 const alphaEngine = require('./lib/alpha-engine');
 const { createWeeklyChallenge, scoreAndResolveChallenge } = require('./lib/challenge-engine');
-const { makeDbQuery, createConnectCircuit, createPgGate, makePoolConfig, pgHostKind } = require('./lib/pg-query');
-const pgCircuit = createConnectCircuit({ failLimit: 2, openMs: 15000 });
-const pgGate = createPgGate();
 const { createStaleStore } = require('./lib/stale-payload');
 const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
