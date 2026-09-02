@@ -52,6 +52,11 @@ function ok(name, cond, detail) {
   const f = await store2.resolve('kings', async () => { throw new Error('should not need this'); });
   ok('disk snapshot rehydrates after restart', f.data.overall[0] === 3);
 
+  const seeded = createStaleStore({ ttlMs: 50, seed: { kings: { overall: [{ display_name: 'Seed' }] } } });
+  const g = await seeded.resolve('kings', async () => { throw new Error('pg_timeout'); });
+  ok('seed serves last-good without builder', g.data.overall[0].display_name === 'Seed');
+  ok('seed is stale so a later refresh can replace it', g.stale === true);
+
   try { fs.unlinkSync(file); } catch (_) {}
   console.log(fail ? `stale-payload FAIL ${fail}` : `stale-payload ok ${pass}`);
   if (failures.length) failures.forEach((x) => console.log('  ✗ ' + x));

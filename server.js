@@ -1,5 +1,6 @@
 // redeployed 2026-05-21
 require('dotenv').config();
+try { require('dns').setDefaultResultOrder('ipv4first'); } catch (_) {}
 
 // ══════════════════════════════════════════════════════════════════════
 // POLYMARKET REFERRAL TAG — appends ?via=CODE to all outbound polymarket.com URLs
@@ -87,7 +88,7 @@ async function resilientFetch(url, options = {}, { retries = 3, baseDelay = 1000
 
 // ── Monetization strategy: all users get Premium ──
 // One-time bulk upgrade on boot — ensures every existing user has platinum plan
-setTimeout(async () => {
+pgGate.whenReady(async () => {
   try {
     if (pool) {
       const result = await dbQuery("UPDATE creator_settings SET plan = 'platinum', plan_trial_expires_at = NULL WHERE plan != 'platinum' OR plan IS NULL");
@@ -99,7 +100,7 @@ setTimeout(async () => {
   } catch (e) {
     console.error('[boot] Bulk upgrade failed:', e.message);
   }
-}, 5000); // 5s after boot to let DB connections establish
+});
 
 // Safe wrapper for async cron/interval callbacks
 function safeCron(name, fn) {
@@ -150,7 +151,9 @@ const heroBanner = require('./lib/hero-banner');
 const hotMarkets = require('./lib/hot-markets');
 const alphaEngine = require('./lib/alpha-engine');
 const { createWeeklyChallenge, scoreAndResolveChallenge } = require('./lib/challenge-engine');
-const { makeDbQuery } = require('./lib/pg-query');
+const { makeDbQuery, createConnectCircuit, createPgGate, makePoolConfig, pgHostKind } = require('./lib/pg-query');
+const pgCircuit = createConnectCircuit({ failLimit: 2, openMs: 15000 });
+const pgGate = createPgGate();
 const { createStaleStore } = require('./lib/stale-payload');
 const marketSummaryLib = require('./lib/market-summary');
 const wordMarkets = require('./lib/word-markets');
@@ -916,40 +919,115 @@ polymarket.init({ fetch: _nodeFetch });
 // purely to surface load-time syntax errors early.
 const fedTranscripts = require('./scrapers/fed_transcripts');
 
-// Direct Postgres pool — this is the reliable connection.
-// max: 25 (bumped from 5) to handle production traffic load — Cloudflare
-// metrics showed ~133% traffic growth and dbQuery timeouts cascading
-// across multiple crons (closing-prices, agent-eval, picks, hedge-alerts).
-// Pool of 5 was starving the cron loop. 25 gives headroom for the
-// concurrent cron + request load without exceeding Railway Postgres's
-// connection cap (default 100 on Hobby/Pro plans).
+// Direct Postgres pool.
+// max was 25; that plus boot crons (schema, platinum upgrade, sold-resync,
+// ALTER TABLE barrage, CLV, redeem-regrade, price alerts) can occupy every
+// slot before the homepage fills last-good — and on a wedged/unreachable
+// PG it leaves connecting clients sitting in the pool. Cap at 8 so a
+// Railway PG that is actually up still has headroom, fail connects in 2.5s,
+// and recycle the pool when the private URL is dead but DATABASE_PUBLIC_URL
+// answers. Inits receive a Proxy so a failover swap is visible everywhere.
+const PG_POOL_MAX = Math.max(2, Math.min(12, parseInt(process.env.PG_POOL_MAX, 10) || 8));
+const _poolRef = { current: null };
+let _pgUsing = process.env.DATABASE_URL ? 'DATABASE_URL' : null;
+let _pgProbe = { at: null, using: _pgUsing, primary: null, pub: null };
+let _pgLastSwapAt = 0;
+
+function _attachPoolEvents(p, label) {
+  if (!p) return;
+  p.on('error', (err) => console.error('[pg pool error]', label, err.message));
+}
+
+function installPool(url, label) {
+  const next = url ? new Pool(makePoolConfig(url, { max: PG_POOL_MAX })) : null;
+  _attachPoolEvents(next, label);
+  const prev = _poolRef.current;
+  _poolRef.current = next;
+  _pgUsing = label || _pgUsing;
+  if (prev && prev !== next) {
+    try { prev.end().catch(() => {}); } catch (_) {}
+  }
+  return next;
+}
+
 const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 25,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-      statement_timeout: 15000,
-      query_timeout: 15000,
+  ? new Proxy(_poolRef, {
+      get(target, prop) {
+        const p = target.current;
+        if (!p) return undefined;
+        const v = p[prop];
+        return typeof v === 'function' ? v.bind(p) : v;
+      },
     })
   : null;
 if (pool) {
-  console.log('[boot] Postgres pool created via DATABASE_URL (direct connection)');
-  pool.on('error', (err) => console.error('[pg pool error]', err.message));
-  // Surface a wedged pool in logs before the homepage goes blank. waitingCount
-  // > 0 for more than a tick means every client is checked out — historically
-  // a leak, not load.
+  installPool(process.env.DATABASE_URL, 'DATABASE_URL');
+  console.log('[boot] Postgres pool created via DATABASE_URL (max=' + PG_POOL_MAX + ')');
   setInterval(() => {
-    const { totalCount, idleCount, waitingCount } = pool;
-    if (waitingCount > 0 || totalCount >= (pool.options.max || 25) - 2) {
+    const p = _poolRef.current;
+    if (!p) return;
+    const { totalCount, idleCount, waitingCount } = p;
+    if (waitingCount > 0 || totalCount >= (p.options.max || PG_POOL_MAX) - 2) {
       console.warn('[pg-pool]', JSON.stringify({
-        totalCount, idleCount, waitingCount, max: pool.options.max,
+        totalCount, idleCount, waitingCount, max: p.options.max, using: _pgUsing,
+        circuit: pgCircuit.snapshot(),
       }));
     }
   }, 15000).unref();
 } else {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
+}
+
+async function _probePgUrl(url, ms) {
+  if (!url) return { ok: false, error: 'no_url', ms: 0 };
+  const { Client } = require('pg');
+  const client = new Client({
+    connectionString: url,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: ms || 2500,
+  });
+  const t0 = Date.now();
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+    try { await client.end(); } catch (_) {}
+    return { ok: true, ms: Date.now() - t0, kind: pgHostKind(url).kind };
+  } catch (e) {
+    try { await client.end(); } catch (_) {}
+    return { ok: false, ms: Date.now() - t0, error: e.message, code: e.code || null, kind: pgHostKind(url).kind };
+  }
+}
+
+async function recoverPostgres() {
+  const primary = process.env.DATABASE_URL;
+  const pub = process.env.DATABASE_PUBLIC_URL;
+  if (!primary) return false;
+  const a = await _probePgUrl(primary, 2500);
+  _pgProbe = { at: new Date().toISOString(), using: _pgUsing, primary: a, pub: _pgProbe && _pgProbe.pub };
+  if (a.ok) {
+    pgCircuit.ok();
+    pgGate.markReady();
+    return true;
+  }
+  // Drop hung connecting clients on the dead pool so a later retry is clean.
+  if (Date.now() - _pgLastSwapAt > 20000) {
+    _pgLastSwapAt = Date.now();
+    installPool(primary, 'DATABASE_URL');
+  }
+  if (pub && pub !== primary) {
+    const b = await _probePgUrl(pub, 2500);
+    _pgProbe.pub = b;
+    if (b.ok) {
+      installPool(pub, 'DATABASE_PUBLIC_URL');
+      _pgUsing = 'DATABASE_PUBLIC_URL';
+      _pgProbe.using = _pgUsing;
+      pgCircuit.ok();
+      pgGate.markReady();
+      console.warn('[pg] failed over to DATABASE_PUBLIC_URL (' + b.kind + ', ' + b.ms + 'ms)');
+      return true;
+    }
+  }
+  return false;
 }
 
 // Polymarket Safe-proxy derivation — log the resolved factory + selector
@@ -1005,11 +1083,11 @@ setInterval(() => {
 }, 120_000);
 
 // Initial warm-up after 10s (let other services boot first)
-setTimeout(() => {
+pgGate.whenReady(() => {
   dataEngine.refreshAll()
     .then(r => console.log(`[data-engine] Initial warm: ${r.markets.length} markets, ${r.crossRefs.length} cross-refs`))
     .catch(e => console.warn('[data-engine] Initial warm failed:', e.message));
-}, 10000);
+});
 
 // ── API ACCESS TIERS ──────────────────────────────────────────────────────
 // All endpoints free — no tier gating
@@ -1114,7 +1192,7 @@ const _realSupabase = _supaCanInit
 // Railway recycles the process. See lib/pg-query.js.
 let _dbQueryImpl;
 async function dbQuery(text, params = [], timeoutMs = 15000) {
-  if (!_dbQueryImpl) _dbQueryImpl = makeDbQuery(() => pool);
+  if (!_dbQueryImpl) _dbQueryImpl = makeDbQuery(() => _poolRef.current || pool, pgCircuit);
   return _dbQueryImpl(text, params, timeoutMs);
 }
 
@@ -1520,8 +1598,12 @@ app.get('/api/health', async (req, res) => {
       total: pool.totalCount,
       idle: pool.idleCount,
       waiting: pool.waitingCount,
-      max: pool.options.max,
+      max: pool.options && pool.options.max,
     };
+    checks.pg_using = _pgUsing;
+    checks.pg_circuit = pgCircuit.snapshot();
+    checks.pg_ready = pgGate.isReady();
+    checks.pg_probe = _pgProbe;
   }
   // Parallel, cheap, fail-fast. SELECT count(*) FROM users used to hold a
   // client for seconds on a large table and this endpoint ran pg then
@@ -1531,10 +1613,7 @@ app.get('/api/health', async (req, res) => {
     if (!pool) return;
     const start = Date.now();
     try {
-      await Promise.race([
-        pool.query('SELECT 1'),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('pg_timeout_2s')), 2000))
-      ]);
+      await dbQuery('SELECT 1', [], 2000);
       checks.pg_ms = Date.now() - start;
       checks.pg_ok = true;
     } catch (e) {
@@ -1582,7 +1661,7 @@ if (pool) clustererCompose.init({ pool, anthropic });
 // Signal agent — autonomous whale signal evaluator
 if (pool && anthropic) signalAgent.init({ pool, anthropic });
 if (pool) clvEngine.init({ pool });
-setTimeout(() => clvEngine.computeAll().catch(() => {}), 15000);
+pgGate.whenReady(() => clvEngine.computeAll().catch(() => {}));
 setInterval(() => clvEngine.computeAll().catch(() => {}), 6 * 60 * 60 * 1000);
 if (pool && anthropic) inferenceEngine.init({ pool, anthropic });
 if (pool) signalLedger.init({ pool });
@@ -13572,6 +13651,41 @@ const homepageStore = createStaleStore({
   file: path.join(require('os').tmpdir(), 'hfx-homepage-snapshot.json'),
 });
 
+async function homepageResolve(key, builder) {
+  if (pgCircuit.snapshot().open && !homepageStore.peek(key)) {
+    const err = new Error('pg_circuit_open');
+    err.code = 'PG_CIRCUIT';
+    throw err;
+  }
+  return homepageStore.resolve(key, builder);
+}
+
+function homepageSend(res, result) {
+  res.setHeader('X-HFX-Cache', result.stale ? 'stale' : 'fresh');
+  return res.json(result.data);
+}
+
+async function warmHomepageStore() {
+  const port = process.env.PORT || 3000;
+  const base = 'http://127.0.0.1:' + port;
+  const paths = [
+    '/api/kings',
+    '/api/board-stats',
+    '/api/live-calls',
+    '/api/category-leaderboard?category=politics',
+    '/api/category-leaderboard?category=world',
+  ];
+  for (const p of paths) {
+    try {
+      const r = await fetch(base + p, { headers: { Accept: 'application/json' } });
+      console.log('[boot] homepage warm', p, r.status);
+    } catch (e) {
+      console.warn('[boot] homepage warm', p, e.message);
+    }
+  }
+}
+pgGate.whenReady(() => { warmHomepageStore().catch(e => console.warn('[boot] homepage warm', e.message)); });
+
 // 3-min cache, keyed by the request's own params — this endpoint now makes
 // one live gamma lookup per distinct evidence market (to decide whether its
 // "get in this trade" CTA can render), same reasoning as
@@ -13640,7 +13754,7 @@ app.get('/api/kings', async (req, res) => {
   const kingMinN = Math.max(ROI_MIN_N_FLOOR, parseInt(req.query.king_min_n, 10) || CATEGORY_KING_MIN_N);
   const cacheKey = 'kings:' + minDepth + ':' + kingMinN;
   try {
-    const result = await homepageStore.resolve(cacheKey, async () => {
+    const result = await homepageResolve(cacheKey, async () => {
       if (!pool) return { overall: [], categories: [] };
 
       const computed = await _getCachedRoiComputed();
@@ -13682,8 +13796,7 @@ app.get('/api/kings', async (req, res) => {
 
       return { overall: overall || [], categories };
     });
-    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
-    res.json(result.data);
+    return homepageSend(res, result);
   } catch (e) {
     console.error('[kings]', e.message);
     res.status(503).json({ unavailable: true, error: e.message, overall: [], categories: [] });
@@ -13708,7 +13821,7 @@ const BOARD_STATS_TTL_MS = 5 * 60 * 1000; // unused; homepageStore is the real c
 
 app.get('/api/board-stats', async (req, res) => {
   try {
-    const result = await homepageStore.resolve('board-stats', async () => {
+    const result = await homepageResolve('board-stats', async () => {
       if (!pool) throw new Error('unavailable');
 
       const [board, byCategory, durableRows, totalsRows] = await Promise.all([
@@ -13810,8 +13923,7 @@ app.get('/api/board-stats', async (req, res) => {
       _boardStatsCache = { ts: Date.now(), data };
       return data;
     });
-    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
-    res.json(result.data);
+    return homepageSend(res, result);
   } catch (e) {
     console.error('[board-stats]', e.message);
     res.status(503).json({ unavailable: true, error: e.message });
@@ -13891,7 +14003,7 @@ const LIVE_CALLS_MIN_WIN_RATE = 55;
 
 app.get('/api/live-calls', async (req, res) => {
   try {
-    const result = await homepageStore.resolve('live-calls', async () => {
+    const result = await homepageResolve('live-calls', async () => {
     if (!pool) throw new Error('unavailable');
 
     const computed = await _getCachedRoiComputed();
@@ -14056,8 +14168,7 @@ app.get('/api/live-calls', async (req, res) => {
     _liveCallsCache = { ts: Date.now(), data };
     return data;
     });
-    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
-    res.json(result.data);
+    return homepageSend(res, result);
   } catch (e) {
     console.error('[live-calls]', e.message);
     res.status(503).json({ unavailable: true, error: e.message, calls: [] });
@@ -14210,7 +14321,7 @@ app.get('/api/category-leaderboard', async (req, res) => {
     if (!category || category === 'other') return res.status(400).json({ error: 'invalid category' });
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
     const cacheKey = 'catlb:' + category + ':' + limit;
-    const result = await homepageStore.resolve(cacheKey, async () => {
+    const result = await homepageResolve(cacheKey, async () => {
       const byCategory = await _getCachedCategoryRoiLeaderboards();
       if (byCategory == null) throw new Error('category leaderboard query failed');
       const cat = byCategory[category];
@@ -14234,8 +14345,7 @@ app.get('/api/category-leaderboard', async (req, res) => {
       _categoryLeaderboardCache.set(category + '|' + limit, { data: payload, ts: Date.now() });
       return payload;
     });
-    if (result.stale) res.setHeader('X-HFX-Cache', 'stale');
-    res.json(result.data);
+    return homepageSend(res, result);
   } catch (e) {
     console.error('[category-leaderboard]', e.message);
     res.status(503).json({ unavailable: true, error: e.message, cards: [] });
@@ -31439,7 +31549,11 @@ app.get('/health', (req, res) => {
     watchdog_restarts: _healthTimestamps.watchdogRestarts,
     recent_errors: _recentErrors.slice(-10),
     boot_time: _healthTimestamps.boot,
-    pg_pool: pool ? { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: pool.options.max } : null
+    pg_pool: pool ? { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: pool.options && pool.options.max } : null,
+    pg_using: _pgUsing,
+    pg_ready: pgGate.isReady(),
+    pg_circuit: pgCircuit.snapshot(),
+    pg_probe: _pgProbe,
   });
 });
 
@@ -62126,6 +62240,7 @@ cron.schedule('*/30 * * * *', safeCron('resolvingSoonNotifs', async () => {
 
 // ── Price Alert Checker (every 2 min) ──
 cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
+  if (!pgGate.isReady()) return;
   // Get current market prices from screener cache
   let markets;
   try {
@@ -65121,7 +65236,7 @@ const REGRADE_REDEEM_CRON_BATCH = 1500;
 let _regradeRedeemCronRunning = false;
 let _regradeRedeemCronLastRun = null;
 cron.schedule('*/2 * * * *', safeCron('redeem-regrade', () => {
-  if (!pool || _regradeRedeemCronRunning) return;
+  if (!pool || !pgGate.isReady() || _regradeRedeemCronRunning) return;
   _regradeRedeemCronRunning = true;
   const startedAt = new Date().toISOString();
   return _regradeRedeemedPositionsBatch(REGRADE_REDEEM_CRON_BATCH)
@@ -66090,7 +66205,7 @@ cron.schedule('*/5 * * * *', () => fireSoldResyncTick('cron'));
 // "never fires" when it's really just never survived long enough to hit
 // its own mark. 5s delay, not 0, so this doesn't compete with whatever
 // else fires synchronously at boot.
-setTimeout(() => fireSoldResyncTick('boot'), 5000);
+pgGate.whenReady(() => fireSoldResyncTick('boot'));
 
 // ── GET /api/admin/segment-trace ─────────────────────────────────────────
 // READ-ONLY. Writes nothing, changes nothing. Re-runs the REAL segmentation
@@ -69627,10 +69742,13 @@ setInterval(safeCron('expireStaleChallenges', expireStaleChallenges), 60 * 60 * 
 // MP-2d mention-sync. Rule pass every 15 min (cheap; reuses word-markets
 // discovery cache). LLM pass every hour, capped at LLM_MAX_PER_RUN
 // ambiguities so daily Sonnet 4.6 spend stays bounded (~$3/day at cap).
-setInterval(safeCron('mentionSyncRule', () => mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) })), 15 * 60 * 1000);
+setInterval(safeCron('mentionSyncRule', () => {
+  if (!pgGate.isReady()) return;
+  return mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) });
+}), 15 * 60 * 1000);
 setInterval(safeCron('mentionSyncLlm',  () => mentionSync.llmPass(dbQuery,  { log: (...a) => console.log(...a) })), 60 * 60 * 1000);
 
-setTimeout(() => {
+pgGate.whenReady(() => {
   resolveSignalOutcomes().catch(e => _logError('boot/resolveSignalOutcomes', e));
   refreshSourceWeights().catch(e => _logError('boot/refreshSourceWeights', e));
   // Honest recompute on boot so the gated/whale-edge numbers apply to the
@@ -69689,7 +69807,7 @@ setTimeout(() => {
   // Boot-time first rule pass so we don't wait 15min for the first run.
   // LLM pass deferred to its hourly schedule — no need to burn budget on boot.
   mentionSync.rulePass(dbQuery, { log: (...a) => console.log(...a) }).catch(e => _logError('boot/mentionSyncRule', e));
-}, 60000);
+});
 
 // ══════════════════════════════════════════════════════════════════════
 // WATCHDOG — every 5 min, check data freshness and restart stale polls
@@ -72107,6 +72225,16 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HYPERFLEX server running on port ${PORT}`);
 
+  recoverPostgres()
+    .then((ok) => {
+      console.log(ok ? '[pg] reachable at boot' : '[pg] not reachable at boot — retrying, homepage will fail-open');
+    })
+    .catch((e) => console.warn('[pg] boot probe failed:', e.message));
+  setInterval(() => {
+    if (pgGate.isReady() && !pgCircuit.snapshot().open) return;
+    recoverPostgres().catch(() => {});
+  }, 10000).unref();
+
   // Check Polymarket Builder credentials
   if (!process.env.POLY_BUILDER_API_KEY || !process.env.POLY_BUILDER_SECRET || !process.env.POLY_BUILDER_PASSPHRASE) {
     console.warn('');
@@ -72130,7 +72258,7 @@ app.listen(PORT, () => {
   // All statements use IF NOT EXISTS / ADD COLUMN IF NOT EXISTS so repeated
   // runs are no-ops. Non-blocking: if it fails, the server still starts and
   // logs the error, matching the prior manual-migration behavior.
-  (async () => {
+  pgGate.whenReady(async () => {
     if (!pool) {
       console.warn('[boot] No DATABASE_URL — cannot auto-apply schema. Run supabase_migration_predictions.sql manually in Supabase SQL editor.');
       return;
@@ -72494,10 +72622,10 @@ app.listen(PORT, () => {
     } catch (err) {
       console.error('[boot] ✗ failed to ensure rewards schema:', err.message);
     }
-  })();
+  });
 
   // market_summaries — AI-generated one-sentence market summary, 4h TTL
-  (async () => {
+  pgGate.whenReady(async () => {
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS market_summaries (
@@ -72511,7 +72639,7 @@ app.listen(PORT, () => {
     } catch (err) {
       console.error('[boot] ✗ failed to ensure market_summaries schema:', err.message);
     }
-  })();
+  });
 
   // Pre-warm critical data caches on startup (non-blocking)
   setTimeout(async () => {

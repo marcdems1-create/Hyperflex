@@ -64,6 +64,41 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
   ok('hung query destroys client', destroyed === 1, 'destroyed=' + destroyed);
   ok('hung query is not returned clean', returnedClean === 0, 'clean=' + returnedClean);
 
+  const { createConnectCircuit, createPgGate } = require('../lib/pg-query');
+  const circuit = createConnectCircuit({ failLimit: 2, openMs: 200 });
+  let circuitConnects = 0;
+  const hangingPool = {
+    connect() {
+      circuitConnects++;
+      return new Promise((_, reject) => setTimeout(() => reject(new Error('timeout exceeded when trying to connect')), 5));
+    },
+  };
+  const q = makeDbQuery(() => hangingPool, circuit);
+  try { await q('SELECT 1', [], 20); } catch (_) {}
+  try { await q('SELECT 1', [], 20); } catch (_) {}
+  const before = circuitConnects;
+  let circuitErr = null;
+  try { await q('SELECT 1', [], 20); } catch (e) { circuitErr = e.message; }
+  ok('circuit opens after 2 connect failures', circuit.snapshot().open === true);
+  ok('open circuit does not checkout', circuitConnects === before, 'connects=' + circuitConnects);
+  ok('open circuit error is pg_circuit_open', circuitErr === 'pg_circuit_open');
+
+  const gate = createPgGate();
+  let bootConnects = 0;
+  const bootPool = {
+    connect() {
+      bootConnects++;
+      return Promise.resolve({ query: async () => ({ rows: [{}] }), release() {} });
+    },
+  };
+  const bootQ = makeDbQuery(() => bootPool);
+  for (let i = 0; i < 25; i++) gate.whenReady(() => bootQ('SELECT 1'));
+  ok('boot jobs do not checkout before pg ready', bootConnects === 0, 'connects=' + bootConnects);
+  ok('boot jobs are queued', gate.queuedCount() === 25);
+  gate.markReady();
+  await sleep(30);
+  ok('boot jobs run after pg ready', bootConnects === 25, 'connects=' + bootConnects);
+
   console.log(fail ? `pg-query FAIL ${fail}` : `pg-query ok ${pass}`);
   if (failures.length) failures.forEach((f) => console.log('  ✗ ' + f));
   process.exit(fail ? 1 : 0);

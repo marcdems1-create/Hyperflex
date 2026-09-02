@@ -12,7 +12,8 @@
     "test:homepage:deep": "node test/homepage-deep.test.js",
     "test:yield:live": "node test/yield-live.test.js",
     "test:pg-query": "node test/pg-query.test.js",
-    "test:stale-payload": "node test/stale-payload.test.js"
+    "test:stale-payload": "node test/stale-payload.test.js",
+    "test:homepage-failopen": "node test/homepage-failopen.test.js"
   },
   "keywords": [],
   "author": "",
