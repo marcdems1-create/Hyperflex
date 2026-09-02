@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LP Rewards Screener — HYPERFLEX</title>
+<meta name="description" content="Polymarket markets currently paying liquidity rewards, ranked by estimated daily yield per $100 of working capital. Read-only — no order placement.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Tokens lifted verbatim from finance.html / home-kings.html so this page
+     reads as the same product. Duplicated on purpose (no shared page-level
+     stylesheet exists yet); a drifted copy is more obvious than a broken import. */
+  :root{
+    --bg-outer:#07080a; --bg:#0b0d12; --surface:#12151b; --surface-2:#181c25;
+    --border:#232733; --border-soft:#191d27;
+    --ink:#eceef2; --ink-muted:#8890a3; --ink-faint:#7d8599;
+    --gold:#c9920d; --gold-bright:#e0ab2c; --gold-soft:rgba(201,146,13,0.14);
+    --green:#35b075; --green-soft:rgba(53,176,117,0.13);
+    --red:#e2495a; --red-soft:rgba(226,73,90,0.13);
+    --blue:#5b8dd9; --purple:#9b6dd6;
+    --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:"JetBrains Mono","SFMono-Regular",ui-monospace,"SF Mono",Consolas,monospace;
+    --radius:13px; --radius-sm:8px; --grid-line:#1b1f29;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg-outer);color:var(--ink);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  ::selection{background:var(--gold-soft);color:var(--gold-bright);}
+  a{color:inherit;}
+
+  .shell{max-width:1120px;margin:0 auto;padding:26px 20px 80px;}
+  .page-head{padding:14px 0 8px;border-bottom:1px solid var(--border-soft);margin-bottom:20px;}
+  .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
+  .page-head h1{font-size:26px;font-weight:800;letter-spacing:-0.01em;margin:0 0 8px;}
+  .lede{font-size:14px;line-height:1.55;color:var(--ink-muted);max-width:660px;margin:0;}
+  .head-meta{display:flex;gap:14px;align-items:center;margin-top:12px;font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);}
+  .live-pill{display:inline-flex;align-items:center;gap:6px;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green-soft);}
+
+  /* KPI row — same shape as finance.html .kpi */
+  .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0 22px;}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+  .kpi-val{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--ink);line-height:1.1;}
+  .kpi-val.is-mute{color:var(--ink-faint);}
+  .kpi-val.gold{color:var(--gold-bright);}
+  .kpi-key{display:block;font-size:11px;font-weight:600;color:var(--ink-muted);margin-top:6px;text-transform:uppercase;letter-spacing:0.06em;}
+  .kpi-sub{font-size:11px;color:var(--ink-faint);margin-top:3px;line-height:1.35;}
+
+  /* Controls */
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
+  .ctl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-muted);}
+  .switch{position:relative;display:inline-block;width:38px;height:21px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;inset:0;background:var(--surface-2);border:1px solid var(--border);border-radius:21px;cursor:pointer;transition:.15s;}
+  .slider:before{content:"";position:absolute;height:15px;width:15px;left:2px;top:2px;background:var(--ink-faint);border-radius:50%;transition:.15s;}
+  .switch input:checked + .slider{background:var(--gold-soft);border-color:var(--gold);}
+  .switch input:checked + .slider:before{transform:translateX(17px);background:var(--gold-bright);}
+  .ctl input[type=number]{width:66px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--ink);font-family:var(--font-mono);font-size:13px;padding:5px 8px;}
+  .ctl .k{font-family:var(--font-mono);color:var(--ink-faint);font-size:12px;}
+
+  /* Screener table */
+  .screener{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  table.scr{width:100%;border-collapse:collapse;font-size:13px;}
+  table.scr thead th{position:sticky;top:0;background:var(--surface-2);color:var(--ink-muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;text-align:right;padding:11px 14px;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+  table.scr thead th:first-child{text-align:left;cursor:default;}
+  table.scr thead th .arw{color:var(--gold);margin-left:4px;font-size:10px;}
+  table.scr tbody td{text-align:right;padding:12px 14px;border-bottom:1px solid var(--border-soft);font-family:var(--font-mono);color:var(--ink);white-space:nowrap;vertical-align:middle;}
+  table.scr tbody td:first-child{text-align:left;font-family:var(--font-sans);white-space:normal;}
+  table.scr tbody tr:last-child td{border-bottom:none;}
+  table.scr tbody tr{transition:background .1s;}
+  table.scr tbody tr:hover{background:var(--surface-2);}
+  .mkt-q{font-weight:600;color:var(--ink);line-height:1.35;display:block;max-width:420px;}
+  .mkt-q a{text-decoration:none;}
+  .mkt-q a:hover{color:var(--gold-bright);}
+  .mkt-q .grp{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--gold-bright);background:var(--gold-soft);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle;letter-spacing:0.02em;}
+  .mkt-sub{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);margin-top:3px;}
+  .px-yes{color:var(--green);} .px-no{color:var(--red);} .px-sep{color:var(--ink-faint);margin:0 3px;}
+  .pool{color:var(--gold-bright);font-weight:700;}
+  .yield{font-weight:700;}
+  .yield.hi{color:var(--green);} .yield.mid{color:var(--gold-bright);} .yield.lo{color:var(--ink-muted);}
+  .muted{color:var(--ink-faint);}
+  .depth-crowd{color:var(--red);} .depth-open{color:var(--green);}
+  .est-tag{font-family:var(--font-mono);font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.08em;}
+
+  /* Empty / status — plain text, matches finance "no signal" convention */
+  .empty{padding:34px 22px;text-align:center;}
+  .empty-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:6px;}
+  .empty-body{font-size:12px;line-height:1.55;color:var(--ink-muted);max-width:460px;margin:0 auto;}
+  .empty-body a{color:var(--gold);}
+
+  .method{margin-top:20px;padding:16px 18px;background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);}
+  .method h2{font-size:12px;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-muted);margin:0 0 10px;}
+  .method p{font-size:12.5px;line-height:1.6;color:var(--ink-muted);margin:0 0 8px;}
+  .method code{font-family:var(--font-mono);font-size:11.5px;color:var(--gold-bright);background:var(--bg);padding:1px 5px;border-radius:4px;}
+  .method a{color:var(--gold);}
+  .method .warn{color:var(--ink-faint);}
+
+  @media(max-width:820px){
+    .kpi-row{grid-template-columns:repeat(2,1fr);}
+    table.scr thead th:nth-child(4),table.scr tbody td:nth-child(4){display:none;} /* hide 24h-context in Market sub only; keep core cols */
+    .mkt-q{max-width:200px;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="page-head">
+    <div class="eyebrow">Polymarket · liquidity rewards · read-only</div>
+    <h1>LP Rewards Screener</h1>
+    <p class="lede">
+      Every Polymarket market currently paying liquidity rewards, ranked by estimated daily yield per $100 of
+      two-sided working capital. This screens where to <em>post maker orders</em> — it places no orders and touches no wallet.
+    </p>
+    <div class="head-meta">
+      <span class="live-pill"><span class="live-dot"></span><span id="livePill">loading…</span></span>
+      <span id="stamp"></span>
+    </div>
+  </header>
+
+  <section class="kpi-row" aria-label="Rewards summary">
+    <div class="kpi"><div class="kpi-val is-mute" id="kMarkets">—</div><span class="kpi-key">Markets paying</span><div class="kpi-sub">Active liquidity-reward programs</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kBest">—</div><span class="kpi-key">Best daily pool</span><div class="kpi-sub">Largest single USDC/day budget</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kPool">—</div><span class="kpi-key">Total daily pool</span><div class="kpi-sub">Sum of live program budgets</div></div>
+    <div class="kpi"><div class="kpi-val is-mute" id="kShown">—</div><span class="kpi-key">Shown after filter</span><div class="kpi-sub">Books read live for in-band depth</div></div>
+  </section>
+
+  <div class="controls">
+    <label class="ctl">
+      <span class="switch"><input type="checkbox" id="floorToggle" checked><span class="slider"></span></span>
+      Hide pools under
+    </label>
+    <label class="ctl"><span class="k">$</span><input type="number" id="floorVal" value="1" min="0" step="0.5"><span class="k">/day</span></label>
+    <span class="ctl muted" id="hiddenNote" style="margin-left:auto;"></span>
+  </div>
+
+  <div class="screener">
+    <table class="scr">
+      <thead>
+        <tr>
+          <th data-sort="q">Market</th>
+          <th data-sort="price">YES / NO</th>
+          <th data-sort="band">Band</th>
+          <th data-sort="pool">Pool /day</th>
+          <th data-sort="yield">Est yield /$100/day</th>
+          <th data-sort="depth">In-band depth</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="6"><div class="empty"><div class="empty-title">Loading live rewards…</div><div class="empty-body">Pulling active programs from Polymarket and reading each book for in-band depth.</div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="method">
+    <h2>How the numbers are built</h2>
+    <p><b>Pool /day</b>, <b>band</b> (max qualifying spread from mid), and min order size come straight from Polymarket's
+      reward config on each market (Gamma <code>clobRewards</code>). <b>In-band depth</b> is the live resting liquidity
+      inside the reward band on both sides of the book, read from the CLOB order book right now — it tells you how crowded
+      the pool already is.</p>
+    <p><b>Estimated yield</b> is a first-order model, not a guarantee:
+      <code>daily_pool × 100 / (in_band_depth + 100)</code> — your $100 earning a pro-rata share of the pool against the
+      liquidity already sitting in the band. <span class="warn">Polymarket's exact reward-scoring function (two-sided Qmin
+      weighting, spread-proximity scoring, in-game multipliers) isn't fully published, so treat this as a ranking signal,
+      not a promised payout.</span> Where a book can't be read, depth and yield show <b>—</b> rather than a fabricated number.</p>
+    <p class="warn">Read-only. To actually post orders, open a market and use its trade widget on Limit —
+      <a href="https://docs.polymarket.com/quickstart/orders-rewards/rewards" target="_blank" rel="noopener">Polymarket's rewards docs ↗</a></p>
+  </div>
+</div>
+
+<script>
+var STATE = { data: [], sortKey: 'yield', sortDir: -1 };
+
+// Deep-linkable state: ?sort=pool|yield|depth|band|price  ?dir=asc|desc
+// ?floor=<n>  ?all=1 (disable the floor filter). Lets a specific screener
+// view be shared or bookmarked.
+(function(){
+  var q = new URLSearchParams(location.search);
+  var s = q.get('sort'); if(['pool','yield','depth','band','price'].indexOf(s)>=0) STATE.sortKey = s;
+  if(q.get('dir')==='asc') STATE.sortDir = 1;
+  STATE._initFloor = q.get('floor');
+  STATE._initAll = q.get('all')==='1';
+})();
+
+function fmtUsd(n, dp){ if(n==null||isNaN(n)) return '—'; dp = dp==null?0:dp; return '$' + Number(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
+function fmtRate(n){ if(n==null) return '—'; if(n>=1000) return '$' + (n/1000).toFixed(n>=10000?0:1) + 'k'; return '$' + Number(n).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function yesCents(m){ var bb=m.best_bid,ba=m.best_ask; if(bb!=null&&ba!=null) return Math.round((bb+ba)/2*100); if(m.yes_price!=null) return Math.round(m.yes_price*100); return null; }
+
+function sortVal(m, key){
+  switch(key){
+    case 'pool': return m.daily_pool||0;
+    case 'yield': return m.est_yield_per_100==null?-1:m.est_yield_per_100;
+    case 'depth': return m.in_band_depth_usd==null?-1:m.in_band_depth_usd;
+    case 'band': return m.band_c==null?-1:m.band_c;
+    case 'price': return yesCents(m)==null?-1:yesCents(m);
+    default: return 0;
+  }
+}
+
+function currentFloor(){
+  var on = document.getElementById('floorToggle').checked;
+  var v = parseFloat(document.getElementById('floorVal').value);
+  return on ? (isNaN(v)?0:v) : 0;
+}
+
+function render(){
+  var tbody = document.getElementById('rows');
+  var floor = currentFloor();
+  var all = STATE.data.slice();
+  var shown = all.filter(function(m){ return (m.daily_pool||0) >= floor; });
+  var hidden = all.length - shown.length;
+
+  document.getElementById('kShown').textContent = shown.length + (STATE.booksRead!=null ? '' : '');
+  document.getElementById('kShown').classList.remove('is-mute');
+  document.getElementById('hiddenNote').textContent = hidden > 0
+    ? (hidden + ' market' + (hidden===1?'':'s') + ' below $' + floor + '/day hidden')
+    : '';
+
+  if(!shown.length){
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty">' +
+      '<div class="empty-title">Nothing clears the filter right now.</div>' +
+      '<div class="empty-body">' +
+        (all.length
+          ? ('All ' + all.length + ' live reward program' + (all.length===1?'':'s') + ' pay under $' + floor + '/day. Lower the floor to see them, or check back — Polymarket rotates programs and budgets daily.')
+          : 'No liquidity-reward programs are running on tradeable markets right now. Polymarket rotates them in and out daily; check back in a few hours.') +
+      '</div></div></td></tr>';
+    return;
+  }
+
+  shown.sort(function(a,b){ return (sortVal(a,STATE.sortKey)-sortVal(b,STATE.sortKey))*STATE.sortDir; });
+
+  tbody.innerHTML = shown.map(function(m){
+    var yc = yesCents(m);
+    var priceCell = yc==null ? '<span class="muted">—</span>'
+      : '<span class="px-yes">' + yc + '¢</span><span class="px-sep">/</span><span class="px-no">' + (100-yc) + '¢</span>';
+    var bandCell = (m.band_c!=null && m.band_c>0) ? ('±' + Number(m.band_c).toFixed(1) + '¢') : '<span class="muted">n/a</span>';
+    var y = m.est_yield_per_100;
+    var yCls = y==null?'lo':(y>=1?'hi':(y>=0.2?'mid':'lo'));
+    var yieldCell = y==null
+      ? '<span class="muted" title="Order book could not be read">—</span>'
+      : '<span class="yield ' + yCls + '">$' + y.toFixed(2) + '</span> <span class="est-tag">est</span>';
+    var depthCell = m.in_band_depth_usd==null
+      ? '<span class="muted">—</span>'
+      : '<span class="' + (m.in_band_depth_usd>=25000?'depth-crowd':(m.in_band_depth_usd<3000?'depth-open':'')) + '">' + fmtUsd(m.in_band_depth_usd) + '</span>';
+    var href = m.slug ? '/market/' + encodeURIComponent(m.slug) : (m.url || '#');
+    var sub = [];
+    if(m.min_size!=null && m.min_size>0) sub.push('min ' + fmtUsd(m.min_size));
+    if(m.volume_24h) sub.push(fmtRate(m.volume_24h) + ' 24h vol');
+    // Multi-outcome events repeat the event question per outcome; show the
+    // outcome label so each distinct book/program is legible.
+    var title = esc(m.question) + (m.group_item ? ' <span class="grp">' + esc(m.group_item) + '</span>' : '');
+    return '<tr>' +
+      '<td><span class="mkt-q"><a href="' + esc(href) + '">' + title + '</a></span>' +
+        (sub.length?'<div class="mkt-sub">' + sub.join(' · ') + '</div>':'') + '</td>' +
+      '<td>' + priceCell + '</td>' +
+      '<td>' + bandCell + '</td>' +
+      '<td><span class="pool">' + fmtRate(m.daily_pool) + '</span></td>' +
+      '<td>' + yieldCell + '</td>' +
+      '<td>' + depthCell + '</td>' +
+    '</tr>';
+  }).join('');
+
+  // header arrows
+  [].forEach.call(document.querySelectorAll('th[data-sort]'), function(th){
+    var base = th.getAttribute('data-sort');
+    th.querySelector('.arw') && th.querySelector('.arw').remove();
+    if(base===STATE.sortKey && base!=='q'){
+      var s = document.createElement('span'); s.className='arw'; s.textContent = STATE.sortDir<0?'▼':'▲';
+      th.appendChild(s);
+    }
+  });
+}
+
+function paintKpis(d){
+  document.getElementById('kMarkets').textContent = d.markets_paying!=null?d.markets_paying:'—';
+  document.getElementById('kMarkets').classList.remove('is-mute');
+  document.getElementById('kBest').textContent = d.best_daily_rate!=null?fmtRate(d.best_daily_rate)+'/day':'—';
+  document.getElementById('kBest').classList.remove('is-mute'); document.getElementById('kBest').classList.add('gold');
+  document.getElementById('kPool').textContent = d.total_daily_pool!=null?fmtRate(d.total_daily_pool)+'/day':'—';
+  document.getElementById('kPool').classList.remove('is-mute');
+}
+
+function load(){
+  fetch('/api/lp-rewards').then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d){ throw new Error('no data'); }
+    STATE.data = Array.isArray(d.markets)?d.markets:[];
+    STATE.booksRead = d.books_read;
+    paintKpis(d);
+    document.getElementById('livePill').textContent = (d.books_read||0) + ' books read live';
+    if(d.updated_at){ var t=new Date(d.updated_at); document.getElementById('stamp').textContent = 'updated ' + t.toLocaleTimeString(); }
+    render();
+  }).catch(function(){
+    document.getElementById('livePill').textContent = 'feed unavailable';
+    document.getElementById('rows').innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-title">Couldn\u2019t load the rewards feed.</div><div class="empty-body">The screener refreshes every 5 minutes. Try again shortly.</div></div></td></tr>';
+  });
+}
+
+document.querySelector('table.scr thead').addEventListener('click', function(e){
+  var th = e.target.closest('th[data-sort]'); if(!th) return;
+  var key = th.getAttribute('data-sort'); if(key==='q') return;
+  if(STATE.sortKey===key){ STATE.sortDir *= -1; } else { STATE.sortKey=key; STATE.sortDir=-1; }
+  render();
+});
+document.getElementById('floorToggle').addEventListener('change', render);
+document.getElementById('floorVal').addEventListener('input', render);
+
+// Apply any deep-linked filter state before first paint.
+if(STATE._initFloor != null && STATE._initFloor !== '') document.getElementById('floorVal').value = STATE._initFloor;
+if(STATE._initAll) document.getElementById('floorToggle').checked = false;
+
+load();
+setInterval(load, 5*60*1000);
+</script>
+<script src="/nav.js?v=26"></script>
+</body>
+</html>
