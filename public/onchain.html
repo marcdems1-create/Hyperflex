@@ -34,6 +34,7 @@
   .legend b{color:var(--ink);}
   .prov{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;white-space:nowrap;}
   .prov.verified{color:var(--green);background:var(--green-soft);}
+  .prov.fill{color:var(--gold-bright);background:var(--gold-soft);}
   .prov.native{color:var(--blue);background:rgba(91,141,217,0.13);}
   .prov.pending{color:var(--ink-faint);background:var(--surface-2);}
 
@@ -65,6 +66,7 @@
   .taddr{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);margin-top:2px;}
   .pos{color:var(--green);} .neg{color:var(--red);} .muted{color:var(--ink-faint);}
   .flex-badge{font-family:var(--font-mono);font-weight:700;color:var(--gold-bright);}
+  .flag{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-faint);background:var(--surface-2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;}
   .empty{padding:40px 24px;text-align:center;}
   .empty-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px;}
   .empty-body{font-size:12.5px;line-height:1.6;color:var(--ink-muted);max-width:520px;margin:0 auto;}
@@ -87,6 +89,7 @@
 
   <div class="legend">
     <span><span class="prov verified">✓ Verified</span> &nbsp;<b>Hyperflex-graded</b> — scored against real resolutions, wins <em>and</em> losses, n≥10.</span>
+    <span><span class="prov fill">⊕ Fill-graded</span> &nbsp;<b>Close-fill record</b> — public Hyperliquid closes, independently counted. Perps have no resolution event.</span>
     <span><span class="prov native">◇ Native</span> &nbsp;<b>Venue-reported</b> — the platform's own PnL, not independently graded by us.</span>
     <span><span class="prov pending">⋯ Pending</span> &nbsp;<b>Data source needed</b> — shown honestly empty until connected.</span>
   </div>
@@ -94,6 +97,7 @@
   <div class="tabs" id="tabs">
     <div class="tab active" data-venue="polymarket"><span class="dot" style="background:var(--green)"></span>Polymarket <span class="cnt" id="cnt-polymarket"></span></div>
     <div class="tab" data-venue="hyperliquid"><span class="dot" style="background:var(--blue)"></span>Hyperliquid <span class="cnt" id="cnt-hyperliquid"></span></div>
+    <div class="tab" data-venue="hyperliquid_graded"><span class="dot" style="background:var(--gold-bright)"></span>HL fill-grade <span class="cnt" id="cnt-hyperliquid_graded"></span></div>
     <div class="tab" data-venue="solana"><span class="dot" style="background:var(--purple)"></span>Solana · Pump.fun <span class="cnt" id="cnt-solana"></span></div>
   </div>
 
@@ -116,7 +120,7 @@
 var STATE = { venue:'polymarket', window:'month', data:null };
 (function(){
   var q=new URLSearchParams(location.search);
-  if(['polymarket','hyperliquid','solana'].indexOf(q.get('venue'))>=0) STATE.venue=q.get('venue');
+  if(['polymarket','hyperliquid','hyperliquid_graded','solana'].indexOf(q.get('venue'))>=0) STATE.venue=q.get('venue');
   if(['day','week','month','allTime'].indexOf(q.get('window'))>=0) STATE.window=q.get('window');
 })();
 
@@ -157,6 +161,26 @@ function renderHyperliquid(v){
   return '<table class="lb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
 }
 
+function renderHlGraded(v){
+  if(!v || !v.ok) return emptyState('Fill-grade unavailable', 'Couldn\u2019t read public Hyperliquid fills just now.'+(v&&v.error?' ('+esc(v.error)+')':''));
+  if(!v.traders.length) return emptyState('No wallet cleared the fill-grade bar', 'None of the sampled Hyperliquid wallets had n\u226510 close fills in the last 2,000 fills. That is a real empty, not a loading state.');
+  var head='<tr><th class="rk">#</th><th>Trader</th><th>Net PnL</th><th>Win rate</th><th class="hide-sm">Closes</th><th class="hide-sm">Fees</th><th class="hide-sm">Top coin</th></tr>';
+  var body=v.traders.map(function(t){
+    var flags=Array.isArray(t.flags)?t.flags:[];
+    var flagHtml='';
+    if(flags.indexOf('inventory_closer')>=0) flagHtml=' <span class="flag">inventory closer</span>';
+    else if(flags.indexOf('single_coin_closer')>=0) flagHtml=' <span class="flag">single-coin</span>';
+    return '<tr><td class="rk '+(t.rank<=3?'top':'')+'">'+t.rank+'</td>'+
+      '<td class="trader">'+esc(t.display_name)+flagHtml+'<div class="taddr">'+shortAddr(t.address)+'</div></td>'+
+      '<td class="'+cls(t.net_pnl)+'">'+fmtUsd(t.net_pnl)+'</td>'+
+      '<td class="'+cls((t.win_rate||0)-50)+'">'+((t.win_rate!=null)?t.win_rate.toFixed(1)+'%':'\u2014')+'</td>'+
+      '<td class="hide-sm muted">'+(t.n!=null?t.n+' <span class="muted">('+t.wins+'\u2013'+t.losses+')</span>':'\u2014')+'</td>'+
+      '<td class="hide-sm muted">'+fmtUsd(t.fees)+'</td>'+
+      '<td class="hide-sm muted">'+(t.top_coin?esc(t.top_coin):'\u2014')+'</td></tr>';
+  }).join('');
+  return '<table class="lb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
+}
+
 function renderSolana(v){
   return emptyState('Solana lane needs a data source',
     (v&&v.note?esc(v.note):'Per-trader PnL rankings on Solana require a keyed provider.') +
@@ -178,14 +202,24 @@ function paint(){
   var html;
   if(STATE.venue==='polymarket') html=renderPolymarket(v);
   else if(STATE.venue==='hyperliquid') html=renderHyperliquid(v);
+  else if(STATE.venue==='hyperliquid_graded') html=renderHlGraded(v);
   else html=renderSolana(v);
   document.getElementById('boardBody').innerHTML=html;
   // counts
-  ['polymarket','hyperliquid','solana'].forEach(function(k){
+  ['polymarket','hyperliquid','hyperliquid_graded','solana'].forEach(function(k){
     var el=document.getElementById('cnt-'+k); var vv=d[k];
     el.textContent = (vv&&vv.traders&&vv.traders.length) ? vv.traders.length : (vv&&vv.needs_key?'⋯':'0');
   });
   if(d.updated_at) document.getElementById('stamp').textContent='Updated '+new Date(d.updated_at).toLocaleTimeString()+' · rankings cached 10 min';
+  syncUrl();
+}
+
+function syncUrl(){
+  var q=new URLSearchParams();
+  q.set('venue', STATE.venue);
+  if(STATE.venue==='hyperliquid') q.set('window', STATE.window);
+  var s=q.toString();
+  history.replaceState(null,'','/onchain'+(s?'?'+s:''));
 }
 
 function load(){

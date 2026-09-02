@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-02 — feat(onchain): HL fill-grade + inventory-closer flags
+
+`/onchain` now has a fourth lane: **HL fill-grade**, independently counted from public Hyperliquid `userFills` (Close Long/Short only, n≥10, wins and losses, fees deducted). Perps have no resolution event — labelled ⊕ Fill-graded, never passed off as a Polymarket-equivalent grade.
+
+`/api/hyperliquid/whales` now reads live `windowPerformances` (was returning 0 PnL). 2000–0 same-coin closers are flagged `inventory_closer` / `single_coin_closer` and ranked *below* directional W–L books, not hidden. Solana lane still `needs_key` — GMGN 403, Birdeye 401, Pump.fun exposes coins not wallets.
+
+Files: `lib/hl-fill-grade.js`, `test/hl-fill-grade.test.js`, `server.js`, `public/onchain.html`.
+
+---
+
 ## 2026-08-27 — feat(markets): Yield / Alpha slider; "The read" renamed Alpha
 
 `/markets` keeps both halves. A sticky Yield | Alpha slider sits under the site nav. Picking a half puts it on top (flex `order`) and scrolls to its start. "The read" is now **Alpha** (charts + board). `#yield` / `#alpha` hashes work; `/incentives` still 301s to `#yield`.

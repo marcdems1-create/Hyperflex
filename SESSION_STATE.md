@@ -49,6 +49,19 @@
 
 ## Chronological log (newest first)
 
+## 2026-09-02b (continue: HL fill-grader + whales parser fix)
+
+**Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (hash in this commit).
+
+**What changed:**
+- Shared `_hlParseLeaderRow` / `_hlWindowMap` — `/api/hyperliquid/whales` and whale-positions now read `windowPerformances` (was returning 0 PnL).
+- New Hyperliquid **fill-grader** (`lib/hl-fill-grade.js`): public `userFills`, Close Long/Short only, n≥10, wins AND losses, net of fees. New `/onchain` tab "HL fill-grade". Labelled fill-graded, not resolution-verified (perps have no resolution).
+- Inventory / MM closers (n≥200 at ≥98% WR, or single-coin n≥100 at ≥95% WR) are flagged and ranked below directional books — not hidden, not sold as "best traders."
+- Tab/window state is deep-linkable (`?venue=&window=`).
+- Solana still needs a key — re-probed 2026-09-02: GMGN 403, Birdeye 401, Pump `/traders` 404. Coins API still works; no per-wallet PnL.
+
+**Active blockers:** Solana lane still scaffold. Fill-grade samples last 2,000 fills (HL cap), not lifetime. Real venue-#2 perps grader (entry→exit/leverage/funding) still unbuilt — fill-grade is the public-fills approximation.
+
 ## 2026-09-02 (Cross-chain "best onchain traders" board — Gate 2/3 OVERRIDDEN by Marc)
 
 **⛔ Decision reversal — on the record:** Marc explicitly overrode Gate 2 (no venue #2 until the Polymarket grader is defensible) and Gate 3 (publish nothing off the grader until n≥30 & hit_rate≥58%). Verbatim rationale: **"We have no users just build it all now."** The gate reasoning was surfaced 3× first (venue-#2 = second grading engine; Polymarket grader last read n=83/53% and live `/api/edge/receipts` returned `record:null`; "scanner" = the ruled-out market-browsing surface). Marc reframed the ask as **"a way to visualize the best onchain traders"** (a scoreboard, not a token scanner), then gave the override. Building proceeded.
