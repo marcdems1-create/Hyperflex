@@ -823,6 +823,14 @@ app.get('/mentions', (req, res) => res.redirect(301, '/markets'));
 app.get('/incentives', (req, res) => res.redirect(301, '/markets#yield'));
 app.get('/incentives.html', (req, res) => res.redirect(301, '/markets#yield'));
 
+// Cross-chain "best onchain traders" board — read-only visualization across
+// Polymarket (Hyperflex-verified) + Hyperliquid (native) + Solana (pending key).
+app.get('/onchain', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'onchain.html'));
+});
+app.get('/onchain.html', (req, res) => res.redirect(301, '/onchain'));
+
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
     // Prevent caching of HTML and JS files so users always get latest version
@@ -53453,6 +53461,103 @@ app.get('/api/hyperliquid/whales', async (req, res) => {
     if (stale) return res.json(stale.data);
     res.status(502).json({ error: 'Failed to fetch Hyperliquid leaderboard', detail: err.message });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// CROSS-CHAIN "BEST ONCHAIN TRADERS" BOARD — /api/onchain/traders
+//
+// Visualizes the best onchain traders across venues in one place. Built
+// 2026-09-02 on Marc's explicit override of Gate 2/3 ("we have no users, just
+// build it all now" — logged in SESSION_STATE.md 2026-09-02). The one thing
+// the override does NOT relax: provenance honesty. Each venue carries a
+// `source` label saying exactly what the ranking is, so a native-venue PnL
+// ranking is never silently passed off as a Hyperflex-verified grade.
+//
+//   - hyperliquid: native Hyperliquid perps leaderboard (their reported PnL /
+//     ROI / volume). NOT Hyperflex-graded — labelled as such. Ranked by the
+//     selected window's PnL. Parses `windowPerformances` correctly (the
+//     existing /api/hyperliquid/whales parser reads r.pnl.day, which the live
+//     shape doesn't have — so PnL there comes back 0; this endpoint fixes it).
+//   - polymarket: the Hyperflex-VERIFIED durable board (_computeRoiLeaderboard)
+//     — the one venue where the rank IS our own graded score (wins & losses).
+//   - solana (Pump.fun): per-trader PnL needs a keyed provider (GMGN/Birdeye/
+//     Helius) we don't hold yet. Returned as needs_key:true with NO fabricated
+//     rows, so the UI shows an honest "connect a data source" state.
+//
+// Read-only. No order placement, no wallet writes.
+let _onchainTradersCache = new Map();
+app.get('/api/onchain/traders', async (req, res) => {
+  const win = ['day', 'week', 'month', 'allTime'].includes(req.query.window) ? req.query.window : 'month';
+  const cached = _onchainTradersCache.get(win);
+  if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
+
+  // ── Hyperliquid (native leaderboard) ──
+  const hyperliquid = { ok: false, graded: false, source: 'Hyperliquid — native perps leaderboard (venue-reported PnL, not Hyperflex-graded)', traders: [] };
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 25000);
+    const r = await _nodeFetch('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (r.ok) {
+      const raw = await r.json();
+      const rows = Array.isArray(raw) ? raw : (raw.leaderboardRows || []);
+      const parsed = rows.map(row => {
+        // Live shape: windowPerformances = [["day",{pnl,roi,vlm}],["week",...],
+        // ["month",...],["allTime",...]].
+        const perf = {};
+        (row.windowPerformances || []).forEach(p => { if (Array.isArray(p) && p[0]) perf[p[0]] = p[1] || {}; });
+        const w = perf[win] || {};
+        const addr = row.ethAddress || row.address || '';
+        const nm = row.displayName || '';
+        return {
+          address: addr,
+          display_name: (!nm || /^0x[0-9a-fA-F]{6,}/.test(nm)) ? getWhaleNickname(addr || 'trader') : nm,
+          account_value: parseFloat(row.accountValue || 0),
+          pnl: parseFloat(w.pnl || 0),
+          roi_pct: Math.round((parseFloat(w.roi || 0)) * 1000) / 10,
+          volume: parseFloat(w.vlm || 0)
+        };
+      }).filter(t => t.address);
+      parsed.sort((a, b) => b.pnl - a.pnl);
+      hyperliquid.traders = parsed.slice(0, 50).map((t, i) => ({ rank: i + 1, ...t }));
+      hyperliquid.total_traders = rows.length;
+      hyperliquid.ok = true;
+    } else {
+      hyperliquid.error = 'Hyperliquid leaderboard returned ' + r.status;
+    }
+  } catch (e) { hyperliquid.error = e.message; }
+
+  // ── Polymarket (Hyperflex-verified durable board) ──
+  const polymarket = { ok: false, graded: true, source: 'Polymarket — Hyperflex-verified durable board (graded, wins & losses, n≥' + ROI_MIN_N_FLOOR + ')', traders: [] };
+  try {
+    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
+    const rows = (board && board.rows) || [];
+    polymarket.traders = rows.slice(0, 50).map((t, i) => ({
+      rank: i + 1,
+      address: t.polymarket_address || null,
+      display_name: t.display_name || 'Trader',
+      handle: t.username || null,
+      roi_pct: t.score_pct,
+      n: t.n,
+      flex_score: t.flex_score,
+      scope_label: t.scope_label || null
+    }));
+    polymarket.ok = true;
+  } catch (e) { polymarket.error = e.message; }
+
+  // ── Solana / Pump.fun (needs a keyed trader-PnL provider) ──
+  const solana = {
+    ok: false, graded: false, needs_key: true, source: 'Pump.fun / Solana', traders: [],
+    note: 'Per-trader realized-PnL rankings on Solana require a keyed provider (GMGN, Birdeye, or Helius). ' +
+          'Set the SOLANA_TRADERS_PROVIDER_KEY secret to enable this lane. Pump.fun\'s public API exposes ' +
+          'coins/launches but not aggregated per-wallet PnL, so nothing is shown here rather than faking it.'
+  };
+
+  const data = { window: win, hyperliquid, polymarket, solana, updated_at: new Date().toISOString() };
+  _onchainTradersCache.set(win, { ts: Date.now(), data });
+  res.json(data);
 });
 
 // GET /api/hyperliquid/whale-positions — top 20 whales' open positions

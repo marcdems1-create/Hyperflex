@@ -404,6 +404,7 @@
     { href: '/challenges', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
     { href: '/markets', label: 'Markets' },
+    { href: '/onchain', label: 'Onchain', gold: true },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
