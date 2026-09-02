@@ -49,6 +49,18 @@
 
 ## Chronological log (newest first)
 
+## 2026-09-02c (onchain board on homepage; prod / still empty because PG is down)
+
+**Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (this commit). Merged `origin/main` (`5316ebb` fail-open + pg circuit).
+
+**Prod diagnosis (live `/health` 2026-09-02 ~23:29Z):** HTML 200. Every homepage rail 503. `pg_ready:false`, `pg_circuit.open:true`, last_error `Connection terminated due to connection timeout`, `pg_probe.primary` `timeout expired` via public-proxy. Pool total 0. Main's fail-open already deployed — last-good is empty so the page still reads as dead. Cannot fix Railway↔Postgres from this PR.
+
+**What changed:**
+- `/` now has an **Onchain traders** section (`home-kings.html`) fed by `/api/onchain/traders`. HL native + fill-grade do not touch Postgres, so they still paint during this outage.
+- `/api/onchain/traders` starts the Polymarket grade in parallel and drops it after 2.5s — a wedged pool no longer blocks the HL lanes. Null board is `ok:false`, not an empty "success."
+
+**Active blockers:** Prod Postgres is unreachable. Homepage Polymarket rails stay empty until the DB answers. Solana still needs a key.
+
 ## 2026-09-02b (continue: HL fill-grader + whales parser fix)
 
 **Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (hash in this commit).

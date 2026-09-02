@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-02 — feat(home): Onchain traders rail on `/`
+
+Homepage gets the cross-venue board under the connect hero. Hyperliquid lanes do not use Postgres, so `/` still has live traders when the Polymarket rails 503 (`pg_circuit_open` / connect timeout — measured live). `/api/onchain/traders` no longer waits on a dead leaderboard query.
+
 ## 2026-09-02 — feat(onchain): HL fill-grade + inventory-closer flags
 
 `/onchain` now has a fourth lane: **HL fill-grade**, independently counted from public Hyperliquid `userFills` (Close Long/Short only, n≥10, wins and losses, fees deducted). Perps have no resolution event — labelled ⊕ Fill-graded, never passed off as a Polymarket-equivalent grade.

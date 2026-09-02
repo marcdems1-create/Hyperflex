@@ -53716,6 +53716,31 @@ app.get('/api/onchain/traders', async (req, res) => {
   const cached = _onchainTradersCache.get(win);
   if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
 
+  // Polymarket grade hits Postgres. Start it now, cap the wait, and never let
+  // a wedged pool block the Hyperliquid lanes — those are the ones that still
+  // paint when /health says pg_ready=false (live 2026-09-02).
+  const polymarket = { ok: false, graded: true, source: 'Polymarket — Hyperflex-verified durable board (graded, wins & losses, n≥' + ROI_MIN_N_FLOOR + ')', traders: [] };
+  const polyPromise = Promise.race([
+    _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).then(board => {
+      if (!board) throw new Error('roi leaderboard query failed');
+      return board;
+    }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('polymarket board timeout')), 2500))
+  ]).then(board => {
+    const rows = (board && board.rows) || [];
+    polymarket.traders = rows.slice(0, 50).map((t, i) => ({
+      rank: i + 1,
+      address: t.polymarket_address || null,
+      display_name: t.display_name || 'Trader',
+      handle: t.username || null,
+      roi_pct: t.score_pct,
+      n: t.n,
+      flex_score: t.flex_score,
+      scope_label: t.scope_label || null
+    }));
+    polymarket.ok = true;
+  }).catch(e => { polymarket.error = e.message; });
+
   // ── Hyperliquid (native leaderboard) ──
   const hyperliquid = { ok: false, graded: false, source: 'Hyperliquid — native perps leaderboard (venue-reported PnL, not Hyperflex-graded)', traders: [] };
   try {
@@ -53749,24 +53774,6 @@ app.get('/api/onchain/traders', async (req, res) => {
     }
   } catch (e) { hyperliquid.error = e.message; }
 
-  // ── Polymarket (Hyperflex-verified durable board) ──
-  const polymarket = { ok: false, graded: true, source: 'Polymarket — Hyperflex-verified durable board (graded, wins & losses, n≥' + ROI_MIN_N_FLOOR + ')', traders: [] };
-  try {
-    const board = await _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR);
-    const rows = (board && board.rows) || [];
-    polymarket.traders = rows.slice(0, 50).map((t, i) => ({
-      rank: i + 1,
-      address: t.polymarket_address || null,
-      display_name: t.display_name || 'Trader',
-      handle: t.username || null,
-      roi_pct: t.score_pct,
-      n: t.n,
-      flex_score: t.flex_score,
-      scope_label: t.scope_label || null
-    }));
-    polymarket.ok = true;
-  } catch (e) { polymarket.error = e.message; }
-
   // ── Hyperliquid fill-graded (independent close-fill record) ──
   const hyperliquid_graded = {
     ok: false, graded: true, fill_graded: true,
@@ -53785,6 +53792,7 @@ app.get('/api/onchain/traders', async (req, res) => {
     }
   } catch (e) { hyperliquid_graded.error = e.message; }
   delete hyperliquid._grade_pool;
+  await polyPromise;
 
   // ── Solana / Pump.fun (needs a keyed trader-PnL provider) ──
   const solana = {

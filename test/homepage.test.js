@@ -316,6 +316,39 @@ ok('table: has caption', t.includes('<caption>Cap</caption>'));
 ok('table: row headers are th scope=row', t.includes('scope="row"'));
 
 
+// ===== ONCHAIN HOMEPAGE RAIL ===========================================
+ok('onchain: pick fill-grade when it has rows',
+  pickOnchainVenue({
+    hyperliquid_graded: { traders: [{ rank: 1 }] },
+    hyperliquid: { traders: [{ rank: 1 }] },
+    polymarket: { traders: [] }
+  }) === 'hyperliquid_graded');
+ok('onchain: fall back to native HL when fill-grade is empty',
+  pickOnchainVenue({
+    hyperliquid_graded: { traders: [] },
+    hyperliquid: { traders: [{ rank: 1 }] },
+    polymarket: { traders: [{ rank: 1 }] }
+  }) === 'hyperliquid');
+ok('onchain: solana when every lane is empty',
+  pickOnchainVenue({ hyperliquid_graded: { traders: [] }, hyperliquid: { traders: [] }, polymarket: { traders: [] } }) === 'solana');
+
+{
+  const htmlList = renderOnchainList('hyperliquid_graded', {
+    ok: true,
+    traders: [
+      { rank: 1, display_name: 'Trader', net_pnl: 100, win_rate: 60, wins: 6, losses: 4, top_coin: 'ETH', flags: [] },
+      { rank: 2, display_name: 'MM', net_pnl: 9000, win_rate: 100, wins: 2000, losses: 0, top_coin: 'ETH', flags: ['inventory_closer'] }
+    ]
+  });
+  ok('onchain: fill-grade shows W–L', htmlList.includes('6–4'));
+  ok('onchain: inventory closer is labelled, not hidden', htmlList.includes('inventory closer'));
+  ok('onchain: both books render', htmlList.includes('Trader') && htmlList.includes('MM'));
+}
+ok('onchain: solana empty is honest',
+  renderOnchainList('solana', { needs_key: true, traders: [] }).includes('keyed provider'));
+ok('onchain: failed venue does not invent rows',
+  renderOnchainList('polymarket', { ok: false, traders: [] }).includes('Couldn\'t load this venue'));
+
 // ===== PAGE-LEVEL / ACCESSIBILITY ======================================
 // Asserted against the raw file, not the render functions — these are
 // properties of the served document.
@@ -327,6 +360,8 @@ ok('table: row headers are th scope=row', t.includes('scope="row"'));
   ok('page: donut carries an accessible name',
     /<svg viewBox="0 0 150 150" role="img" aria-label=/.test(html));
   ok('page: has exactly one h1', (html.match(/<h1/g) || []).length === 1);
+  ok('page: onchain section is on the homepage', /id="onchainSection"/.test(html));
+  ok('page: onchain section links to the full board', /href="\/onchain"/.test(html));
   ok('page: html lang set', /<html lang="en"/.test(html));
   ok('page: four chart/table toggles', (html.match(/class="chart-toggle"/g) || []).length === 4);
   ok('page: prediction-market explainer present for newcomers',
