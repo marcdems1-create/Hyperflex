@@ -1,0 +1,19 @@
+{
+  "name": "HYPERFLEX",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "server",
+      "command": "node server.js",
+      "description": "HYPERFLEX Express server (server.js) on port 3000. Reads dev config from .env; health at /health."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 3000
+    }
+  ]
+}
