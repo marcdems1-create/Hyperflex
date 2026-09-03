@@ -733,6 +733,9 @@ app.get('/sitemap.xml', async (req, res) => {
     // Static pages
     const staticPages = [
       { loc: '/', priority: '1.0', freq: 'daily' },
+      { loc: '/onchain', priority: '0.95', freq: 'hourly' },
+      { loc: '/connect', priority: '0.95', freq: 'weekly' },
+      { loc: '/traders', priority: '0.9', freq: 'daily' },
       { loc: '/markets', priority: '0.9', freq: 'hourly' },
       { loc: '/predictors', priority: '0.9', freq: 'daily' },
       { loc: '/odds', priority: '0.9', freq: 'hourly' },

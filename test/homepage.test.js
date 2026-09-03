@@ -362,6 +362,7 @@ ok('onchain: failed venue does not invent rows',
   ok('page: has exactly one h1', (html.match(/<h1/g) || []).length === 1);
   ok('page: onchain section is on the homepage', /id="onchainSection"/.test(html));
   ok('page: onchain section links to the full board', /href="\/onchain"/.test(html));
+  ok('page: identity line is the on-chain score keeper', /on-chain score keeper/i.test(html));
   ok('page: html lang set', /<html lang="en"/.test(html));
   ok('page: four chart/table toggles', (html.match(/class="chart-toggle"/g) || []).length === 4);
   ok('page: prediction-market explainer present for newcomers',

@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-03 — identity: the on-chain score keeper
+
+The product line is now on the homepage, `/onchain`, `/connect`, `/traders`, `/predictors`, `/methodology`, nav (tagline + Scorekeeper), and share cards. `/onchain` and `/connect` added to the sitemap.
+
 ## 2026-09-02 — feat(home): Onchain traders rail on `/`
 
 Homepage gets the cross-venue board under the connect hero. Hyperliquid lanes do not use Postgres, so `/` still has live traders when the Polymarket rails 503 (`pg_circuit_open` / connect timeout — measured live). `/api/onchain/traders` no longer waits on a dead leaderboard query.

@@ -6,7 +6,7 @@
 
 ## 🎯 WHAT HYPERFLEX IS (read before every feature decision — this governs everything)
 
-**HYPERFLEX is where you plug in your wallet and see your real on-chain trading score.** Connect → your score, your profile, your record. Then see how you rank against everyone else.
+**HYPERFLEX is the on-chain score keeper.** Plug in a wallet → see the real on-chain trading score. Connect → your score, your profile, your record. Then see how you rank against everyone else. That line is the identity: write it on every scoreboard surface. Do not dilute it into a market browser or a social app that happens to have scores.
 
 On-chain trading has no honest scoreboard. Everyone screenshots wins and deletes losses; every "alpha" caller is unfalsifiable because nobody keeps receipts. Hyperflex is where a trader's real record exists — wins *and* losses, graded against what actually happened, permanent and public.
 

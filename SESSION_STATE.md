@@ -49,6 +49,12 @@
 
 ## Chronological log (newest first)
 
+## 2026-09-03 (identity: the on-chain score keeper — ship live)
+
+**Identity lock:** HYPERFLEX is **the on-chain score keeper**. Written on `/`, `/onchain`, `/connect`, `/traders`, `/predictors`, `/methodology`, nav tagline + Scorekeeper link, OG/Twitter cards, CLAUDE.md. No "we are." The line is the product.
+
+**Ship:** this commit on `cursor/onchain-traders-board-89e4` — merge to `main` so Railway goes live.
+
 ## 2026-09-02c (onchain board on homepage; prod / still empty because PG is down)
 
 **Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (this commit). Merged `origin/main` (`5316ebb` fail-open + pg circuit).
