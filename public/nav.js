@@ -245,8 +245,11 @@
     style.setAttribute('data-hfx-nav', '1');
     style.textContent =
       '.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(10,10,15,0.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);position:sticky;top:0;z-index:100}' +
+      '.topbar-brand{display:flex;align-items:baseline;gap:10px;flex-shrink:0;text-decoration:none}' +
       '.topbar-logo{font-family:"Inter",-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none}' +
       '.topbar-logo span{background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}' +
+      '.topbar-tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8890a3;white-space:nowrap}' +
+      '@media(max-width:1100px){.topbar-tag{display:none}}' +
       '.nav-links{display:flex;align-items:center;gap:6px;margin-left:auto}' +
       '.nav-link{font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .15s;padding:6px 10px;border-radius:8px;white-space:nowrap}' +
       '.nav-link:hover{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
@@ -404,6 +407,7 @@
     { href: '/challenges', label: 'Challenge' },
     { href: '/predictors', label: 'Leaderboard' },
     { href: '/markets', label: 'Markets' },
+    { href: '/onchain', label: 'Scorekeeper', gold: true },
     { href: '/messages', label: 'Messages', authOnly: true, msgBadge: true }
   ];
 
@@ -509,7 +513,7 @@
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
-    '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
+    '<a href="/" class="topbar-brand"><span class="topbar-logo">HYPER<span>FLEX</span></span><span class="topbar-tag">the on-chain score keeper</span></a>' +
     '<div class="nav-links">' +
       primaryLinks.filter(function(l){ return !l.authOnly || isLoggedIn; }).map(function(l) {
         var isActive = path === l.href || (l.href === '/markets' && path === '/finance');
@@ -624,7 +628,10 @@
     }).join('');
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
-        '<a href="/" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
+        '<a href="/" class="topbar-brand" style="flex-direction:column;align-items:flex-start;gap:4px">' +
+          '<span class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></span>' +
+          '<span class="topbar-tag" style="display:block;font-family:JetBrains Mono,ui-monospace,monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#8890a3">the on-chain score keeper</span>' +
+        '</a>' +
         '<button class="nav-mobile-close" id="navMobileClose" aria-label="Close menu">' +
           '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
         '</button>' +

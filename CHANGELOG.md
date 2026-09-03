@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-09-03 — identity: the on-chain score keeper
+
+The product line is now on the homepage, `/onchain`, `/connect`, `/traders`, `/predictors`, `/methodology`, nav (tagline + Scorekeeper), and share cards. `/onchain` and `/connect` added to the sitemap.
+
+## 2026-09-02 — feat(home): Onchain traders rail on `/`
+
+Homepage gets the cross-venue board under the connect hero. Hyperliquid lanes do not use Postgres, so `/` still has live traders when the Polymarket rails 503 (`pg_circuit_open` / connect timeout — measured live). `/api/onchain/traders` no longer waits on a dead leaderboard query.
+
+## 2026-09-02 — feat(onchain): HL fill-grade + inventory-closer flags
+
+`/onchain` now has a fourth lane: **HL fill-grade**, independently counted from public Hyperliquid `userFills` (Close Long/Short only, n≥10, wins and losses, fees deducted). Perps have no resolution event — labelled ⊕ Fill-graded, never passed off as a Polymarket-equivalent grade.
+
+`/api/hyperliquid/whales` now reads live `windowPerformances` (was returning 0 PnL). 2000–0 same-coin closers are flagged `inventory_closer` / `single_coin_closer` and ranked *below* directional W–L books, not hidden. Solana lane still `needs_key` — GMGN 403, Birdeye 401, Pump.fun exposes coins not wallets.
+
+Files: `lib/hl-fill-grade.js`, `test/hl-fill-grade.test.js`, `server.js`, `public/onchain.html`.
+
+---
+
 ## 2026-08-27 — feat(markets): Yield / Alpha slider; "The read" renamed Alpha
 
 `/markets` keeps both halves. A sticky Yield | Alpha slider sits under the site nav. Picking a half puts it on top (flex `order`) and scrolls to its start. "The read" is now **Alpha** (charts + board). `#yield` / `#alpha` hashes work; `/incentives` still 301s to `#yield`.

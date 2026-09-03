@@ -49,6 +49,60 @@
 
 ## Chronological log (newest first)
 
+## 2026-09-03 (identity: the on-chain score keeper — ship live)
+
+**Identity lock:** HYPERFLEX is **the on-chain score keeper**. Written on `/`, `/onchain`, `/connect`, `/traders`, `/predictors`, `/methodology`, nav tagline + Scorekeeper link, OG/Twitter cards, CLAUDE.md. No "we are." The line is the product.
+
+**Ship:** this commit on `cursor/onchain-traders-board-89e4` — merge to `main` so Railway goes live.
+
+## 2026-09-02c (onchain board on homepage; prod / still empty because PG is down)
+
+**Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (this commit). Merged `origin/main` (`5316ebb` fail-open + pg circuit).
+
+**Prod diagnosis (live `/health` 2026-09-02 ~23:29Z):** HTML 200. Every homepage rail 503. `pg_ready:false`, `pg_circuit.open:true`, last_error `Connection terminated due to connection timeout`, `pg_probe.primary` `timeout expired` via public-proxy. Pool total 0. Main's fail-open already deployed — last-good is empty so the page still reads as dead. Cannot fix Railway↔Postgres from this PR.
+
+**What changed:**
+- `/` now has an **Onchain traders** section (`home-kings.html`) fed by `/api/onchain/traders`. HL native + fill-grade do not touch Postgres, so they still paint during this outage.
+- `/api/onchain/traders` starts the Polymarket grade in parallel and drops it after 2.5s — a wedged pool no longer blocks the HL lanes. Null board is `ok:false`, not an empty "success."
+
+**Active blockers:** Prod Postgres is unreachable. Homepage Polymarket rails stay empty until the DB answers. Solana still needs a key.
+
+## 2026-09-02b (continue: HL fill-grader + whales parser fix)
+
+**Shipped:** follow-up on `cursor/onchain-traders-board-89e4` / PR #243 (hash in this commit).
+
+**What changed:**
+- Shared `_hlParseLeaderRow` / `_hlWindowMap` — `/api/hyperliquid/whales` and whale-positions now read `windowPerformances` (was returning 0 PnL).
+- New Hyperliquid **fill-grader** (`lib/hl-fill-grade.js`): public `userFills`, Close Long/Short only, n≥10, wins AND losses, net of fees. New `/onchain` tab "HL fill-grade". Labelled fill-graded, not resolution-verified (perps have no resolution).
+- Inventory / MM closers (n≥200 at ≥98% WR, or single-coin n≥100 at ≥95% WR) are flagged and ranked below directional books — not hidden, not sold as "best traders."
+- Tab/window state is deep-linkable (`?venue=&window=`).
+- Solana still needs a key — re-probed 2026-09-02: GMGN 403, Birdeye 401, Pump `/traders` 404. Coins API still works; no per-wallet PnL.
+
+**Active blockers:** Solana lane still scaffold. Fill-grade samples last 2,000 fills (HL cap), not lifetime. Real venue-#2 perps grader (entry→exit/leverage/funding) still unbuilt — fill-grade is the public-fills approximation.
+
+## 2026-09-02 (Cross-chain "best onchain traders" board — Gate 2/3 OVERRIDDEN by Marc)
+
+**⛔ Decision reversal — on the record:** Marc explicitly overrode Gate 2 (no venue #2 until the Polymarket grader is defensible) and Gate 3 (publish nothing off the grader until n≥30 & hit_rate≥58%). Verbatim rationale: **"We have no users just build it all now."** The gate reasoning was surfaced 3× first (venue-#2 = second grading engine; Polymarket grader last read n=83/53% and live `/api/edge/receipts` returned `record:null`; "scanner" = the ruled-out market-browsing surface). Marc reframed the ask as **"a way to visualize the best onchain traders"** (a scoreboard, not a token scanner), then gave the override. Building proceeded.
+
+**What was NOT relaxed (held despite override):** provenance honesty. No venue's rows are faked, and each lane is labelled by what its ranking actually is — Hyperflex-verified grade vs. venue-native PnL. This preserves the one non-negotiable ("a track-record company that fudges its own track record has no product").
+
+**Shipped:** PR pending on `cursor/onchain-traders-board-89e4` (see PR link in that branch).
+- New `/onchain` page (`public/onchain.html`) + `GET /api/onchain/traders` + nav link ("Onchain").
+- **Polymarket lane:** Hyperflex-verified durable board (`_computeRoiLeaderboard`), labelled ✓ Verified. The one graded venue.
+- **Hyperliquid lane:** native leaderboard (`stats-data.hyperliquid.xyz/Mainnet/leaderboard`), ranked by selected-window PnL, labelled ◇ Native (venue-reported, NOT graded). Correctly parses `windowPerformances` (see blocker below).
+- **Solana/Pump.fun lane:** honest `needs_key:true` empty state — no fabricated rows. `frontend-api-v3.pump.fun/coins` works but exposes coins, not per-wallet PnL; a real trader board needs a keyed provider.
+
+**Active blockers:**
+- **Solana lane is a scaffold** — needs a keyed provider (GMGN/Birdeye/Helius). Marc action: add a `SOLANA_TRADERS_PROVIDER_KEY` secret (and pick the provider) to light it up.
+- **Hyperliquid is NOT Hyperflex-graded** — it's the venue's own PnL. A real venue-#2 grade needs the perps grading engine (entry→exit/leverage/funding → CLV-equivalent). Gate 2's actual work, still unbuilt.
+- **Pre-existing bug found:** `/api/hyperliquid/whales` parses `r.pnl.day` but the live shape is `windowPerformances:[["day",{pnl,roi,vlm}]…]`, so its pnl_day/week/month come back 0. Left untouched (isolation); the new `/api/onchain/traders` parses correctly. Worth fixing separately.
+
+**Open questions / unverified:**
+- "tomorrow scanner" from the original ask never disambiguated — assumed a second Solana source; folded into the Solana lane.
+- Polymarket lane renders empty on the dev VM (no `realized_trades` locally); verified live-shape via the Hyperliquid lane. Confirm the Polymarket lane populates in prod.
+
+**Notes for next session:** if Marc wants HL genuinely graded (not native PnL), that's the perps grader build — scope it as venue #2 proper.
+
 ## 2026-08-27a (Yield cards moved to the top of /markets)
 
 **Shipped:** `4e4d9fe` on `origin/main`. `public/finance.html` only.

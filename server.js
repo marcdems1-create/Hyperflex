@@ -146,6 +146,7 @@ const inferenceEngine = require('./lib/inference-engine');
 const signalLedger = require('./lib/signal-ledger');
 const edgeEngine = require('./lib/edge-engine');
 const edgeGrade = require('./lib/edge-grade'); // pure: grades each market as a high-reward pick
+const hlFillGrade = require('./lib/hl-fill-grade'); // pure: Hyperliquid close-fill grade + inventory flags
 const biasCaller = require('./lib/bias-caller');
 const liveStream = require('./lib/live-stream');
 const polymarket = require('./lib/polymarket'); // initialized below once _nodeFetch exists
@@ -732,6 +733,9 @@ app.get('/sitemap.xml', async (req, res) => {
     // Static pages
     const staticPages = [
       { loc: '/', priority: '1.0', freq: 'daily' },
+      { loc: '/onchain', priority: '0.95', freq: 'hourly' },
+      { loc: '/connect', priority: '0.95', freq: 'weekly' },
+      { loc: '/traders', priority: '0.9', freq: 'daily' },
       { loc: '/markets', priority: '0.9', freq: 'hourly' },
       { loc: '/predictors', priority: '0.9', freq: 'daily' },
       { loc: '/odds', priority: '0.9', freq: 'hourly' },
@@ -827,6 +831,14 @@ app.get('/finance.html', (req, res) => res.redirect(301, '/markets'));
 app.get('/mentions', (req, res) => res.redirect(301, '/markets'));
 app.get('/incentives', (req, res) => res.redirect(301, '/markets#yield'));
 app.get('/incentives.html', (req, res) => res.redirect(301, '/markets#yield'));
+
+// Cross-chain "best onchain traders" board — read-only visualization across
+// Polymarket (Hyperflex-verified) + Hyperliquid (native) + Solana (pending key).
+app.get('/onchain', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'onchain.html'));
+});
+app.get('/onchain.html', (req, res) => res.redirect(301, '/onchain'));
 
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
@@ -53542,6 +53554,104 @@ app.get('/api/hyperliquid/positions/:address', async (req, res) => {
   }
 });
 
+// Hyperliquid live leaderboard shape (confirmed 2026-09-02):
+//   { ethAddress, accountValue, displayName, windowPerformances:
+//     [["day",{pnl,roi,vlm}],["week",...],["month",...],["allTime",...]] }
+// The old parser read r.pnl.day / r.vlm.allTime — those keys do not exist,
+// so /api/hyperliquid/whales was returning 0 PnL for every row. Shared here
+// so whales + the onchain board + the fill-grader all read the same fields.
+function _hlWindowMap(row) {
+  const perf = {};
+  (row && row.windowPerformances || []).forEach(p => {
+    if (Array.isArray(p) && p[0]) perf[p[0]] = p[1] || {};
+  });
+  return perf;
+}
+function _hlDisplayName(addr, name) {
+  const n = name || '';
+  return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(addr || 'trader') : n;
+}
+function _hlParseLeaderRow(r) {
+  if (Array.isArray(r)) {
+    const addr = r[1] || '';
+    return {
+      address: addr,
+      display_name: _hlDisplayName(addr, r[2]),
+      account_value: parseFloat(r[3]) || 0,
+      pnl_day: parseFloat(r[4]) || 0,
+      pnl_week: parseFloat(r[5]) || 0,
+      pnl_month: parseFloat(r[6]) || 0,
+      pnl_all_time: parseFloat(r[7]) || 0,
+      volume_all_time: parseFloat(r[8]) || 0,
+      roi: parseFloat(r[9]) || 0
+    };
+  }
+  const addr = r.ethAddress || r.address || r.user || '';
+  const w = _hlWindowMap(r);
+  const day = w.day || {}, week = w.week || {}, month = w.month || {}, all = w.allTime || {};
+  return {
+    address: addr,
+    display_name: _hlDisplayName(addr, r.displayName || r.accountName),
+    account_value: parseFloat(r.accountValue || r.equity || 0),
+    pnl_day: parseFloat(day.pnl || r.pnl?.day || r.dailyPnl || 0),
+    pnl_week: parseFloat(week.pnl || r.pnl?.week || r.weeklyPnl || 0),
+    pnl_month: parseFloat(month.pnl || r.pnl?.month || r.monthlyPnl || 0),
+    pnl_all_time: parseFloat(all.pnl || r.pnl?.allTime || r.allTimePnl || 0),
+    volume_all_time: parseFloat(all.vlm || r.vlm?.allTime || r.allTimeVlm || 0),
+    roi: parseFloat(all.roi || r.roi || 0),
+    windows: { day, week, month, allTime: all }
+  };
+}
+
+// Grade a Hyperliquid wallet from public userFills. Perps have no resolution
+// event, so this is NOT the same as the Polymarket durable grade — it is an
+// independently computed close-fill record (entry→exit), wins AND losses.
+// Only `dir` starting with "Close" counts; opens are inventory, not a result.
+// Hyperliquid caps userFills at 2,000 rows; the sample is labelled as such.
+const HL_FILL_GRADE_MIN_N = hlFillGrade.HL_FILL_GRADE_MIN_N;
+function _gradeHyperliquidFills(fills) {
+  return hlFillGrade.gradeHyperliquidFills(fills);
+}
+
+let _hlFillGradeCache = null;
+async function _gradeHyperliquidCohort(candidates) {
+  if (_hlFillGradeCache && (Date.now() - _hlFillGradeCache.ts < 15 * 60 * 1000)) {
+    return _hlFillGradeCache.traders;
+  }
+  const CONCURRENCY = 6;
+  const graded = [];
+  for (let i = 0; i < candidates.length; i += CONCURRENCY) {
+    const batch = candidates.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(async (c) => {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 8000);
+        const r = await _nodeFetch('https://api.hyperliquid.xyz/info', {
+          method: 'POST',
+          signal: ctrl.signal,
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+          body: JSON.stringify({ type: 'userFills', user: c.address })
+        });
+        clearTimeout(tid);
+        if (!r.ok) return null;
+        const fills = await r.json();
+        const g = _gradeHyperliquidFills(fills);
+        if (!g.qualify) return null;
+        return {
+          address: c.address,
+          display_name: c.display_name,
+          account_value: c.account_value,
+          ...g
+        };
+      } catch { return null; }
+    }));
+    for (const row of results) if (row) graded.push(row);
+  }
+  const ranked = hlFillGrade.rankFillGraded(graded).slice(0, 50);
+  _hlFillGradeCache = { ts: Date.now(), traders: ranked };
+  return ranked;
+}
+
 // GET /api/hyperliquid/whales — top 50 traders from leaderboard
 app.get('/api/hyperliquid/whales', async (req, res) => {
   const cacheKey = 'hl_whales';
@@ -53555,35 +53665,8 @@ app.get('/api/hyperliquid/whales', async (req, res) => {
     if (!upstream.ok) throw new Error('HL leaderboard API returned ' + upstream.status);
     const raw = await upstream.json();
 
-    // raw is array of arrays or objects — parse top 50 by accountValue
     const rows = Array.isArray(raw) ? raw : (raw.leaderboardRows || []);
-    const parsed = rows.map(r => {
-      // Handle both array format and object format
-      if (Array.isArray(r)) {
-        return {
-          address: r[1] || '',
-          display_name: (() => { const n = r[2] || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(r[1] || `trader`) : n; })(),
-          account_value: parseFloat(r[3]) || 0,
-          pnl_day: parseFloat(r[4]) || 0,
-          pnl_week: parseFloat(r[5]) || 0,
-          pnl_month: parseFloat(r[6]) || 0,
-          pnl_all_time: parseFloat(r[7]) || 0,
-          volume_all_time: parseFloat(r[8]) || 0,
-          roi: parseFloat(r[9]) || 0
-        };
-      }
-      return {
-        address: r.ethAddress || r.address || r.user || '',
-        display_name: (() => { const n = r.displayName || r.accountName || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(r.ethAddress || r.address || r.user || 'unknown') : n; })(),
-        account_value: parseFloat(r.accountValue || r.equity || 0),
-        pnl_day: parseFloat(r.pnl?.day || r.dailyPnl || 0),
-        pnl_week: parseFloat(r.pnl?.week || r.weeklyPnl || 0),
-        pnl_month: parseFloat(r.pnl?.month || r.monthlyPnl || 0),
-        pnl_all_time: parseFloat(r.pnl?.allTime || r.allTimePnl || 0),
-        volume_all_time: parseFloat(r.vlm?.allTime || r.allTimeVlm || 0),
-        roi: parseFloat(r.roi || 0)
-      };
-    });
+    const parsed = rows.map(_hlParseLeaderRow).filter(t => t.address);
 
     // Sort by accountValue desc, take top 50
     parsed.sort((a, b) => b.account_value - a.account_value);
@@ -53606,6 +53689,127 @@ app.get('/api/hyperliquid/whales', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// CROSS-CHAIN "BEST ONCHAIN TRADERS" BOARD — /api/onchain/traders
+//
+// Visualizes the best onchain traders across venues in one place. Built
+// 2026-09-02 on Marc's explicit override of Gate 2/3 ("we have no users, just
+// build it all now" — logged in SESSION_STATE.md 2026-09-02). The one thing
+// the override does NOT relax: provenance honesty. Each venue carries a
+// `source` label saying exactly what the ranking is, so a native-venue PnL
+// ranking is never silently passed off as a Hyperflex-verified grade.
+//
+//   - hyperliquid: native Hyperliquid perps leaderboard (their reported PnL /
+//     ROI / volume). NOT Hyperflex-graded — labelled as such. Ranked by the
+//     selected window's PnL.
+//   - hyperliquid_graded: independently computed from public userFills
+//     (Close Long/Short only). Wins AND losses. n≥10 close-fills. This is
+//     NOT a resolution grade — perps have no resolution event — and is
+//     labelled as fill-graded so it is never confused with Polymarket.
+//   - polymarket: the Hyperflex-VERIFIED durable board (_computeRoiLeaderboard)
+//     — the one venue where the rank IS our own graded score (wins & losses).
+//   - solana (Pump.fun): per-trader PnL needs a keyed provider (GMGN/Birdeye/
+//     Helius) we don't hold yet. Returned as needs_key:true with NO fabricated
+//     rows, so the UI shows an honest "connect a data source" state.
+//
+// Read-only. No order placement, no wallet writes.
+let _onchainTradersCache = new Map();
+app.get('/api/onchain/traders', async (req, res) => {
+  const win = ['day', 'week', 'month', 'allTime'].includes(req.query.window) ? req.query.window : 'month';
+  const cached = _onchainTradersCache.get(win);
+  if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
+
+  // Polymarket grade hits Postgres. Start it now, cap the wait, and never let
+  // a wedged pool block the Hyperliquid lanes — those are the ones that still
+  // paint when /health says pg_ready=false (live 2026-09-02).
+  const polymarket = { ok: false, graded: true, source: 'Polymarket — Hyperflex-verified durable board (graded, wins & losses, n≥' + ROI_MIN_N_FLOOR + ')', traders: [] };
+  const polyPromise = Promise.race([
+    _computeRoiLeaderboard('all', ROI_MIN_N_FLOOR).then(board => {
+      if (!board) throw new Error('roi leaderboard query failed');
+      return board;
+    }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('polymarket board timeout')), 2500))
+  ]).then(board => {
+    const rows = (board && board.rows) || [];
+    polymarket.traders = rows.slice(0, 50).map((t, i) => ({
+      rank: i + 1,
+      address: t.polymarket_address || null,
+      display_name: t.display_name || 'Trader',
+      handle: t.username || null,
+      roi_pct: t.score_pct,
+      n: t.n,
+      flex_score: t.flex_score,
+      scope_label: t.scope_label || null
+    }));
+    polymarket.ok = true;
+  }).catch(e => { polymarket.error = e.message; });
+
+  // ── Hyperliquid (native leaderboard) ──
+  const hyperliquid = { ok: false, graded: false, source: 'Hyperliquid — native perps leaderboard (venue-reported PnL, not Hyperflex-graded)', traders: [] };
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 25000);
+    const r = await _nodeFetch('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (r.ok) {
+      const raw = await r.json();
+      const rows = Array.isArray(raw) ? raw : (raw.leaderboardRows || []);
+      const parsed = rows.map(_hlParseLeaderRow).filter(t => t.address).map(t => {
+        const w = (t.windows && t.windows[win]) || {};
+        return {
+          address: t.address,
+          display_name: t.display_name,
+          account_value: t.account_value,
+          pnl: parseFloat(w.pnl != null ? w.pnl : ({ day: t.pnl_day, week: t.pnl_week, month: t.pnl_month, allTime: t.pnl_all_time }[win] || 0)),
+          roi_pct: Math.round((parseFloat(w.roi || 0)) * 1000) / 10,
+          volume: parseFloat(w.vlm || 0)
+        };
+      });
+      parsed.sort((a, b) => b.pnl - a.pnl);
+      hyperliquid.traders = parsed.slice(0, 50).map((t, i) => ({ rank: i + 1, ...t }));
+      hyperliquid.total_traders = rows.length;
+      hyperliquid.ok = true;
+      hyperliquid._grade_pool = parsed.slice(0, 30);
+    } else {
+      hyperliquid.error = 'Hyperliquid leaderboard returned ' + r.status;
+    }
+  } catch (e) { hyperliquid.error = e.message; }
+
+  // ── Hyperliquid fill-graded (independent close-fill record) ──
+  const hyperliquid_graded = {
+    ok: false, graded: true, fill_graded: true,
+    source: 'Hyperliquid — Hyperflex fill-grade from public close fills (n≥' + HL_FILL_GRADE_MIN_N + '). Perps have no resolution event; this is not a Polymarket-equivalent grade.',
+    traders: []
+  };
+  try {
+    const pool = hyperliquid._grade_pool || [];
+    if (pool.length) {
+      const graded = await _gradeHyperliquidCohort(pool);
+      hyperliquid_graded.traders = graded;
+      hyperliquid_graded.ok = true;
+      hyperliquid_graded.graded_from = pool.length;
+    } else {
+      hyperliquid_graded.error = 'No Hyperliquid cohort to grade';
+    }
+  } catch (e) { hyperliquid_graded.error = e.message; }
+  delete hyperliquid._grade_pool;
+  await polyPromise;
+
+  // ── Solana / Pump.fun (needs a keyed trader-PnL provider) ──
+  const solana = {
+    ok: false, graded: false, needs_key: true, source: 'Pump.fun / Solana', traders: [],
+    note: 'Per-trader realized-PnL rankings on Solana require a keyed provider (GMGN, Birdeye, or Helius). ' +
+          'Set the SOLANA_TRADERS_PROVIDER_KEY secret to enable this lane. Pump.fun\'s public API exposes ' +
+          'coins/launches but not aggregated per-wallet PnL, so nothing is shown here rather than faking it.'
+  };
+
+  const data = { window: win, hyperliquid, hyperliquid_graded, polymarket, solana, updated_at: new Date().toISOString() };
+  _onchainTradersCache.set(win, { ts: Date.now(), data });
+  res.json(data);
+});
+
 // GET /api/hyperliquid/whale-positions — top 20 whales' open positions
 app.get('/api/hyperliquid/whale-positions', async (req, res) => {
   const cacheKey = 'hl_whale_positions';
@@ -53621,12 +53825,7 @@ app.get('/api/hyperliquid/whale-positions', async (req, res) => {
     const rawLb = await lbRes.json();
     const rows = Array.isArray(rawLb) ? rawLb : (rawLb.leaderboardRows || []);
 
-    const traders = rows.map(r => {
-      if (Array.isArray(r)) {
-        return { address: r[1] || '', display_name: r[2] || r[1] || 'Unknown', account_value: parseFloat(r[3]) || 0, pnl_all_time: parseFloat(r[7]) || 0 };
-      }
-      return { address: r.ethAddress || r.address || r.user || '', display_name: r.displayName || r.accountName || r.ethAddress || 'Unknown', account_value: parseFloat(r.accountValue || r.equity || 0), pnl_all_time: parseFloat(r.pnl?.allTime || r.allTimePnl || 0) };
-    }).filter(t => t.address).sort((a, b) => b.account_value - a.account_value).slice(0, 20);
+    const traders = rows.map(_hlParseLeaderRow).filter(t => t.address).sort((a, b) => b.account_value - a.account_value).slice(0, 20);
 
     // 2. Fetch positions for each with 500ms delay between batches (same as Polymarket whale fetch)
     const BATCH_SIZE = 5;

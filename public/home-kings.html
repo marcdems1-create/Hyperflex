@@ -3,9 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HYPERFLEX — What's your score?</title>
+<title>HYPERFLEX — The on-chain score keeper</title>
 <!-- hfx-home-boot=pg-circuit-2 -->
-<meta name="description" content="Connect your wallet to see your real Polymarket trading record — wins and losses, graded against what actually happened. See who's currently ranked #1.">
+<meta name="description" content="The on-chain score keeper. Connect a wallet to see its real trading record — wins and losses, graded against what actually happened. Polymarket, Hyperliquid, and the rest of the chain.">
+<meta property="og:title" content="HYPERFLEX — The on-chain score keeper">
+<meta property="og:description" content="Plug in a wallet. See the real record. Wins and losses, permanent and public.">
+<meta property="og:url" content="https://hyperflex.network/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HYPERFLEX">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@HyperFlexApp">
+<meta name="twitter:title" content="HYPERFLEX — The on-chain score keeper">
+<meta name="twitter:description" content="Plug in a wallet. See the real record. Wins and losses, permanent and public.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   /* ══════════════════════════════════════════════════════════════════════
@@ -554,6 +563,32 @@
   @media (prefers-reduced-motion: reduce){.skel{animation:none;}}
 
   .hero-empty,.rail-empty{font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);line-height:1.6;padding:18px 2px;max-width:46ch;}
+
+  /* Onchain traders — compact cross-venue board. Lives on / so a Postgres
+     outage (the rails below) cannot leave the homepage with nothing live.
+     Hyperliquid lanes do not touch the DB. */
+  .oc-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin:0 0 12px;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.04em;color:var(--ink-faint);}
+  .oc-prov{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:5px;font-weight:700;}
+  .oc-prov.verified{color:var(--green);background:var(--green-soft);}
+  .oc-prov.fill{color:var(--gold-bright);background:var(--gold-soft);}
+  .oc-prov.native{color:#5b8dd9;background:rgba(91,141,217,.13);}
+  .oc-prov.pending{color:var(--ink-faint);background:var(--surface-2);}
+  .oc-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
+  .oc-tab{font-family:var(--font-sans);font-size:.75rem;font-weight:600;color:var(--ink-muted);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;cursor:pointer;}
+  .oc-tab.active{color:var(--ink);border-color:var(--gold);background:var(--gold-soft);}
+  .oc-tab .oc-n{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-left:4px;}
+  .oc-source{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);line-height:1.45;margin:0 0 10px;}
+  .oc-list{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .oc-row{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:baseline;padding:10px 12px;border-bottom:1px solid var(--border-soft);}
+  .oc-row:last-child{border-bottom:none;}
+  .oc-rk{font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);}
+  .oc-rk.top{color:var(--gold-bright);font-weight:700;}
+  .oc-who{font-size:.88rem;font-weight:600;min-width:0;}
+  .oc-who a{text-decoration:none;}
+  .oc-flag{display:inline-block;margin-left:6px;font-family:var(--font-mono);font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);border:1px solid var(--border);border-radius:4px;padding:1px 5px;vertical-align:middle;}
+  .oc-sub{font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:2px;}
+  .oc-num{font-family:var(--font-mono);font-size:.88rem;font-weight:700;white-space:nowrap;}
+  .oc-num.pos{color:var(--green);} .oc-num.neg{color:var(--red);} .oc-num.mute{color:var(--ink-faint);}
 
   .score-num-big.is-mute,.gauge-center.is-mute{color:var(--ink-faint);}
 
@@ -1153,7 +1188,7 @@
 <body>
 
 <div id="nav-root"></div>
-<script src="/nav.js?v=28"></script>
+<script src="/nav.js?v=31"></script>
 <script src="/trader-card.js?v=3"></script>
 
 <div class="app-shell">
@@ -1163,9 +1198,9 @@
   </div>
 
   <header class="hero">
-    <p class="eyebrow">On-chain trading, graded honestly</p>
+    <p class="eyebrow">The on-chain score keeper</p>
     <h1 class="headline">What&rsquo;s your score?</h1>
-    <p class="subline">Connect a wallet to see its real Polymarket record — every resolved trade, <b>wins and losses</b>, scored against how the market actually settled.</p>
+    <p class="subline">Connect a wallet to see its real on-chain record — every resolved trade, <b>wins and losses</b>, scored against how the market actually settled.</p>
 
     <div class="cta-row">
       <a class="btn-connect" href="/connect">Connect Wallet</a>
@@ -1177,6 +1212,33 @@
     <p class="connect-err" id="connectErr" style="display:none;"></p>
     <p class="listing-note">Connecting lists you on the public leaderboard. <a href="/connect">Opt out anytime.</a></p>
   </header>
+
+  <hr class="div" />
+
+  <!-- ONCHAIN TRADERS — GET /api/onchain/traders. Hyperliquid lanes do not
+       touch Postgres, so this section still paints when the Polymarket rails
+       below cannot. Provenance is labelled on every ranking. -->
+  <section class="section" id="onchainSection">
+    <div class="section-head">
+      <span class="section-title hero-title">On-chain scoreboard</span>
+      <a class="section-more" href="/onchain">FULL BOARD →</a>
+    </div>
+    <p class="calls-intro">The on-chain score keeper, across venues. Every ranking is labelled by exactly what it is — a Hyperflex-verified grade, a close-fill record, or a venue&rsquo;s own PnL.</p>
+    <div class="oc-legend">
+      <span><span class="oc-prov verified">✓ Verified</span> graded</span>
+      <span><span class="oc-prov fill">⊕ Fill-grade</span> public closes</span>
+      <span><span class="oc-prov native">◇ Native</span> venue-reported</span>
+      <span><span class="oc-prov pending">⋯ Pending</span> needs a key</span>
+    </div>
+    <div class="oc-tabs" id="onchainTabs">
+      <button type="button" class="oc-tab" data-oc="polymarket">Polymarket <span class="oc-n" id="ocn-polymarket"></span></button>
+      <button type="button" class="oc-tab" data-oc="hyperliquid">Hyperliquid <span class="oc-n" id="ocn-hyperliquid"></span></button>
+      <button type="button" class="oc-tab active" data-oc="hyperliquid_graded">HL fill-grade <span class="oc-n" id="ocn-hyperliquid_graded"></span></button>
+      <button type="button" class="oc-tab" data-oc="solana">Solana <span class="oc-n" id="ocn-solana"></span></button>
+    </div>
+    <p class="oc-source" id="onchainSource"></p>
+    <div class="oc-list" id="onchainBody"><div class="skel" style="height:220px;"></div></div>
+  </section>
 
   <hr class="div" />
 
@@ -1328,7 +1390,7 @@
   </section>
 
   <footer class="site-foot">
-    <p>SCORED ON DURABLE MARKETS ONLY &middot; LOSSES ARE NEVER HIDDEN</p>
+    <p>THE ON-CHAIN SCORE KEEPER &middot; LOSSES ARE NEVER HIDDEN</p>
   </footer>
 
 </div>
@@ -2189,6 +2251,108 @@ function loadBoardStats(){
 }
 loadBoardStats();
 setInterval(loadBoardStats, 5 * 60 * 1000);
+
+/* ── Onchain traders on the homepage. Same payload as /onchain.
+   Prefers the fill-graded Hyperliquid lane when it has rows, then native
+   HL, then Polymarket — so a Postgres outage still leaves a live board. */
+var OC_STATE = { venue: 'hyperliquid_graded', data: null };
+function ocUsd(n){
+  if (n == null || isNaN(n)) return '—';
+  var sign = n < 0 ? '−' : '';
+  return sign + fmtUsdCompact(Math.abs(n));
+}
+function ocCls(n){ return n > 0 ? 'pos' : (n < 0 ? 'neg' : 'mute'); }
+function pickOnchainVenue(d){
+  if (d && d.hyperliquid_graded && d.hyperliquid_graded.traders && d.hyperliquid_graded.traders.length) return 'hyperliquid_graded';
+  if (d && d.hyperliquid && d.hyperliquid.traders && d.hyperliquid.traders.length) return 'hyperliquid';
+  if (d && d.polymarket && d.polymarket.traders && d.polymarket.traders.length) return 'polymarket';
+  return 'solana';
+}
+function renderOnchainList(venue, v){
+  if (venue === 'solana' || (v && v.needs_key && !(v.traders && v.traders.length))) {
+    return '<p class="rail-empty">Solana lane needs a keyed provider (GMGN, Birdeye, or Helius). Nothing shown rather than a fabricated rank.</p>';
+  }
+  if (!v || !v.ok) {
+    return '<p class="rail-empty">Couldn\'t load this venue. The other tabs may still be live.</p>';
+  }
+  var rows = (v.traders || []).slice(0, 8);
+  if (!rows.length) {
+    return '<p class="rail-empty">No wallet cleared this lane\'s bar yet.</p>';
+  }
+  return rows.map(function(t){
+    var name = t.handle ? '<a href="/@' + esc(t.handle) + '">' + esc(t.display_name) + '</a>' : esc(t.display_name || 'Trader');
+    var flags = Array.isArray(t.flags) ? t.flags : [];
+    var flag = '';
+    if (flags.indexOf('inventory_closer') >= 0) flag = ' <span class="oc-flag">inventory closer</span>';
+    else if (flags.indexOf('single_coin_closer') >= 0) flag = ' <span class="oc-flag">single-coin</span>';
+    var num, sub;
+    if (venue === 'hyperliquid_graded') {
+      num = ocUsd(t.net_pnl);
+      sub = (t.win_rate != null ? t.win_rate.toFixed(1) + '% · ' : '')
+        + (t.wins != null ? t.wins + '–' + t.losses : '')
+        + (t.top_coin ? ' · ' + t.top_coin : '');
+    } else if (venue === 'hyperliquid') {
+      num = ocUsd(t.pnl);
+      sub = (t.roi_pct != null ? (t.roi_pct >= 0 ? '+' : '') + Number(t.roi_pct).toFixed(1) + '% ROI' : '');
+    } else {
+      num = (t.roi_pct == null ? '—' : ((t.roi_pct >= 0 ? '+' : '') + Number(t.roi_pct).toFixed(1) + '%'));
+      sub = (t.n != null ? t.n + ' durable' : '') + (t.flex_score != null ? ' · flex ' + t.flex_score : '');
+    }
+    var numCls = venue === 'polymarket' ? ocCls(t.roi_pct) : ocCls(venue === 'hyperliquid_graded' ? t.net_pnl : t.pnl);
+    return '<div class="oc-row"><span class="oc-rk' + (t.rank <= 3 ? ' top' : '') + '">' + esc(t.rank) + '</span>'
+      + '<span class="oc-who">' + name + flag + '<div class="oc-sub">' + esc(sub) + '</div></span>'
+      + '<span class="oc-num ' + numCls + '">' + esc(num) + '</span></div>';
+  }).join('');
+}
+function paintOnchain(){
+  var d = OC_STATE.data; if (!d) return;
+  var venue = OC_STATE.venue;
+  var v = d[venue] || {};
+  var src = document.getElementById('onchainSource');
+  if (src) src.textContent = v.source || '';
+  var body = document.getElementById('onchainBody');
+  if (body) body.innerHTML = renderOnchainList(venue, v);
+  ['polymarket','hyperliquid','hyperliquid_graded','solana'].forEach(function(k){
+    var el = document.getElementById('ocn-' + k);
+    var vv = d[k];
+    if (el) el.textContent = (vv && vv.traders && vv.traders.length) ? vv.traders.length : (vv && vv.needs_key ? '⋯' : '0');
+  });
+  var tabs = document.getElementById('onchainTabs');
+  if (tabs && tabs.querySelectorAll) {
+    tabs.querySelectorAll('.oc-tab').forEach(function(x){
+      x.classList.toggle('active', x.getAttribute('data-oc') === venue);
+    });
+  }
+}
+function loadOnchain(){
+  fetch('/api/onchain/traders?window=month')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if (!d) throw new Error('no data');
+      OC_STATE.data = d;
+      if (!OC_STATE._picked) { OC_STATE.venue = pickOnchainVenue(d); OC_STATE._picked = true; }
+      paintOnchain();
+    })
+    .catch(function(){
+      var body = document.getElementById('onchainBody');
+      if (body && body.querySelector && body.querySelector('.oc-row')) return;
+      if (body) body.innerHTML = '<p class="rail-empty">Couldn\'t load onchain traders. Refresh in a moment.</p>';
+    });
+}
+(function(){
+  var tabs = document.getElementById('onchainTabs');
+  if (tabs && tabs.addEventListener) {
+    tabs.addEventListener('click', function(e){
+      var t = e.target && e.target.closest ? e.target.closest('.oc-tab') : null;
+      if (!t) return;
+      OC_STATE.venue = t.getAttribute('data-oc');
+      OC_STATE._picked = true;
+      paintOnchain();
+    });
+  }
+})();
+loadOnchain();
+setInterval(loadOnchain, 10 * 60 * 1000);
 
 // Connect flow — unchanged behavior from the live site: validate, then
 // hand off to /connect, which owns the real wallet-connect + polling +

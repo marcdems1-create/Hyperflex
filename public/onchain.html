@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On-chain score keeper — HYPERFLEX</title>
+<meta name="description" content="HYPERFLEX is the on-chain score keeper. Best traders across Polymarket, Hyperliquid, and Solana — every ranking labelled by exactly what it is.">
+<meta property="og:title" content="On-chain score keeper — HYPERFLEX">
+<meta property="og:description" content="Cross-venue trader scores. Verified, fill-graded, or venue-reported — never mixed.">
+<meta property="og:url" content="https://hyperflex.network/onchain">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HYPERFLEX">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@HyperFlexApp">
+<meta name="twitter:title" content="On-chain score keeper — HYPERFLEX">
+<meta name="twitter:description" content="Cross-venue trader scores. Verified, fill-graded, or venue-reported — never mixed.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-outer:#07080a; --bg:#0b0d12; --surface:#12151b; --surface-2:#181c25;
+    --border:#232733; --border-soft:#191d27;
+    --ink:#eceef2; --ink-muted:#8890a3; --ink-faint:#7d8599;
+    --gold:#c9920d; --gold-bright:#e0ab2c; --gold-soft:rgba(201,146,13,0.14);
+    --green:#35b075; --green-soft:rgba(53,176,117,0.13);
+    --red:#e2495a; --red-soft:rgba(226,73,90,0.13);
+    --blue:#5b8dd9; --purple:#9b6dd6; --purple-soft:rgba(155,109,214,0.14);
+    --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:"JetBrains Mono","SFMono-Regular",ui-monospace,"SF Mono",Consolas,monospace;
+    --radius:13px; --radius-sm:8px;
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:var(--bg-outer);color:var(--ink);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--gold-soft);color:var(--gold-bright);}
+  a{color:inherit;}
+  .shell{max-width:1120px;margin:0 auto;padding:26px 20px 80px;}
+  .page-head{padding:14px 0 8px;border-bottom:1px solid var(--border-soft);margin-bottom:18px;}
+  .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
+  .page-head h1{font-size:26px;font-weight:800;letter-spacing:-0.01em;margin:0 0 8px;}
+  .lede{font-size:14px;line-height:1.55;color:var(--ink-muted);max-width:680px;margin:0;}
+
+  /* Provenance legend — the honest core of the page */
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin:14px 0 20px;padding:12px 15px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--ink-muted);}
+  .legend b{color:var(--ink);}
+  .prov{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;white-space:nowrap;}
+  .prov.verified{color:var(--green);background:var(--green-soft);}
+  .prov.fill{color:var(--gold-bright);background:var(--gold-soft);}
+  .prov.native{color:var(--blue);background:rgba(91,141,217,0.13);}
+  .prov.pending{color:var(--ink-faint);background:var(--surface-2);}
+
+  /* Tabs */
+  .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .tab{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--ink-muted);cursor:pointer;transition:.12s;}
+  .tab:hover{color:var(--ink);border-color:var(--ink-faint);}
+  .tab.active{color:var(--ink);border-color:var(--gold);background:var(--gold-soft);}
+  .tab .dot{width:7px;height:7px;border-radius:50%;}
+  .tab .cnt{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);}
+
+  .venue-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--ink-muted);}
+  .win-switch{display:flex;gap:4px;margin-left:auto;}
+  .win-switch button{font-family:var(--font-mono);font-size:11px;padding:4px 9px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--ink-muted);cursor:pointer;}
+  .win-switch button.active{color:var(--gold-bright);border-color:var(--gold);background:var(--gold-soft);}
+
+  .board{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  table.lb{width:100%;border-collapse:collapse;font-size:13px;}
+  table.lb thead th{background:var(--surface-2);color:var(--ink-muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;text-align:right;padding:11px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  table.lb thead th:nth-child(1),table.lb thead th:nth-child(2){text-align:left;}
+  table.lb tbody td{text-align:right;padding:12px 14px;border-bottom:1px solid var(--border-soft);font-family:var(--font-mono);white-space:nowrap;}
+  table.lb tbody td:nth-child(1),table.lb tbody td:nth-child(2){text-align:left;font-family:var(--font-sans);}
+  table.lb tbody tr:last-child td{border-bottom:none;}
+  table.lb tbody tr:hover{background:var(--surface-2);}
+  .rk{font-family:var(--font-mono);color:var(--ink-faint);width:34px;}
+  .rk.top{color:var(--gold-bright);font-weight:700;}
+  .trader{font-weight:600;color:var(--ink);}
+  .trader a{text-decoration:none;} .trader a:hover{color:var(--gold-bright);}
+  .taddr{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);margin-top:2px;}
+  .pos{color:var(--green);} .neg{color:var(--red);} .muted{color:var(--ink-faint);}
+  .flex-badge{font-family:var(--font-mono);font-weight:700;color:var(--gold-bright);}
+  .flag{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-faint);background:var(--surface-2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;}
+  .empty{padding:40px 24px;text-align:center;}
+  .empty-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+  .empty-body{font-size:12.5px;line-height:1.6;color:var(--ink-muted);max-width:520px;margin:0 auto;}
+  .empty-body code{font-family:var(--font-mono);font-size:11.5px;color:var(--gold-bright);background:var(--bg);padding:1px 5px;border-radius:4px;}
+  .stamp{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);}
+  @media(max-width:760px){
+    table.lb thead th.hide-sm,table.lb tbody td.hide-sm{display:none;}
+    .taddr{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="page-head">
+    <div class="eyebrow">The on-chain score keeper</div>
+    <h1>On-chain scoreboard</h1>
+    <p class="lede">HYPERFLEX keeps the record. Best on-chain traders across venues, in one place. Every ranking is labelled by exactly what it is —
+      a Hyperflex-verified grade, a close-fill record, or a venue's own reported numbers — so nothing here pretends to be more than it is.</p>
+  </header>
+
+  <div class="legend">
+    <span><span class="prov verified">✓ Verified</span> &nbsp;<b>Hyperflex-graded</b> — scored against real resolutions, wins <em>and</em> losses, n≥10.</span>
+    <span><span class="prov fill">⊕ Fill-graded</span> &nbsp;<b>Close-fill record</b> — public Hyperliquid closes, independently counted. Perps have no resolution event.</span>
+    <span><span class="prov native">◇ Native</span> &nbsp;<b>Venue-reported</b> — the platform's own PnL, not independently graded by us.</span>
+    <span><span class="prov pending">⋯ Pending</span> &nbsp;<b>Data source needed</b> — shown honestly empty until connected.</span>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-venue="polymarket"><span class="dot" style="background:var(--green)"></span>Polymarket <span class="cnt" id="cnt-polymarket"></span></div>
+    <div class="tab" data-venue="hyperliquid"><span class="dot" style="background:var(--blue)"></span>Hyperliquid <span class="cnt" id="cnt-hyperliquid"></span></div>
+    <div class="tab" data-venue="hyperliquid_graded"><span class="dot" style="background:var(--gold-bright)"></span>HL fill-grade <span class="cnt" id="cnt-hyperliquid_graded"></span></div>
+    <div class="tab" data-venue="solana"><span class="dot" style="background:var(--purple)"></span>Solana · Pump.fun <span class="cnt" id="cnt-solana"></span></div>
+  </div>
+
+  <div class="venue-meta">
+    <span id="venueSource" class="stamp">loading…</span>
+    <div class="win-switch" id="winSwitch" style="display:none;">
+      <button data-win="day">24h</button>
+      <button data-win="week">7d</button>
+      <button data-win="month" class="active">30d</button>
+      <button data-win="allTime">All</button>
+    </div>
+  </div>
+
+  <div class="board"><div id="boardBody"><div class="empty"><div class="empty-title">Loading onchain traders…</div></div></div></div>
+
+  <p class="stamp" id="stamp" style="margin-top:14px;"></p>
+</div>
+
+<script>
+var STATE = { venue:'polymarket', window:'month', data:null };
+(function(){
+  var q=new URLSearchParams(location.search);
+  if(['polymarket','hyperliquid','hyperliquid_graded','solana'].indexOf(q.get('venue'))>=0) STATE.venue=q.get('venue');
+  if(['day','week','month','allTime'].indexOf(q.get('window'))>=0) STATE.window=q.get('window');
+})();
+
+function fmtUsd(n){ if(n==null||isNaN(n)) return '—'; var a=Math.abs(n); var s=n<0?'-':''; if(a>=1e9)return s+'$'+(a/1e9).toFixed(2)+'B'; if(a>=1e6)return s+'$'+(a/1e6).toFixed(2)+'M'; if(a>=1e3)return s+'$'+(a/1e3).toFixed(1)+'k'; return s+'$'+a.toFixed(0); }
+function fmtPct(n){ if(n==null||isNaN(n)) return '—'; return (n>=0?'+':'')+Number(n).toFixed(1)+'%'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function shortAddr(a){ if(!a) return ''; return a.length>12 ? a.slice(0,6)+'…'+a.slice(-4) : a; }
+function cls(n){ return n>0?'pos':(n<0?'neg':'muted'); }
+
+function renderPolymarket(v){
+  if(!v || !v.ok) return emptyState('Verified board unavailable', 'The Hyperflex durable board couldn\u2019t be computed right now. It refreshes continuously.');
+  if(!v.traders.length) return emptyState('No verified traders yet', 'No wallet has cleared the durable-market bar (n\u226510 graded trades) on this instance yet. This board fills as real resolved trades are ingested and graded.');
+  var head='<tr><th class="rk">#</th><th>Trader</th><th>Flex</th><th>ROI</th><th class="hide-sm">Trades</th><th class="hide-sm">Scope</th></tr>';
+  var body=v.traders.map(function(t){
+    var name = t.handle ? '<a href="/@'+esc(t.handle)+'">'+esc(t.display_name)+'</a>' : esc(t.display_name);
+    return '<tr><td class="rk '+(t.rank<=3?'top':'')+'">'+t.rank+'</td>'+
+      '<td class="trader">'+name+(t.address?'<div class="taddr">'+shortAddr(t.address)+'</div>':'')+'</td>'+
+      '<td><span class="flex-badge">'+(t.flex_score!=null?t.flex_score:'\u2014')+'</span></td>'+
+      '<td class="'+cls(t.roi_pct)+'">'+fmtPct(t.roi_pct)+'</td>'+
+      '<td class="hide-sm muted">'+(t.n!=null?t.n:'\u2014')+'</td>'+
+      '<td class="hide-sm muted" style="font-size:11px;">'+esc(t.scope_label||'')+'</td></tr>';
+  }).join('');
+  return '<table class="lb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
+}
+
+function renderHyperliquid(v){
+  if(!v || !v.ok) return emptyState('Hyperliquid leaderboard unavailable', 'Couldn\u2019t reach the Hyperliquid leaderboard just now. It refreshes every 10 minutes.'+(v&&v.error?' ('+esc(v.error)+')':''));
+  if(!v.traders.length) return emptyState('No traders in this window', 'The selected window returned no ranked traders.');
+  var head='<tr><th class="rk">#</th><th>Trader</th><th>PnL</th><th>ROI</th><th class="hide-sm">Volume</th><th class="hide-sm">Account value</th></tr>';
+  var body=v.traders.map(function(t){
+    return '<tr><td class="rk '+(t.rank<=3?'top':'')+'">'+t.rank+'</td>'+
+      '<td class="trader">'+esc(t.display_name)+'<div class="taddr">'+shortAddr(t.address)+'</div></td>'+
+      '<td class="'+cls(t.pnl)+'">'+fmtUsd(t.pnl)+'</td>'+
+      '<td class="'+cls(t.roi_pct)+'">'+fmtPct(t.roi_pct)+'</td>'+
+      '<td class="hide-sm muted">'+fmtUsd(t.volume)+'</td>'+
+      '<td class="hide-sm muted">'+fmtUsd(t.account_value)+'</td></tr>';
+  }).join('');
+  return '<table class="lb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
+}
+
+function renderHlGraded(v){
+  if(!v || !v.ok) return emptyState('Fill-grade unavailable', 'Couldn\u2019t read public Hyperliquid fills just now.'+(v&&v.error?' ('+esc(v.error)+')':''));
+  if(!v.traders.length) return emptyState('No wallet cleared the fill-grade bar', 'None of the sampled Hyperliquid wallets had n\u226510 close fills in the last 2,000 fills. That is a real empty, not a loading state.');
+  var head='<tr><th class="rk">#</th><th>Trader</th><th>Net PnL</th><th>Win rate</th><th class="hide-sm">Closes</th><th class="hide-sm">Fees</th><th class="hide-sm">Top coin</th></tr>';
+  var body=v.traders.map(function(t){
+    var flags=Array.isArray(t.flags)?t.flags:[];
+    var flagHtml='';
+    if(flags.indexOf('inventory_closer')>=0) flagHtml=' <span class="flag">inventory closer</span>';
+    else if(flags.indexOf('single_coin_closer')>=0) flagHtml=' <span class="flag">single-coin</span>';
+    return '<tr><td class="rk '+(t.rank<=3?'top':'')+'">'+t.rank+'</td>'+
+      '<td class="trader">'+esc(t.display_name)+flagHtml+'<div class="taddr">'+shortAddr(t.address)+'</div></td>'+
+      '<td class="'+cls(t.net_pnl)+'">'+fmtUsd(t.net_pnl)+'</td>'+
+      '<td class="'+cls((t.win_rate||0)-50)+'">'+((t.win_rate!=null)?t.win_rate.toFixed(1)+'%':'\u2014')+'</td>'+
+      '<td class="hide-sm muted">'+(t.n!=null?t.n+' <span class="muted">('+t.wins+'\u2013'+t.losses+')</span>':'\u2014')+'</td>'+
+      '<td class="hide-sm muted">'+fmtUsd(t.fees)+'</td>'+
+      '<td class="hide-sm muted">'+(t.top_coin?esc(t.top_coin):'\u2014')+'</td></tr>';
+  }).join('');
+  return '<table class="lb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
+}
+
+function renderSolana(v){
+  return emptyState('Solana lane needs a data source',
+    (v&&v.note?esc(v.note):'Per-trader PnL rankings on Solana require a keyed provider.') +
+    ' Once connected, the best Pump.fun / Solana traders appear here on the same board.');
+}
+
+function emptyState(title, body){
+  return '<div class="empty"><div class="empty-title">'+esc(title)+'</div><div class="empty-body">'+body+'</div></div>';
+}
+
+function paint(){
+  var d=STATE.data; if(!d) return;
+  var v=d[STATE.venue];
+  var meta=document.getElementById('venueSource');
+  meta.textContent = v && v.source ? v.source : '';
+  // Window switch only applies to Hyperliquid. Toggle display directly —
+  // the [hidden] attribute is overridden by .win-switch{display:flex}.
+  document.getElementById('winSwitch').style.display = (STATE.venue==='hyperliquid') ? 'flex' : 'none';
+  var html;
+  if(STATE.venue==='polymarket') html=renderPolymarket(v);
+  else if(STATE.venue==='hyperliquid') html=renderHyperliquid(v);
+  else if(STATE.venue==='hyperliquid_graded') html=renderHlGraded(v);
+  else html=renderSolana(v);
+  document.getElementById('boardBody').innerHTML=html;
+  // counts
+  ['polymarket','hyperliquid','hyperliquid_graded','solana'].forEach(function(k){
+    var el=document.getElementById('cnt-'+k); var vv=d[k];
+    el.textContent = (vv&&vv.traders&&vv.traders.length) ? vv.traders.length : (vv&&vv.needs_key?'⋯':'0');
+  });
+  if(d.updated_at) document.getElementById('stamp').textContent='Updated '+new Date(d.updated_at).toLocaleTimeString()+' · rankings cached 10 min';
+  syncUrl();
+}
+
+function syncUrl(){
+  var q=new URLSearchParams();
+  q.set('venue', STATE.venue);
+  if(STATE.venue==='hyperliquid') q.set('window', STATE.window);
+  var s=q.toString();
+  history.replaceState(null,'','/onchain'+(s?'?'+s:''));
+}
+
+function load(){
+  document.getElementById('boardBody').innerHTML='<div class="empty"><div class="empty-title">Loading…</div></div>';
+  fetch('/api/onchain/traders?window='+encodeURIComponent(STATE.window))
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){ if(!d) throw new Error('no data'); STATE.data=d; paint(); })
+    .catch(function(){ document.getElementById('boardBody').innerHTML=emptyState('Couldn\u2019t load the board','The feed refreshes every 10 minutes. Try again shortly.'); });
+}
+
+document.getElementById('tabs').addEventListener('click', function(e){
+  var t=e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+  t.classList.add('active'); STATE.venue=t.getAttribute('data-venue'); paint();
+});
+document.getElementById('winSwitch').addEventListener('click', function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#winSwitch button').forEach(function(x){x.classList.remove('active');});
+  b.classList.add('active'); STATE.window=b.getAttribute('data-win'); load();
+});
+
+// Sync tab/window UI to any deep-linked state before first paint.
+document.querySelectorAll('.tab').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-venue')===STATE.venue); });
+document.querySelectorAll('#winSwitch button').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-win')===STATE.window); });
+
+load();
+setInterval(load, 10*60*1000);
+</script>
+<script src="/nav.js?v=26"></script>
+</body>
+</html>
