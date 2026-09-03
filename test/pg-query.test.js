@@ -99,6 +99,17 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
   await sleep(30);
   ok('boot jobs run after pg ready', bootConnects === 25, 'connects=' + bootConnects);
 
+  const { deriveAlternatePgUrls, collectPgCandidates, pgHostKind } = require('../lib/pg-query');
+  const pub = 'postgresql://u:p@maglev.proxy.rlwy.net:12345/railway';
+  const alts = deriveAlternatePgUrls(pub);
+  ok('public proxy derives private host', alts.length === 1 && /postgres\.railway\.internal:5432/.test(alts[0].url));
+  ok('derived private keeps user', /postgresql:\/\/u:p@/.test(alts[0].url));
+  ok('public kind is public-proxy', pgHostKind(pub).kind === 'public-proxy');
+  ok('derived kind is private', pgHostKind(alts[0].url).kind === 'private');
+  const cands = collectPgCandidates({ DATABASE_URL: pub, DATABASE_PUBLIC_URL: pub });
+  ok('candidates include derived-private', cands.some(c => c.name === 'derived-private'));
+  ok('candidates do not duplicate the same URL', new Set(cands.map(c => c.url)).size === cands.length);
+
   console.log(fail ? `pg-query FAIL ${fail}` : `pg-query ok ${pass}`);
   if (failures.length) failures.forEach((f) => console.log('  ✗ ' + f));
   process.exit(fail ? 1 : 0);

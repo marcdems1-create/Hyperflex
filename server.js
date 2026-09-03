@@ -1,7 +1,7 @@
 // redeployed 2026-05-21
 require('dotenv').config();
 try { require('dns').setDefaultResultOrder('ipv4first'); } catch (_) {}
-const { makeDbQuery, createConnectCircuit, createPgGate, makePoolConfig, pgHostKind } = require('./lib/pg-query');
+const { makeDbQuery, createConnectCircuit, createPgGate, makePoolConfig, pgHostKind, collectPgCandidates } = require('./lib/pg-query');
 const pgCircuit = createConnectCircuit({ failLimit: 2, openMs: 15000 });
 const pgGate = createPgGate();
 
@@ -950,8 +950,9 @@ function _attachPoolEvents(p, label) {
   p.on('error', (err) => console.error('[pg pool error]', label, err.message));
 }
 
-function installPool(url, label) {
-  const next = url ? new Pool(makePoolConfig(url, { max: PG_POOL_MAX })) : null;
+function installPool(url, label, extra) {
+  extra = extra || {};
+  const next = url ? new Pool(makePoolConfig(url, { max: PG_POOL_MAX, ssl: extra.ssl })) : null;
   _attachPoolEvents(next, label);
   const prev = _poolRef.current;
   _poolRef.current = next;
@@ -990,12 +991,13 @@ if (pool) {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
 
-async function _probePgUrl(url, ms) {
+async function _probePgUrl(url, ms, sslMode) {
   if (!url) return { ok: false, error: 'no_url', ms: 0 };
   const { Client } = require('pg');
+  const useSsl = sslMode !== false;
   const client = new Client({
     connectionString: url,
-    ssl: { rejectUnauthorized: false },
+    ssl: useSsl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: ms || 2500,
   });
   const t0 = Date.now();
@@ -1003,41 +1005,41 @@ async function _probePgUrl(url, ms) {
     await client.connect();
     await client.query('SELECT 1');
     try { await client.end(); } catch (_) {}
-    return { ok: true, ms: Date.now() - t0, kind: pgHostKind(url).kind };
+    return { ok: true, ms: Date.now() - t0, kind: pgHostKind(url).kind, ssl: useSsl };
   } catch (e) {
     try { await client.end(); } catch (_) {}
-    return { ok: false, ms: Date.now() - t0, error: e.message, code: e.code || null, kind: pgHostKind(url).kind };
+    return { ok: false, ms: Date.now() - t0, error: e.message, code: e.code || null, kind: pgHostKind(url).kind, ssl: useSsl };
   }
 }
 
 async function recoverPostgres() {
-  const primary = process.env.DATABASE_URL;
-  const pub = process.env.DATABASE_PUBLIC_URL;
-  if (!primary) return false;
-  const a = await _probePgUrl(primary, 2500);
-  _pgProbe = { at: new Date().toISOString(), using: _pgUsing, primary: a, pub: _pgProbe && _pgProbe.pub };
-  if (a.ok) {
-    pgCircuit.ok();
-    pgGate.markReady();
-    return true;
-  }
-  // Drop hung connecting clients on the dead pool so a later retry is clean.
-  if (Date.now() - _pgLastSwapAt > 20000) {
-    _pgLastSwapAt = Date.now();
-    installPool(primary, 'DATABASE_URL');
-  }
-  if (pub && pub !== primary) {
-    const b = await _probePgUrl(pub, 2500);
-    _pgProbe.pub = b;
-    if (b.ok) {
-      installPool(pub, 'DATABASE_PUBLIC_URL');
-      _pgUsing = 'DATABASE_PUBLIC_URL';
-      _pgProbe.using = _pgUsing;
-      pgCircuit.ok();
-      pgGate.markReady();
-      console.warn('[pg] failed over to DATABASE_PUBLIC_URL (' + b.kind + ', ' + b.ms + 'ms)');
-      return true;
+  const candidates = collectPgCandidates(process.env);
+  if (!candidates.length) return false;
+  const tried = [];
+  for (const c of candidates) {
+    const kind = pgHostKind(c.url).kind;
+    const timeout = kind === 'private' ? 8000 : 4000;
+    // Private Railway PG often has no TLS. Public proxy needs it.
+    // Try the likely mode first so a dead public proxy doesn't burn 8s × 2.
+    const sslOrder = kind === 'private' ? [false, true] : [true, false];
+    for (const ssl of sslOrder) {
+      const result = await _probePgUrl(c.url, timeout, ssl);
+      tried.push({ name: c.name, kind: result.kind, ok: result.ok, ms: result.ms, error: result.error || null, ssl: result.ssl });
+      if (result.ok) {
+        installPool(c.url, c.name, { ssl });
+        _pgUsing = c.name;
+        _pgProbe = { at: new Date().toISOString(), using: _pgUsing, primary: tried[0] || result, pub: null, tried };
+        pgCircuit.ok();
+        pgGate.markReady();
+        console.warn('[pg] connected via ' + c.name + ' kind=' + result.kind + ' ssl=' + ssl + ' ' + result.ms + 'ms');
+        return true;
+      }
     }
+  }
+  _pgProbe = { at: new Date().toISOString(), using: _pgUsing, primary: tried[0] || null, pub: tried.find(t => t.name === 'DATABASE_PUBLIC_URL') || null, tried };
+  if (Date.now() - _pgLastSwapAt > 30000 && process.env.DATABASE_URL) {
+    _pgLastSwapAt = Date.now();
+    installPool(process.env.DATABASE_URL, 'DATABASE_URL');
   }
   return false;
 }
@@ -13664,8 +13666,9 @@ const homepageStore = createStaleStore({
 });
 
 async function homepageResolve(key, builder) {
-  if (pgCircuit.snapshot().open && !homepageStore.peek(key)) {
-    const err = new Error('pg_circuit_open');
+  const have = homepageStore.peek(key);
+  if (!have && (!pgGate.isReady() || pgCircuit.snapshot().open)) {
+    const err = new Error(pgCircuit.snapshot().open ? 'pg_circuit_open' : 'pg_not_ready');
     err.code = 'PG_CIRCUIT';
     throw err;
   }
