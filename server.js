@@ -14215,6 +14215,7 @@ app.get('/api/verified-trades', async (req, res) => {
       const cutoff = Date.now() - TAPE_MAX_AGE_MS;
       const byId = new Map();
       let failed = 0;
+      let ephemeralHidden = 0;
 
       const fetchWallet = async (card) => {
         const url = 'https://data-api.polymarket.com/activity?user=' + encodeURIComponent(card.polymarket_address)
@@ -14227,6 +14228,8 @@ app.get('/api/verified-trades', async (req, res) => {
           const ts = Number(t.timestamp) * 1000;
           const usd = Number(t.usdcSize);
           if (!ts || ts < cutoff || !(usd > 0)) continue;
+          // Same classifier the score uses, so the tape and the score cover the same kind of market.
+          if (classifyMarketDurability(t.title) === 'ephemeral') { ephemeralHidden++; continue; }
           const ev = {
             id: (t.transactionHash || '') + ':' + (t.asset || '') + ':' + card.user_id,
             ts: new Date(ts).toISOString(),
@@ -14274,6 +14277,7 @@ app.get('/api/verified-trades', async (req, res) => {
         events: events.slice(0, TAPE_MAX_EVENTS),
         wallets: roster.length,
         wallets_failed: failed,
+        ephemeral_hidden: ephemeralHidden,
         window_hours: TAPE_MAX_AGE_MS / 3600000,
         disclosure: 'Observed fills by traders on the verified board. Not recommendations. Each trader’s score and sample size are shown with every trade.',
         updated_at: new Date().toISOString(),

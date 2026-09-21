@@ -89,6 +89,8 @@
   function render(data) {
     var ev = data.events || [];
     document.getElementById('counts').textContent = data.wallets + ' wallets · last ' + data.window_hours + 'h';
+    document.getElementById('foot').textContent = 'Observed fills, not recommendations. Prices move; a trade shown here may already be closed.'
+      + (data.ephemeral_hidden ? ' Excludes ' + Number(data.ephemeral_hidden).toLocaleString() + ' fills in short-horizon markets (5-minute up/down, hourly, parlays), which are not scored.' : '');
     if (!ev.length) {
       listEl.innerHTML = '<div class="empty">No trades match these filters in the last ' + esc(data.window_hours) + ' hours.<br>Lower the size filter or switch to All.</div>';
       return;
