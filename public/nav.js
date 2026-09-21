@@ -402,6 +402,7 @@
     { href: '/traders', label: 'Traders', gold: true },
     { href: '/feed', label: 'Feed', gold: true },
     { href: '/live', label: '● Live', gold: true },
+    { href: '/tape', label: 'Tape', gold: true },
     { href: '/explore', label: 'Explore' },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/challenges', label: 'Challenge' },

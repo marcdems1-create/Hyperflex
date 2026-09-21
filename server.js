@@ -14190,6 +14190,104 @@ app.get('/api/live-calls', async (req, res) => {
   }
 });
 
+// ── GET /api/verified-trades ─────────────────────────────────────────────
+// Public trade tape: recent fills by wallets on the verified durable board.
+// Roster is _buildTraderCards() over the same _getCachedRoiComputed() rows
+// every trader surface uses, so a wallet appears here only if it is on the
+// board — and score + n ride on every row (rule 3). Trades are OBSERVED
+// fills, not recommendations; buys and sells both shown, nothing filtered
+// by outcome.
+const TAPE_BATCH = 10;              // wallets fetched at a time
+const TAPE_PER_WALLET = 30;         // most recent fills per wallet
+const TAPE_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const TAPE_MAX_EVENTS = 300;
+
+app.get('/api/verified-trades', async (req, res) => {
+  try {
+    const result = await homepageResolve('verified-trades', async () => {
+      if (!pool) throw new Error('unavailable');
+      const computed = await _getCachedRoiComputed();
+      if (computed == null) throw new Error('roi leaderboard query failed');
+      const cards = (await _buildTraderCards(computed.rows)) || [];
+      const roster = cards.filter(c => c.polymarket_address && c.flex_score != null);
+
+      const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
+      const cutoff = Date.now() - TAPE_MAX_AGE_MS;
+      const events = [];
+      let failed = 0;
+
+      const fetchWallet = async (card) => {
+        const url = 'https://data-api.polymarket.com/activity?user=' + encodeURIComponent(card.polymarket_address)
+          + '&type=TRADE&limit=' + TAPE_PER_WALLET + '&sortBy=TIMESTAMP&sortDirection=DESC';
+        const r = await fetch(url, Object.assign({}, H, { signal: AbortSignal.timeout(8000) }));
+        if (!r.ok) throw new Error('activity ' + r.status);
+        const rows = await r.json();
+        if (!Array.isArray(rows)) return;
+        for (const t of rows) {
+          const ts = Number(t.timestamp) * 1000;
+          const usd = Number(t.usdcSize);
+          if (!ts || ts < cutoff || !(usd > 0)) continue;
+          events.push({
+            id: (t.transactionHash || '') + ':' + (t.asset || '') + ':' + card.user_id,
+            ts: new Date(ts).toISOString(),
+            side: String(t.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+            outcome: t.outcome || null,
+            price: Number(t.price) || null,
+            usd: Math.round(usd * 100) / 100,
+            shares: Number(t.size) || null,
+            market: t.title || null,
+            slug: t.slug || t.eventSlug || null,
+            icon: t.icon || null,
+            tx: t.transactionHash || null,
+            trader: {
+              user_id: card.user_id,
+              display_name: card.display_name,
+              username: card.username || null,
+              polymarket_address: card.polymarket_address,
+              flex_score: card.flex_score,
+              win_rate_pct: card.win_rate_pct,
+              n: card.n,
+              scope_label: card.scope_label,
+              durable_verified: true,
+            },
+          });
+        }
+      };
+
+      for (let i = 0; i < roster.length; i += TAPE_BATCH) {
+        const settled = await Promise.allSettled(roster.slice(i, i + TAPE_BATCH).map(fetchWallet));
+        failed += settled.filter(s => s.status === 'rejected').length;
+      }
+      if (roster.length && failed === roster.length) throw new Error('polymarket activity unreachable');
+
+      events.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      return {
+        events: events.slice(0, TAPE_MAX_EVENTS),
+        wallets: roster.length,
+        wallets_failed: failed,
+        window_hours: TAPE_MAX_AGE_MS / 3600000,
+        disclosure: 'Observed fills by traders on the verified board. Not recommendations. Each trader’s score and sample size are shown with every trade.',
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    const q = req.query || {};
+    const minUsd = Math.max(0, Number(q.min_usd) || 0);
+    const side = q.side === 'buy' || q.side === 'sell' ? q.side : null;
+    const user = q.user_id ? String(q.user_id) : null;
+    const limit = Math.min(200, Math.max(1, parseInt(q.limit, 10) || 60));
+    const data = result.data;
+    const events = data.events
+      .filter(e => e.usd >= minUsd && (!side || e.side === side) && (!user || e.trader.user_id === user))
+      .slice(0, limit);
+    res.setHeader('X-HFX-Cache', result.stale ? 'stale' : 'fresh');
+    res.json(Object.assign({}, data, { events }));
+  } catch (e) {
+    console.error('[verified-trades]', e.message);
+    res.status(503).json({ unavailable: true, error: e.message, events: [] });
+  }
+});
+
 // ── GET /api/feed/category-wins ──────────────────────────────────────────
 // Public, no auth — the /feed page's "score wall": one row per market
 // category, most-liquid category first, each row a wall of real winning
@@ -14850,6 +14948,11 @@ app.get('/api/trader-record/:handle', async (req, res) => {
 app.get('/traders', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'home-traders-preview.html'));
+});
+
+app.get('/tape', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'tape.html'));
 });
 
 // GET /methodology — public, permanent statement of what the score measures,

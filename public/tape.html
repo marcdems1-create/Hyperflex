@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tape — HYPERFLEX</title>
+<meta name="description" content="Live trades from the verified board. Every fill carries the trader's score and sample size.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#0e0e15; --card:#121218; --border:#1e1e2a; --ink:#f0f0f5; --muted:rgba(240,240,245,.5);
+          --gold:#c9920d; --green:#00e68a; --red:#ff4d6a; --blue:#4d9fff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',system-ui,sans-serif; font-size:14px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 16px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 13px; line-height: 1.55; max-width: 620px; }
+  .meta { font-family:'JetBrains Mono',monospace; font-size: 11.5px; color: var(--muted); margin-top: 10px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; box-shadow:0 0 8px var(--green); }
+  .dot.off { background: var(--red); box-shadow: none; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin: 20px 0 14px; align-items:center; }
+  .chip, select { background:var(--card); color:var(--ink); border:1px solid var(--border); border-radius:8px; padding:7px 12px; font:inherit; font-size:12.5px; cursor:pointer; }
+  .chip.on { border-color: var(--gold); color: var(--gold); }
+  .who { color: var(--gold); font-size:12.5px; }
+  .who button { background:none; border:0; color:var(--muted); cursor:pointer; font:inherit; }
+  .row { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:10px; display:grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items:start; }
+  .side { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11px; letter-spacing:.08em; text-transform:uppercase; padding:5px 0; text-align:center; border-radius:6px; border:1px solid; }
+  .side.buy { color:var(--green); border-color:rgba(0,230,138,.35); }
+  .side.sell { color:var(--red); border-color:rgba(255,77,106,.35); }
+  .mkt { font-weight:600; line-height:1.35; }
+  .mkt a { color:inherit; text-decoration:none; }
+  .mkt a:hover { text-decoration:underline; }
+  .detail { color:var(--muted); font-size:12.5px; margin-top:4px; font-family:'JetBrains Mono',monospace; }
+  .trader { margin-top:8px; font-size:12.5px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .trader button { background:none; border:0; padding:0; color:var(--ink); font:inherit; font-weight:600; cursor:pointer; text-decoration:underline; text-decoration-color:var(--border); }
+  .score { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--gold); border:1px solid rgba(201,146,13,.35); border-radius:6px; padding:2px 7px; }
+  .right { text-align:right; font-family:'JetBrains Mono',monospace; }
+  .usd { font-weight:600; }
+  .when { color:var(--muted); font-size:11.5px; margin-top:4px; }
+  .cta { display:inline-block; margin-top:8px; color:var(--blue); font-size:12px; text-decoration:none; font-family:'Inter',sans-serif; }
+  .cta:hover { text-decoration:underline; }
+  .empty, .err { color:var(--muted); padding:40px 0; text-align:center; line-height:1.6; }
+  .foot { color:var(--muted); font-size:11.5px; line-height:1.6; margin-top:26px; border-top:1px solid var(--border); padding-top:14px; }
+  @media (max-width:560px) { .row { grid-template-columns: 52px 1fr; } .right { grid-column: 2; text-align:left; display:flex; gap:12px; align-items:baseline; } .when { margin-top:0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tape</h1>
+  <div class="sub">Trades placed by wallets on the verified board, newest first. Each fill carries the trader's score and sample size. Wins and losses are both on the record; this shows what they did, not what happened after.</div>
+  <div class="meta"><span><span class="dot" id="dot"></span><span id="status">Connecting</span></span><span id="counts"></span></div>
+
+  <div class="filters">
+    <button class="chip on" data-side="">All</button>
+    <button class="chip" data-side="buy">Buys</button>
+    <button class="chip" data-side="sell">Sells</button>
+    <select id="minUsd" aria-label="Minimum trade size">
+      <option value="0">Any size</option>
+      <option value="100">$100+</option>
+      <option value="500">$500+</option>
+      <option value="1000">$1,000+</option>
+      <option value="5000">$5,000+</option>
+    </select>
+    <span class="who" id="who" hidden></span>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="foot" id="foot">Observed fills, not recommendations. Prices move; a trade shown here may already be closed.</div>
+</div>
+
+<script>
+(function () {
+  var state = { side: '', minUsd: 0, userId: '' };
+  var listEl = document.getElementById('list');
+  var TRADE_USD = 25;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+  function ago(iso) {
+    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return Math.floor(s) + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return new Date(iso).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+  }
+  function money(n) { return '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: n >= 100 ? 0 : 2 }); }
+
+  function render(data) {
+    var ev = data.events || [];
+    document.getElementById('counts').textContent = data.wallets + ' wallets · last ' + data.window_hours + 'h';
+    if (!ev.length) {
+      listEl.innerHTML = '<div class="empty">No trades match these filters in the last ' + esc(data.window_hours) + ' hours.<br>Lower the size filter or switch to All.</div>';
+      return;
+    }
+    listEl.innerHTML = ev.map(function (e) {
+      var t = e.trader, o = String(e.outcome || '').toLowerCase();
+      var name = t.display_name || t.username || 'Trader';
+      var href = e.slug ? '/market/' + encodeURIComponent(e.slug) : null;
+      var mkt = href ? '<a href="' + esc(href) + '">' + esc(e.market) + '</a>' : esc(e.market);
+      var cta = '';
+      if (href && e.side === 'buy' && (o === 'yes' || o === 'no')) {
+        var h = href + '?from=trader&side=' + o + '&size=' + TRADE_USD + '&copy_user_id=' + encodeURIComponent(t.user_id);
+        cta = '<a class="cta" href="' + esc(h) + '">Trade ' + esc(e.outcome) + ' on Polymarket &rarr;</a>';
+      }
+      var score = 'Score ' + esc(t.flex_score) + ' · n=' + esc(t.n) + (t.win_rate_pct != null ? ' · ' + Number(t.win_rate_pct).toFixed(1) + '% win' : '');
+      return '<div class="row">'
+        + '<div class="side ' + e.side + '">' + (e.side === 'buy' ? 'Bought' : 'Sold') + '</div>'
+        + '<div><div class="mkt">' + mkt + '</div>'
+        + '<div class="detail">' + esc(e.outcome || '') + (e.price != null ? ' at ' + Math.round(e.price * 100) + '¢' : '') + '</div>'
+        + '<div class="trader"><button data-user="' + esc(t.user_id) + '" data-name="' + esc(name) + '">' + esc(name) + '</button><span class="score" title="' + esc(t.scope_label || '') + '">' + score + '</span></div>'
+        + cta + '</div>'
+        + '<div class="right"><div class="usd">' + money(e.usd) + '</div><div class="when">' + esc(ago(e.ts)) + '</div></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function setStatus(ok, text) {
+    document.getElementById('dot').className = 'dot' + (ok ? '' : ' off');
+    document.getElementById('status').textContent = text;
+  }
+
+  function load() {
+    var qs = '?limit=100&min_usd=' + state.minUsd + (state.side ? '&side=' + state.side : '') + (state.userId ? '&user_id=' + encodeURIComponent(state.userId) : '');
+    fetch('/api/verified-trades' + qs).then(function (r) {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }).then(function (d) {
+      setStatus(true, 'Live');
+      render(d);
+    }).catch(function () {
+      setStatus(false, 'Unavailable');
+      if (!listEl.children.length || listEl.querySelector('.empty')) {
+        listEl.innerHTML = '<div class="err">We couldn’t load the tape. Retrying in a minute.</div>';
+      }
+    });
+  }
+
+  document.querySelectorAll('.chip').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on'); state.side = b.getAttribute('data-side'); load();
+    });
+  });
+  document.getElementById('minUsd').addEventListener('change', function (e) { state.minUsd = Number(e.target.value) || 0; load(); });
+  listEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-user]');
+    if (!b) return;
+    state.userId = b.getAttribute('data-user');
+    var who = document.getElementById('who');
+    who.hidden = false;
+    who.innerHTML = esc(b.getAttribute('data-name')) + ' <button id="clearWho">clear</button>';
+    document.getElementById('clearWho').onclick = function () { state.userId = ''; who.hidden = true; load(); };
+    load();
+  });
+
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+<script src="/nav.js?v=31"></script>
+</body>
+</html>
