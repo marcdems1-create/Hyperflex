@@ -14213,7 +14213,7 @@ app.get('/api/verified-trades', async (req, res) => {
 
       const H = { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } };
       const cutoff = Date.now() - TAPE_MAX_AGE_MS;
-      const events = [];
+      const byId = new Map();
       let failed = 0;
 
       const fetchWallet = async (card) => {
@@ -14227,7 +14227,7 @@ app.get('/api/verified-trades', async (req, res) => {
           const ts = Number(t.timestamp) * 1000;
           const usd = Number(t.usdcSize);
           if (!ts || ts < cutoff || !(usd > 0)) continue;
-          events.push({
+          const ev = {
             id: (t.transactionHash || '') + ':' + (t.asset || '') + ':' + card.user_id,
             ts: new Date(ts).toISOString(),
             side: String(t.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
@@ -14250,7 +14250,16 @@ app.get('/api/verified-trades', async (req, res) => {
               scope_label: card.scope_label,
               durable_verified: true,
             },
-          });
+          };
+          // Partial fills of one order share a tx+asset: fold into one row (VWAP price).
+          const prev = byId.get(ev.id);
+          if (prev) {
+            const tot = prev.usd + ev.usd;
+            prev.price = (prev.shares && ev.shares) ? Math.round((prev.usd + ev.usd) / (prev.shares + ev.shares) * 1e4) / 1e4 : prev.price;
+            prev.shares = (prev.shares || 0) + (ev.shares || 0);
+            prev.usd = Math.round(tot * 100) / 100;
+            if (ev.ts > prev.ts) prev.ts = ev.ts;
+          } else { byId.set(ev.id, ev); }
         }
       };
 
@@ -14260,7 +14269,7 @@ app.get('/api/verified-trades', async (req, res) => {
       }
       if (roster.length && failed === roster.length) throw new Error('polymarket activity unreachable');
 
-      events.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      const events = Array.from(byId.values()).sort((a, b) => (a.ts < b.ts ? 1 : -1));
       return {
         events: events.slice(0, TAPE_MAX_EVENTS),
         wallets: roster.length,

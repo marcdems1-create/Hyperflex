@@ -56,6 +56,7 @@
     <button class="chip" data-side="sell">Sells</button>
     <select id="minUsd" aria-label="Minimum trade size">
       <option value="0">Any size</option>
+      <option value="25" selected>$25+</option>
       <option value="100">$100+</option>
       <option value="500">$500+</option>
       <option value="1000">$1,000+</option>
@@ -71,7 +72,7 @@
 
 <script>
 (function () {
-  var state = { side: '', minUsd: 0, userId: '' };
+  var state = { side: '', minUsd: 25, userId: '' };
   var listEl = document.getElementById('list');
   var TRADE_USD = 25;
 
